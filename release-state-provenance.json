@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "historicalProvenanceStatus": "OPERATOR_SUPPLIED_BASELINE",
+  "database": {
+    "path": "database.json",
+    "bytes": 1058639,
+    "sha256": "e3e79f76395af89218ba8cd96437e1812652cd281dfdef1c060e884b3525aae2",
+    "jsonValid": true,
+    "tradeCount": 201,
+    "activeCount": 3,
+    "historyCount": 198
+  },
+  "settings": {
+    "path": "settings.json",
+    "bytes": 15337,
+    "sha256": "e08904861b9c869564f478edd50f19c9c1205ac287de89dc4620df8efb8904eb",
+    "jsonValid": true
+  },
+  "preGateState": {
+    "databaseSha256": "e3e79f76395af89218ba8cd96437e1812652cd281dfdef1c060e884b3525aae2",
+    "settingsSha256": "e08904861b9c869564f478edd50f19c9c1205ac287de89dc4620df8efb8904eb"
+  },
+  "postGateState": {
+    "databaseSha256": "e3e79f76395af89218ba8cd96437e1812652cd281dfdef1c060e884b3525aae2",
+    "settingsSha256": "e08904861b9c869564f478edd50f19c9c1205ac287de89dc4620df8efb8904eb",
+    "byteIdentical": true
+  },
+  "operatorAttestationRequiredBeforeActivation": true
+}

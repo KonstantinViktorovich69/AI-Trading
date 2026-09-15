@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} { allow read, write: if false; }
+    
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    
+    // Trade Blueprint
+    function isValidTrade(data, userId) {
+      return data.keys().hasAll(['userId', 'symbol', 'exchange', 'entryPrice', 'amount', 'leverage', 'side', 'status', 'openTime'])
+        && data.userId == userId
+        && data.symbol is string && data.symbol.size() <= 20
+        && data.exchange is string && data.exchange.size() <= 20
+        && data.entryPrice is number
+        && data.amount is number
+        && data.leverage is number
+        && (data.side == 'LONG' || data.side == 'SHORT')
+        && (data.status == 'OPEN' || data.status == 'CLOSED');
+    }
+
+    match /users/{userId} {
+      match /trades/{tradeId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(tradeId)
+          && isValidTrade(incoming(), userId)
+          && incoming().status == 'OPEN';
+        
+        allow update: if isOwner(userId)
+          && isValidTrade(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().openTime == existing().openTime
+          && (
+             // Close trade action
+             (existing().status == 'OPEN' && incoming().status == 'CLOSED') ||
+             // Update trade info action (DCA, AI Notes, etc)
+             (existing().status == 'OPEN' && incoming().status == 'OPEN')
+          );
+          
+        allow delete: if isOwner(userId);
+      }
+      
+      match /knowledge/{ruleId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && isValidId(ruleId)
+          && incoming().keys().hasAll(['userId', 'agent', 'text'])
+          && incoming().userId == userId
+          && incoming().text is string && incoming().text.size() <= 10000;
+        
+        allow update: if isOwner(userId)
+          && incoming().userId == existing().userId;
+          
+        allow delete: if isOwner(userId);
+      }
+      
+      match /settings/main {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /reports/performance {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /logs/exchange {
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}

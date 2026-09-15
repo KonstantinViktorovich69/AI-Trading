@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Obsidian Pro Palette */
+  --color-zinc-950: #050505;
+  --color-zinc-900: #0a0a0a;
+  --color-zinc-850: #121212;
+  --color-zinc-800: #1a1a1a;
+  
+  --color-obsidian-950: #020203;
+  --color-obsidian-900: #08080a;
+  --color-obsidian-800: #0e0e11;
+  --color-obsidian-700: #16161a;
+  
+  --shadow-glow-emerald: 0 0 20px -5px rgba(16, 185, 129, 0.2);
+  --shadow-glow-indigo: 0 0 20px -5px rgba(99, 102, 241, 0.2);
+  --shadow-glow-rose: 0 0 20px -5px rgba(244, 63, 94, 0.2);
+}
+
+@layer base {
+  body {
+    @apply bg-obsidian-950 text-zinc-100 antialiased selection:bg-indigo-500/30 selection:text-white;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-obsidian-800/40 backdrop-blur-md border border-white/5 rounded-xl;
+  }
+  
+  .data-card {
+    @apply bg-obsidian-900 border border-zinc-800/50 rounded-lg p-4 transition-all duration-200 hover:border-zinc-700/50;
+  }
+
+  .bento-grid {
+    @apply grid gap-4 lg:grid-cols-12;
+  }
+}
+
+/* Custom Scrollbar for Pro Feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-zinc-800 rounded-full hover:bg-zinc-700 transition-colors;
+}

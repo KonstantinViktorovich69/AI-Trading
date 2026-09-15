@@ -1,0 +1,8 @@
+{
+  "name": "SpreadScanner",
+  "description": "A professional-grade crypto trading simulator and bot with AI multi-agent committee analysis and automated strategy execution.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

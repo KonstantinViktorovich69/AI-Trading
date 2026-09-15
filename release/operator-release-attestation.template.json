@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "releaseCandidate": {
+    "archiveFile": "release-candidate.zip",
+    "archiveSha256": "<copy from release-candidate.zip.sha256>",
+    "receiptFile": "release-receipt.json",
+    "verificationResultFile": "release-package-verification-result.json"
+  },
+  "stateBaseline": {
+    "historicalProvenanceStatus": "OPERATOR_SUPPLIED_BASELINE",
+    "databaseSha256": "<copy from release-state-provenance.json>",
+    "settingsSha256": "<copy from release-state-provenance.json>",
+    "operatorReviewedHistoricalDelta": false
+  },
+  "technicalGates": {
+    "manifestVerified": false,
+    "inventoryVerified": false,
+    "negativeFixturesRejected": false,
+    "realTradingConfirmedDisabled": true
+  },
+  "authorization": {
+    "authorizedBy": "<human operator identifier>",
+    "authorizedAtUtc": "<ISO-8601 UTC timestamp>",
+    "decision": "PENDING",
+    "notes": "<non-sensitive approval/rejection rationale>"
+  }
+}

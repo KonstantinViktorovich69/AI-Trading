@@ -1,0 +1,27 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "/settings.json",
+        "/data/**/settings*.json",
+        "settings.json"
+      ],
+      "schema": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    {
+      "fileMatch": [
+        "/database.json",
+        "/data/**/database*.json",
+        "database.json"
+      ],
+      "schema": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  ],
+  "json.maxItemsComputed": 100000
+}

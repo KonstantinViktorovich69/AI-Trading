@@ -1,0 +1,41 @@
+{
+  "systemName": "Crypto AI Agent Quantitative Trading Terminal",
+  "version": "2.1.0",
+  "canonicalStrategy": {
+    "id": "CANONICAL_QUANT_SCALP_V2",
+    "version": "2.1.0",
+    "failClosed": true,
+    "minSymmetricConfidence": {
+      "LONG": 65,
+      "SHORT": 65
+    },
+    "maxSpreadAllowedPct": 0.80,
+    "minVolume24hUsd": 50000
+  },
+  "exitPolicy": {
+    "minNormalAutoCloseNetPnlPct": 4.00,
+    "minPttpActivationNetPnlPct": 4.00,
+    "minPttpPeakNetPnlPct": 6.00,
+    "pttpTrailingDropPct": 25.0,
+    "emergencyHardStopNetPnlPct": -18.0
+  },
+  "databasePersistence": {
+    "atomicStoreEnabled": true,
+    "targetPath": "database.json",
+    "backupCount": 5,
+    "autoRecoveryEnabled": true
+  },
+  "securityGuard": {
+    "realTradingGuardVar": "ENABLE_REAL_TRADING",
+    "defaultRealTradingState": false,
+    "authModesSupported": ["STRICT", "OPTIONAL", "DISABLED"],
+    "systemStatusEndpoint": "/api/system/status"
+  },
+  "verificationScripts": {
+    "lint": "npm run lint",
+    "testIntegration": "npm run test:integration",
+    "verifyWiring": "npm run verify:integration-wiring",
+    "verifySecrets": "npm run verify:secrets",
+    "build": "npm run build"
+  }
+}

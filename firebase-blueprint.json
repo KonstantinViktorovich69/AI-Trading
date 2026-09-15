@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "Trade": {
+      "title": "Paper Trade",
+      "description": "Represents a paper trade position",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "symbol": { "type": "string" },
+        "exchange": { "type": "string" },
+        "entryPrice": { "type": "number" },
+        "amount": { "type": "number" },
+        "leverage": { "type": "number" },
+        "side": { "type": "string", "enum": ["LONG", "SHORT"] },
+        "status": { "type": "string", "enum": ["OPEN", "CLOSED"] },
+        "openTime": { "type": "number" },
+        "closeTime": { "type": "number" },
+        "closePrice": { "type": "number" },
+        "pnl": { "type": "number" },
+        "pnlPercent": { "type": "number" },
+        "signalAiScore": { "type": "number" },
+        "feedback": { "type": "string" },
+        "notes": { "type": "string" },
+        "mode": { "type": "string", "enum": ["MANUAL", "AUTO", "SEMI_AUTO"] },
+        "takeProfit": { "type": "number" },
+        "stopLoss": { "type": "number" }
+      },
+      "required": ["userId", "symbol", "exchange", "entryPrice", "amount", "leverage", "side", "status", "openTime"]
+    },
+    "KnowledgeRule": {
+      "title": "AI Knowledge Rule",
+      "description": "Rule added to the AI knowledge base",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "agent": { "type": "string" },
+        "text": { "type": "string" },
+        "image": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "agent", "text"]
+    },
+    "UserSettings": {
+      "title": "User Settings & Balance",
+      "description": "Stores user balance and API settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "virtualBalance": { "type": "number" },
+        "startOfDayBalance": { "type": "number" }
+      },
+      "required": ["userId", "virtualBalance"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/trades/{tradeId}": {
+      "schema": "Trade",
+      "description": "Trades belonging to a user"
+    },
+    "/users/{userId}/knowledge/{ruleId}": {
+      "schema": "KnowledgeRule",
+      "description": "Knowledge rules belonging to a user"
+    },
+    "/users/{userId}/settings/main": {
+      "schema": "UserSettings",
+      "description": "Main settings for a user"
+    }
+  }
+}
