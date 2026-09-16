@@ -20,6 +20,8 @@ export class EventStreamHub {
   private emitter: EventEmitter;
   private agentExchangeLogs: AgentExchangeLog[] = [];
   private deps: EventStreamHubDependencies;
+  private lastFlushTime: number = 0;
+  private pendingFlushTimer: NodeJS.Timeout | null = null;
 
   constructor(deps: EventStreamHubDependencies = {}) {
     this.deps = deps;
@@ -67,7 +69,35 @@ export class EventStreamHub {
         const dbData = this.deps.getCachedDB();
         if (dbData) {
           dbData.agentExchangeLogs = this.agentExchangeLogs;
-          this.deps.flushDB();
+
+          const now = Date.now();
+          const elapsed = now - this.lastFlushTime;
+
+          if (elapsed >= 3000) {
+            if (this.pendingFlushTimer) {
+              clearTimeout(this.pendingFlushTimer);
+              this.pendingFlushTimer = null;
+            }
+            this.lastFlushTime = now;
+            try {
+              this.deps.flushDB();
+            } catch (err) {
+              // Fail-safe silently for non-critical logging persist
+            }
+          } else if (!this.pendingFlushTimer) {
+            const delay = Math.max(0, 3000 - elapsed);
+            this.pendingFlushTimer = setTimeout(() => {
+              this.pendingFlushTimer = null;
+              this.lastFlushTime = Date.now();
+              try {
+                if (this.deps.flushDB) {
+                  this.deps.flushDB();
+                }
+              } catch (err) {
+                // Fail-safe silently for non-critical logging persist
+              }
+            }, delay);
+          }
         }
       } catch (err) {
         // Fail-safe silently for non-critical logging persist
