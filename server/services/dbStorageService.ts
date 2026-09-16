@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { inferDataOrigin, inferDecisionSource, inferCloseReasonCode } from './tradeSchema.ts';
 import { processIncomingStateMessage } from './stateSync.ts';
+import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive.ts';
 
 export interface DbStorageContext {
   getAtomicStore: () => { loadState: <T>(fallback: T) => T; saveState: (data: any) => Promise<any>; getRevision: () => number };
@@ -85,6 +86,11 @@ export async function flushDB(ctx: DbStorageContext): Promise<void> {
 export async function requestDBSave(ctx: DbStorageContext): Promise<void> {
   const cachedDBData = ctx.getCachedDBData();
   if (!cachedDBData) return;
+  if (cachedDBData.trades) {
+    const partitioned = partitionTradesForArchive(cachedDBData.trades);
+    cachedDBData.trades = partitioned.keep;
+    appendTradesToArchive(partitioned.toArchive);
+  }
   if (cachedDBData.trades && cachedDBData.trades.length > 600) {
     const active = cachedDBData.trades.filter((t: any) => t.status === 'OPEN');
     const closed = cachedDBData.trades.filter((t: any) => t.status !== 'OPEN')
@@ -351,6 +357,12 @@ export async function saveTradeToDB(trade: any, immediate: boolean = false, ctx:
           }
         }
       }
+    }
+
+    if (dbData.trades) {
+      const partitioned = partitionTradesForArchive(dbData.trades);
+      dbData.trades = partitioned.keep;
+      appendTradesToArchive(partitioned.toArchive);
     }
 
     if (dbData.trades.length > 2000) {

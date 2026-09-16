@@ -1,6 +1,7 @@
 import { processIncomingStateMessage } from './stateSync.ts';
 import { withFirestoreTimeout } from './dbStorageService.ts';
 import { ensureHistoricalDataSeeded } from '../db/seedData.ts';
+import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive.ts';
 
 export interface AgentExchangeLog {
   id: string;
@@ -404,6 +405,10 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
     }
     
     if (Array.isArray(dbData.trades)) {
+      const partitioned = partitionTradesForArchive(dbData.trades);
+      dbData.trades = partitioned.keep;
+      appendTradesToArchive(partitioned.toArchive);
+
       if (dbData.trades.length > 1000) {
         const active = dbData.trades.filter((t: any) => t.status === 'OPEN');
         const closed = dbData.trades.filter((t: any) => t.status !== 'OPEN')
