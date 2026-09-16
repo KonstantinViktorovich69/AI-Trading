@@ -35,7 +35,7 @@ describe('Risk/Reward & Consensus Guard Logic', () => {
                              (signalSide === 'SHORT' && marketRegime === 'TREND_DOWN') ||
                              isReversalSweep;
       if (isTrendAligned) return 68;
-      if (marketRegime === 'RANGING_FLAT' || marketRegime === 'NEUTRAL') return 72;
+      if (marketRegime === 'RANGING_FLAT' || marketRegime === 'NEUTRAL') return 79;
       return 75;
     };
 
@@ -45,8 +45,8 @@ describe('Risk/Reward & Consensus Guard Logic', () => {
     expect(getAdaptiveRequiredScore('SHORT', 'TREND_DOWN', false)).toBe(68);
     // Reversal sweep in flat range
     expect(getAdaptiveRequiredScore('SHORT', 'RANGING_FLAT', true)).toBe(68);
-    // Range trade without sweep
-    expect(getAdaptiveRequiredScore('SHORT', 'RANGING_FLAT', false)).toBe(72);
+    // Range trade without sweep (ужесточённый порог во флэте)
+    expect(getAdaptiveRequiredScore('SHORT', 'RANGING_FLAT', false)).toBe(79);
     // Counter trend trade (LONG in bear trend)
     expect(getAdaptiveRequiredScore('LONG', 'TREND_DOWN', false)).toBe(75);
   });

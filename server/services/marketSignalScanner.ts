@@ -423,7 +423,7 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
             return 68; // Calibrated for high-conviction trend-aligned setups
           }
           if (marketRegime === 'RANGING_FLAT' || marketRegime === 'NEUTRAL') {
-            return 72; // Balanced threshold in flat range
+            return 79; // Ужесточённый порог во флэтовом режиме для защиты от ложных пробоев
           }
           return 75; // Strict standard threshold for counter-trend or high volatility
         })()
