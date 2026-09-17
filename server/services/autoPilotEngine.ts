@@ -7,6 +7,7 @@ import { dbAtomicStore } from '../atomicDbSaver.ts';
 import { type AgentDecisionEnvelope, evaluateCommitteeConsensus } from './agentEngine.ts';
 import { createAutopilotTradeIntentFromScanner } from './autopilotIntentFactory.ts';
 import { type AutoEntryExecutionPort } from './autoEntryService.ts';
+import { calculateStructuralStopLoss, calculateStructuralTpLadder } from './structuralExitLevels.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -452,46 +453,12 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                 }
                 // Open new virtual trade
                 const tradeId = `AL-${Date.now()}-${Math.floor(Math.random() * 10000).toString(36).toUpperCase()}`;
-                const atr = currentSig.atr ? Number(currentSig.atr) : (price * 0.015);
-                // Tightened scalping parameters: 1.2x ATR with mild volatility damping to target 1.5% - 2.5% SL
-                const pumpScale = volatility > 5.0 ? Math.min(1.4, 1.0 + (volatility - 5.0) * 0.05) : 1.0;
-                const slDistVal = atr * 1.2 * pumpScale;
-                const slPctVal = Math.min(0.025, Math.max(0.010, slDistVal / price));
-                const tpDistVal = Math.min(price * 0.05, Math.max(price * 0.02, slDistVal * 2.0)); // Strictly enforce realistic Scalp Reward 1:2
-                const tpPctVal = tpDistVal / price;
-                const rewardToRiskVal = 2.0;
-
-                const kVal = calculateKelly(finalAiScore, rewardToRiskVal);
-                const virtualRiskBudget = virtualBalance * Math.max(0.1, kVal) * 0.05;
-                const targetVirtualPosVal = slPctVal > 0 ? (virtualRiskBudget / slPctVal) : (virtualBalance * Math.max(0.1, kVal));
-                
-                // Scale base position size and minimum size based on current virtualBalance
-                let minBaseSize = 20;
-                let maxPctOfBalance = 0.15;
-                if (virtualBalance <= 150) {
-                    minBaseSize = 10;
-                    maxPctOfBalance = 0.10;
-                } else if (virtualBalance <= 300) {
-                    minBaseSize = 15;
-                    maxPctOfBalance = 0.10;
-                } else if (virtualBalance <= 500) {
-                    maxPctOfBalance = 0.12;
-                }
-                const baseSize = Math.max(minBaseSize, Math.min(virtualBalance * maxPctOfBalance, targetVirtualPosVal));
+                const cachedIndicators = GLOBAL_TRUE_OHLCV[normalizeSymbol(symbol)] || {};
+                const atr = currentSig.atr ? Number(currentSig.atr) : (GLOBAL_ATR[normalizeSymbol(symbol)] || (price * 0.015));
 
                 const signalVol = volatility;
                 const slippagePercent = Math.min(0.0015, 0.0005 * (1 + Math.max(0, signalVol - 2.0) * 0.15));
                 const slippagePrice = isSellSignal ? formatNumericPrice(price * (1 - slippagePercent)) : formatNumericPrice(price * (1 + slippagePercent));
-
-                const openAutoTradesNowCount = activeVirtualCount;
-                let portfolioOverexposureMultiplier = 1.0;
-                if (openAutoTradesNowCount >= 2 && openAutoTradesNowCount < 4) {
-                    portfolioOverexposureMultiplier = 0.70;
-                } else if (openAutoTradesNowCount >= 4) {
-                    portfolioOverexposureMultiplier = 0.50;
-                }
-
-                let challengeRiskMultiplier = 1.0; // Для виртуальных и обучающих сделок отключены любые ограничения по просадке баланса или точности сделок
 
                 const hasWickWorthy = typeof currentSig.wicks !== 'undefined' && currentSig.wicks && (isSellSignal ? currentSig.wicks.topPct > 0.25 : currentSig.wicks.bottomPct > 0.25);
                 let optimizedEntryPrice = slippagePrice;
@@ -530,6 +497,47 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                 const dAutoTp2 = Math.max(1.40, 2.0 * autoVolSqueezeFactor);
                 const dAutoTp3 = Math.max(2.60, 3.8 * autoVolSqueezeFactor);
                 const dAutoTp4 = Math.max(4.50, 7.0 * autoVolSqueezeFactor);
+
+                // Structural Stop-Loss (привязанный к localLow5m/localHigh5m и буферу ATR)
+                const structuralSlVirtual = calculateStructuralStopLoss({
+                    isSellSignal,
+                    referencePrice: optimizedEntryPrice,
+                    localLow5m: cachedIndicators.localLow5m ?? price,
+                    localHigh5m: cachedIndicators.localHigh5m ?? price,
+                    atr,
+                    dAutoTp1OrDRealTp1: dAutoTp1
+                });
+                const slDistVal = optimizedEntryPrice * structuralSlVirtual.slPct;
+                const slPctVal = structuralSlVirtual.slPct;
+
+                const rewardToRiskVal = 2.0;
+                const kVal = calculateKelly(finalAiScore, rewardToRiskVal);
+                const virtualRiskBudget = virtualBalance * Math.max(0.1, kVal) * 0.05;
+                const targetVirtualPosVal = slPctVal > 0 ? (virtualRiskBudget / slPctVal) : (virtualBalance * Math.max(0.1, kVal));
+                
+                // Scale base position size and minimum size based on current virtualBalance
+                let minBaseSize = 20;
+                let maxPctOfBalance = 0.15;
+                if (virtualBalance <= 150) {
+                    minBaseSize = 10;
+                    maxPctOfBalance = 0.10;
+                } else if (virtualBalance <= 300) {
+                    minBaseSize = 15;
+                    maxPctOfBalance = 0.10;
+                } else if (virtualBalance <= 500) {
+                    maxPctOfBalance = 0.12;
+                }
+                const baseSize = Math.max(minBaseSize, Math.min(virtualBalance * maxPctOfBalance, targetVirtualPosVal));
+
+                const openAutoTradesNowCount = activeVirtualCount;
+                let portfolioOverexposureMultiplier = 1.0;
+                if (openAutoTradesNowCount >= 2 && openAutoTradesNowCount < 4) {
+                    portfolioOverexposureMultiplier = 0.70;
+                } else if (openAutoTradesNowCount >= 4) {
+                    portfolioOverexposureMultiplier = 0.50;
+                }
+
+                let challengeRiskMultiplier = 1.0; // Для виртуальных и обучающих сделок отключены любые ограничения по просадке баланса или точности сделок
                 const sctoSizeMult = currentSig.sctoSizeMultiplier || 1.0;
 
                 let calculatedAmount = Number((baseSize * sizeMultiplierVirtual * portfolioOverexposureMultiplier * challengeRiskMultiplier * sctoSizeMult).toFixed(1));
@@ -545,13 +553,22 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                 const autoImbVal = orderBookImbalance[normalizeSymbol(symbol)]?.imbalance ?? 50;
                 const autoRatios = calculateAdaptiveCloseRatios(autoImbVal, volatility);
 
-                const rawTakeProfit = isSellSignal ? Number((optimizedEntryPrice - tpDistVal).toFixed(5)) : Number((optimizedEntryPrice + tpDistVal).toFixed(5));
+                // Structural TP Ladder (привязанный к swingHigh1h/swingLow1h)
+                const tpLadderVirtual = calculateStructuralTpLadder({
+                    isSellSignal,
+                    referencePrice: optimizedEntryPrice,
+                    swingHigh1h: cachedIndicators.swingHigh1h ?? price,
+                    swingLow1h: cachedIndicators.swingLow1h ?? price,
+                    dAutoTp4OrDRealTp4Floor: dAutoTp4
+                });
+
+                const rawTakeProfit = tpLadderVirtual.stage4;
                 const adjustedTakeProfit = deps.getWallAdjustedTp(symbol, isSellSignal, optimizedEntryPrice, rawTakeProfit);
 
-                const stage1Target = isSellSignal ? Number((optimizedEntryPrice * (1 - dAutoTp1 / 100)).toFixed(5)) : Number((optimizedEntryPrice * (1 + dAutoTp1 / 100)).toFixed(5));
-                const stage2Target = isSellSignal ? Number((optimizedEntryPrice * (1 - dAutoTp2 / 100)).toFixed(5)) : Number((optimizedEntryPrice * (1 + dAutoTp2 / 100)).toFixed(5));
-                const stage3Target = isSellSignal ? Number((optimizedEntryPrice * (1 - dAutoTp3 / 100)).toFixed(5)) : Number((optimizedEntryPrice * (1 + dAutoTp3 / 100)).toFixed(5));
-                const stage4Target = isSellSignal ? Number((optimizedEntryPrice * (1 - dAutoTp4 / 100)).toFixed(5)) : Number((optimizedEntryPrice * (1 + dAutoTp4 / 100)).toFixed(5));
+                const stage1Target = tpLadderVirtual.stage1;
+                const stage2Target = tpLadderVirtual.stage2;
+                const stage3Target = tpLadderVirtual.stage3;
+                const stage4Target = tpLadderVirtual.stage4;
 
                 const autoEntryPort: AutoEntryExecutionPort = {
                     saveTradeDB: async (t, imm) => {
@@ -712,21 +729,13 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                         finalAiScore,
                         calculatedAmount,
                         leverage: adaptiveLeverageVirtual,
-                        stopLoss: (() => {
-                            // Dynamic Risk-to-Reward Guard: Stop-Loss restricted to max 1.8x of initial TP1 target
-                            // bounded between 0.8% and 2.2% price movement to prevent skewed downside
-                            const maxSlBoundByTp1 = Math.max(0.012, (dAutoTp1 / 100) * 1.8);
-                            const finalSlPct = Math.min(0.022, Math.max(0.008, Math.min(slDistVal / optimizedEntryPrice, maxSlBoundByTp1)));
-                            return validatedIntent.side === 'SHORT'
-                                ? formatNumericPrice(optimizedEntryPrice * (1 + finalSlPct))
-                                : formatNumericPrice(optimizedEntryPrice * (1 - finalSlPct));
-                        })(),
+                        stopLoss: formatNumericPrice(structuralSlVirtual.stopLoss),
                         takeProfit: adjustedTakeProfit,
                         tpStages: [
-                            { targetPrice: stage1Target, targetPercent: Number(dAutoTp1.toFixed(2)), closeRatio: autoRatios[0], executed: false },
-                            { targetPrice: stage2Target, targetPercent: Number(dAutoTp2.toFixed(2)), closeRatio: autoRatios[1], executed: false },
-                            { targetPrice: stage3Target, targetPercent: Number(dAutoTp3.toFixed(2)), closeRatio: autoRatios[2], executed: false },
-                            { targetPrice: stage4Target, targetPercent: Number(dAutoTp4.toFixed(2)), closeRatio: autoRatios[3], executed: false }
+                            { targetPrice: stage1Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.15).toFixed(2)), closeRatio: autoRatios[0], executed: false },
+                            { targetPrice: stage2Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.30).toFixed(2)), closeRatio: autoRatios[1], executed: false },
+                            { targetPrice: stage3Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.55).toFixed(2)), closeRatio: autoRatios[2], executed: false },
+                            { targetPrice: stage4Target, targetPercent: Number(tpLadderVirtual.tp4DistancePct.toFixed(2)), closeRatio: autoRatios[3], executed: false }
                         ],
                         gridOrders: (() => {
                             const cleanSym = (symbol || '').replace(/[\/:]/g, '');
@@ -919,13 +928,25 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                 realBalanceUSDT = balance.USDT.total || balance.USDT.free || 100;
                             }
 
-                            const atr = currentSig.atr ? Number(currentSig.atr) : (price * 0.015);
-                            // Tightened scalping parameters: 1.2x ATR with mild volatility damping to target 1.5% - 2.5% SL
-                            const pumpScale = volatility > 5.0 ? Math.min(1.4, 1.0 + (volatility - 5.0) * 0.05) : 1.0;
-                            const slDistVal = atr * 1.2 * pumpScale;
-                            const slPctVal = Math.min(0.025, Math.max(0.010, slDistVal / price));
-                            const tpDistVal = Math.min(price * 0.05, Math.max(price * 0.02, slDistVal * 2.0)); // Strictly enforce realistic Scalp Reward 1:2
-                            const tpPctVal = tpDistVal / price;
+                            const cachedIndicatorsReal = GLOBAL_TRUE_OHLCV[normalizeSymbol(symbol)] || {};
+                            const atr = currentSig.atr ? Number(currentSig.atr) : (GLOBAL_ATR[normalizeSymbol(symbol)] || (price * 0.015));
+                            const realVolSqueezeFactor = (currentSig.atr && price > 0) ? Math.max(0.5, Math.min(1.8, (Number(currentSig.atr) / price * 100) / 1.75)) : 1.0;
+                            const dRealTp1 = Math.max(0.70, 1.0 * realVolSqueezeFactor);
+                            const dRealTp2 = Math.max(1.40, 2.0 * realVolSqueezeFactor);
+                            const dRealTp3 = Math.max(2.60, 3.8 * realVolSqueezeFactor);
+                            const dRealTp4 = Math.max(4.50, 7.0 * realVolSqueezeFactor);
+
+                            // Structural Stop-Loss (привязанный к localLow5m/localHigh5m и буферу ATR)
+                            const structuralSlReal = calculateStructuralStopLoss({
+                                isSellSignal,
+                                referencePrice: price,
+                                localLow5m: cachedIndicatorsReal.localLow5m ?? price,
+                                localHigh5m: cachedIndicatorsReal.localHigh5m ?? price,
+                                atr,
+                                dAutoTp1OrDRealTp1: dRealTp1
+                            });
+                            const slDistVal = price * structuralSlReal.slPct;
+                            const slPctVal = structuralSlReal.slPct;
                             const rewardToRiskVal = 2.0;
 
                             const k = calculateKelly(finalAiScore, rewardToRiskVal);
@@ -982,23 +1003,24 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                 const realImbVal = orderBookImbalance[normalizeSymbol(symbol)]?.imbalance ?? 50;
                                 const step1Amount = totalMargin;
                                 const realLeverage = Math.max(5, adaptiveLeverageReal);
-
-                                const realVolSqueezeFactor = (currentSig.atr && price > 0) ? Math.max(0.5, Math.min(1.8, (Number(currentSig.atr) / price * 100) / 1.75)) : 1.0;
-                                const dRealTp1 = Math.max(0.70, 1.0 * realVolSqueezeFactor);
-                                const dRealTp2 = Math.max(1.40, 2.0 * realVolSqueezeFactor);
-                                const dRealTp3 = Math.max(2.60, 3.8 * realVolSqueezeFactor);
-                                const dRealTp4 = Math.max(4.50, 7.0 * realVolSqueezeFactor);
                                 const realRatios = calculateAdaptiveCloseRatios(realImbVal, volatility);
 
-                                const stage1Target = isSellSignal ? Number((price * (1 - dRealTp1 / 100)).toFixed(5)) : Number((price * (1 + dRealTp1 / 100)).toFixed(5));
-                                const stage2Target = isSellSignal ? Number((price * (1 - dRealTp2 / 100)).toFixed(5)) : Number((price * (1 + dRealTp2 / 100)).toFixed(5));
-                                const stage3Target = isSellSignal ? Number((price * (1 - dRealTp3 / 100)).toFixed(5)) : Number((price * (1 + dRealTp3 / 100)).toFixed(5));
-                                const stage4Target = isSellSignal ? Number((price * (1 - dRealTp4 / 100)).toFixed(5)) : Number((price * (1 + dRealTp4 / 100)).toFixed(5));
+                                // Structural TP Ladder (привязанный к swingHigh1h/swingLow1h)
+                                const tpLadderReal = calculateStructuralTpLadder({
+                                    isSellSignal,
+                                    referencePrice: price,
+                                    swingHigh1h: cachedIndicatorsReal.swingHigh1h ?? price,
+                                    swingLow1h: cachedIndicatorsReal.swingLow1h ?? price,
+                                    dAutoTp4OrDRealTp4Floor: dRealTp4
+                                });
 
-                                const rawTpPrice = isSellSignal
-                                    ? (currentSig.atr ? Math.max(price * 0.94, price - (Number(currentSig.atr) * 2.0)) : price * 0.95)
-                                    : (currentSig.atr ? Math.min(price * 1.06, price + (Number(currentSig.atr) * 2.0)) : price * 1.05);
+                                const rawTpPrice = tpLadderReal.stage4;
                                 const adjustedTakeProfit = deps.getWallAdjustedTp(symbol, isSellSignal, price, rawTpPrice);
+
+                                const stage1Target = tpLadderReal.stage1;
+                                const stage2Target = tpLadderReal.stage2;
+                                const stage3Target = tpLadderReal.stage3;
+                                const stage4Target = tpLadderReal.stage4;
 
                                 const realExecutionPort: AutoEntryExecutionPort = {
                                     executeRealOpenOnExchange: async (sym, side, amt, lev) => {
@@ -1165,21 +1187,13 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                         finalAiScore,
                                         calculatedAmount: step1Amount,
                                         leverage: realLeverage,
-                                        stopLoss: (() => {
-                                            // Dynamic Risk-to-Reward Guard: Stop-Loss restricted to max 1.8x of initial TP1 target
-                                            // bounded between 0.8% and 2.2% price movement to prevent skewed downside
-                                            const maxSlBoundByTp1 = Math.max(0.012, (dRealTp1 / 100) * 1.8);
-                                            const finalSlPct = Math.min(0.022, Math.max(0.008, Math.min(slDistVal / price, maxSlBoundByTp1)));
-                                            return validatedRealIntent.side === 'SHORT'
-                                                ? formatNumericPrice(price * (1 + finalSlPct))
-                                                : formatNumericPrice(price * (1 - finalSlPct));
-                                        })(),
+                                        stopLoss: formatNumericPrice(structuralSlReal.stopLoss),
                                         takeProfit: adjustedTakeProfit,
                                         tpStages: [
-                                            { targetPrice: stage1Target, targetPercent: Number(dRealTp1.toFixed(2)), closeRatio: realRatios[0], executed: false },
-                                            { targetPrice: stage2Target, targetPercent: Number(dRealTp2.toFixed(2)), closeRatio: realRatios[1], executed: false },
-                                            { targetPrice: stage3Target, targetPercent: Number(dRealTp3.toFixed(2)), closeRatio: realRatios[2], executed: false },
-                                            { targetPrice: stage4Target, targetPercent: Number(dRealTp4.toFixed(2)), closeRatio: realRatios[3], executed: false }
+                                            { targetPrice: stage1Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.15).toFixed(2)), closeRatio: realRatios[0], executed: false },
+                                            { targetPrice: stage2Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.30).toFixed(2)), closeRatio: realRatios[1], executed: false },
+                                            { targetPrice: stage3Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.55).toFixed(2)), closeRatio: realRatios[2], executed: false },
+                                            { targetPrice: stage4Target, targetPercent: Number(tpLadderReal.tp4DistancePct.toFixed(2)), closeRatio: realRatios[3], executed: false }
                                         ],
                                         gridOrders: (() => {
                                             const dcaMultFactor = Math.min(1.0, globalSettings.dcaMultiplierFactor || 1.0);
