@@ -4,11 +4,11 @@
       "virtualBalance": 127.41,
       "startOfDayBalance": 150,
       "lastResetDate": "2026-09-16",
-      "startOfWeekBalance": 134.2,
+      "startOfWeekBalance": 127.41,
       "lastWeekCheckTime": 1788680629276,
       "userId": "polyakovats3110@gmail.com",
-      "updatedAt": 1789589097381,
-      "virtualEquity": 146.2
+      "updatedAt": 1789590071792,
+      "virtualEquity": 146.61
     },
     "globalConfig": {
       "virtualBalance": 127.41,
@@ -18452,7 +18452,7 @@
       "lowestPrice": 4.2405,
       "maxReachedUnleveragedPnl": 0.9127106524969879,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789589083708,
+      "lastAiCheck": 1789590071772,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
       "userId": "polyakovats3110@gmail.com",
       "isProtected": true,
@@ -19306,7 +19306,7 @@
       "lowestPrice": 23.83,
       "maxReachedUnleveragedPnl": 0.07328848384859697,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789589083708,
+      "lastAiCheck": 1789590011723,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
       "maxReachedPnl": 0.16103747572116905,
       "userId": "polyakovats3110@gmail.com"
@@ -19356,11 +19356,11 @@
       "strategyId": "CANONICAL_QUANT_SCALP_V2",
       "strategyVersion": "2.1.0",
       "stateRevision": 615987,
-      "highestPrice": 175.41,
+      "highestPrice": 175.55,
       "lowestPrice": 172.94,
       "maxReachedUnleveragedPnl": 0,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789589045850,
+      "lastAiCheck": 1789590011723,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
       "userId": "polyakovats3110@gmail.com"
     },
@@ -19409,13 +19409,13 @@
       "strategyId": "CANONICAL_QUANT_SCALP_V2",
       "strategyVersion": "2.1.0",
       "stateRevision": 616085,
-      "highestPrice": 0.004867,
+      "highestPrice": 0.004879,
       "lowestPrice": 0.004768,
-      "maxReachedUnleveragedPnl": 0.7660455486542382,
+      "maxReachedUnleveragedPnl": 1.0144927536231794,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789589045850,
+      "lastAiCheck": 1789590011723,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
-      "maxReachedPnl": 3.312629399585912,
+      "maxReachedPnl": 5.072463768115897,
       "isProtected": true,
       "userId": "polyakovats3110@gmail.com"
     },
@@ -19468,7 +19468,7 @@
       "lowestPrice": 33.51,
       "maxReachedUnleveragedPnl": 0.2773248611218158,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789589045850,
+      "lastAiCheck": 1789590011723,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
       "maxReachedPnl": 1.386624305609079,
       "userId": "polyakovats3110@gmail.com"
@@ -19726,11 +19726,11 @@
         "confidenceGate": true
       },
       "sourcePath": "MAIN_VIRTUAL",
-      "highestPrice": 0.3397,
+      "highestPrice": 0.3402,
       "lowestPrice": 0.3346,
       "maxReachedUnleveragedPnl": 0.07227289288678376,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789589083708,
+      "lastAiCheck": 1789590011723,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
       "lastGridTime": 1789588037265,
       "dcaAveraged": true,
@@ -22544,8 +22544,8 @@
     }
   ],
   "aiCommitteeHistory": [],
-  "stateRevision": 616505,
-  "updatedAt": 1789589097501,
+  "stateRevision": 616516,
+  "updatedAt": 1789590071792,
   "aiExpertTraderInstructionsHistory": [
     {
       "id": "inst_1789382125320_jvnty",

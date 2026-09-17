@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo, useDeferredValue, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useDeferredValue, useCallback, lazy, Suspense } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Info, Bell, Calculator, TrendingDown, TrendingUp, AlertCircle, AlertTriangle, Rocket, HelpCircle, Play, Bot, Send, RefreshCw, Brain, ShieldAlert, CheckCircle2, Smartphone, Activity, ExternalLink, Filter, Search, ChevronDown, Check, Plus, Settings, X, History, Volume2, VolumeX, Star, Zap, Lightbulb, BookOpen, Loader2, Clock, ArrowRight, Eye, EyeOff, Archive, FolderDown, FolderUp, Sparkles, Sliders, Maximize2, Minimize2, BarChart3, Edit, Wifi, WifiOff } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { cn } from '../lib/utils';
-import { TradingChart } from './TradingChart';
-import { AnalyticsTab } from './AnalyticsTab';
-import { SignalAnalyticsDashboard } from './SignalAnalyticsDashboard';
-import { FineTuningPanel } from './FineTuningPanel';
-import { FundingArbitragePanel } from './FundingArbitragePanel';
+
+const TradingChart = lazy(() => import('./TradingChart').then(m => ({ default: m.TradingChart })));
+const AnalyticsTab = lazy(() => import('./AnalyticsTab').then(m => ({ default: m.AnalyticsTab })));
+const SignalAnalyticsDashboard = lazy(() => import('./SignalAnalyticsDashboard').then(m => ({ default: m.SignalAnalyticsDashboard })));
+const FineTuningPanel = lazy(() => import('./FineTuningPanel').then(m => ({ default: m.FineTuningPanel })));
+const FundingArbitragePanel = lazy(() => import('./FundingArbitragePanel').then(m => ({ default: m.FundingArbitragePanel })));
 
 function Tooltip({ text, children, className }: { text: string, children: React.ReactNode, position?: 'top' | 'right' | 'bottom', className?: string, key?: string | number }) {
   return (
@@ -696,11 +697,18 @@ const ActiveTradeItem = ({
                 {trade.id === activeTerminalTradeId ? <X className="w-3 h-3" /> : <Activity className="w-3 h-3" />}
              </button>
           </div>
-          <TradingChart 
-            symbol={trade.symbol} 
-            exchange={trade.exchange || 'weex'} 
-            trades={singleTradeArray}
-          />
+          <Suspense fallback={
+            <div className="w-full h-full min-h-[400px] flex flex-col items-center justify-center bg-zinc-950 text-zinc-500">
+              <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
+              <span className="text-xs text-zinc-400 font-mono">Загрузка графика...</span>
+            </div>
+          }>
+            <TradingChart 
+              symbol={trade.symbol} 
+              exchange={trade.exchange || 'weex'} 
+              trades={singleTradeArray}
+            />
+          </Suspense>
         </div>
 
         {/* Compact Sidebar (320px) */}
@@ -4744,12 +4752,26 @@ export function TradingTerminal({
 
       {mainTab === 'signal_analytics' && (
         <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-6">
-          <SignalAnalyticsDashboard trades={allTradesArray} onRefresh={manualSync} />
+          <Suspense fallback={
+            <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
+              <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
+              <span className="text-xs text-zinc-400 font-mono">Загрузка аналитики сигналов...</span>
+            </div>
+          }>
+            <SignalAnalyticsDashboard trades={allTradesArray} onRefresh={manualSync} />
+          </Suspense>
         </div>
       )}
 
       {mainTab === 'funding' && (
-        <FundingArbitragePanel addToast={addToast} />
+        <Suspense fallback={
+          <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 border border-zinc-800/50 rounded-xl text-zinc-500">
+            <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
+            <span className="text-xs text-zinc-400 font-mono">Загрузка арбитража фандинга...</span>
+          </div>
+        }>
+          <FundingArbitragePanel addToast={addToast} />
+        </Suspense>
       )}
 
       {mainTab === 'knowledge' && (
@@ -7099,14 +7121,21 @@ export function TradingTerminal({
       })()}
 
       {mainTab === 'fine_tuning' && (
-        <FineTuningPanel 
-          tradingMode={tradingMode}
-          setTradingMode={setTradingMode}
-          onAddToast={(msg, type) => {
-            if (addToast) addToast(msg, type);
-          }}
-          onRefreshBalance={onRefreshRealBalance}
-        />
+        <Suspense fallback={
+          <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 border border-zinc-800/50 rounded-xl text-zinc-500">
+            <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
+            <span className="text-xs text-zinc-400 font-mono">Загрузка тонкой настройки...</span>
+          </div>
+        }>
+          <FineTuningPanel 
+            tradingMode={tradingMode}
+            setTradingMode={setTradingMode}
+            onAddToast={(msg, type) => {
+              if (addToast) addToast(msg, type);
+            }}
+            onRefreshBalance={onRefreshRealBalance}
+          />
+        </Suspense>
       )}
 
       {mainTab === 'scanner' && (() => {
@@ -7984,13 +8013,20 @@ export function TradingTerminal({
         
         {chartSymbol && (
           <div ref={chartScrollRef} className="mt-8 border border-white/10 rounded-2xl overflow-hidden shadow-2xl h-[500px]">
-            <TradingChart 
-              key={`${chartSymbol.symbol}-${chartSymbol.exchange}`}
-              symbol={chartSymbol.symbol} 
-              exchange={chartSymbol.exchange} 
-              onClose={() => setChartSymbol(null)} 
-              trades={allTradesArray}
-            />
+            <Suspense fallback={
+              <div className="w-full h-full min-h-[500px] flex flex-col items-center justify-center bg-zinc-950 text-zinc-500">
+                <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
+                <span className="text-xs text-zinc-400 font-mono">Загрузка графика...</span>
+              </div>
+            }>
+              <TradingChart 
+                key={`${chartSymbol.symbol}-${chartSymbol.exchange}`}
+                symbol={chartSymbol.symbol} 
+                exchange={chartSymbol.exchange} 
+                onClose={() => setChartSymbol(null)} 
+                trades={allTradesArray}
+              />
+            </Suspense>
           </div>
         )}
       </div>
@@ -9214,9 +9250,23 @@ export function TradingTerminal({
           </div>
           
           {historyTab === 'signal_analytics' ? (
-            <SignalAnalyticsDashboard trades={allTradesArray} onRefresh={manualSync} />
+            <Suspense fallback={
+              <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
+                <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
+                <span className="text-xs text-zinc-400 font-mono">Загрузка аналитики сигналов...</span>
+              </div>
+            }>
+              <SignalAnalyticsDashboard trades={allTradesArray} onRefresh={manualSync} />
+            </Suspense>
           ) : historyTab === 'analytics' ? (
-            <AnalyticsTab trades={allTradesArray} onRefresh={manualSync} onExport={handleExportDB} isLoading={loading} />
+            <Suspense fallback={
+              <div className="flex flex-col items-center justify-center py-16 text-zinc-500">
+                <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
+                <span className="text-xs text-zinc-400 font-mono">Загрузка аналитики...</span>
+              </div>
+            }>
+              <AnalyticsTab trades={allTradesArray} onRefresh={manualSync} onExport={handleExportDB} isLoading={loading} />
+            </Suspense>
           ) : historyTab === 'learning' ? (
             <div className="space-y-4">
               {autoLearningTrades.length === 0 ? (
