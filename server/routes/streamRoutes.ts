@@ -46,6 +46,14 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
       const virtualTrades = ctx.getVirtualTrades();
       const dbDataForSse = ctx.getCachedDB();
       const signalsCache = ctx.getSignalsCache();
+
+      const nonClosedTrades = virtualTrades.filter((t: any) => t.status !== 'CLOSED');
+      const recentClosedTrades = virtualTrades
+        .filter((t: any) => t.status === 'CLOSED')
+        .sort((a: any, b: any) => (b.closeTime || 0) - (a.closeTime || 0))
+        .slice(0, 20);
+      const streamedPaperTrades = [...nonClosedTrades, ...recentClosedTrades];
+
       const data = {
         signals: signalsCache?.data || [],
         marketHealth: signalsCache?.marketHealth || 50,
@@ -53,7 +61,7 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
         socialSentiment: ctx.getSocialSentiment(),
         marketRegime: signalsCache?.marketRegime || 'FLAT',
         btcTrend24h: signalsCache?.btcTrend24h || 0,
-        paperTrades: virtualTrades,
+        paperTrades: streamedPaperTrades,
         balance: ctx.getVirtualBalance(),
         startOfDayBalance: ctx.getStartOfDayBalance ? ctx.getStartOfDayBalance() : undefined,
         startOfDayRealBalance: ctx.getStartOfDayRealBalance ? ctx.getStartOfDayRealBalance() : undefined,
