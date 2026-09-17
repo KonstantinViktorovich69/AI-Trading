@@ -270,7 +270,7 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
       const data = ctx.getCachedDB() || {};
       const exportData = {
         ...data,
-        globalSettings: data.globalSettings ? sanitizeSettingsForClient(data.globalSettings) : data.globalSettings
+        settings: data.settings ? sanitizeSettingsForClient(data.settings) : data.settings
       };
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', 'attachment; filename=crypto-ai-agent-db-backup.json');

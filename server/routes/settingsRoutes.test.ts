@@ -170,10 +170,10 @@ describe('Settings Router Security Tests', () => {
     expect(realSettings.exchangeApiConfig.exchange).toBe('weex');
   });
 
-  it('GET /database/export masks globalSettings in backup export', async () => {
+  it('GET /database/export masks settings in backup export', async () => {
     const cachedDB = {
       virtualTrades: [{ id: 'trade-1', symbol: 'BTCUSDT' }],
-      globalSettings: {
+      settings: {
         exchangeApiConfig: {
           apiKey: 'secret-export-key',
           apiSecret: 'secret-export-secret',
@@ -194,11 +194,11 @@ describe('Settings Router Security Tests', () => {
     await handler({} as any, res);
 
     expect(res.jsonData.virtualTrades).toEqual([{ id: 'trade-1', symbol: 'BTCUSDT' }]);
-    expect(res.jsonData.globalSettings.exchangeApiConfig.apiKey).toBe(CONFIGURED_SECRET_MASK);
-    expect(res.jsonData.globalSettings.exchangeApiConfig.apiSecret).toBe(CONFIGURED_SECRET_MASK);
-    expect(res.jsonData.globalSettings.telegramBots[0].botToken).toBe(CONFIGURED_SECRET_MASK);
+    expect(res.jsonData.settings.exchangeApiConfig.apiKey).toBe(CONFIGURED_SECRET_MASK);
+    expect(res.jsonData.settings.exchangeApiConfig.apiSecret).toBe(CONFIGURED_SECRET_MASK);
+    expect(res.jsonData.settings.telegramBots[0].botToken).toBe(CONFIGURED_SECRET_MASK);
 
     // In-memory cachedDB must NOT be modified
-    expect(cachedDB.globalSettings.exchangeApiConfig.apiKey).toBe('secret-export-key');
+    expect(cachedDB.settings.exchangeApiConfig.apiKey).toBe('secret-export-key');
   });
 });
