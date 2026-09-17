@@ -344,6 +344,8 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
 
             let isLiquiditySweep1h = false;
             let isLiquiditySweepLow1h = false;
+            let swingHigh1h = price;
+            let swingLow1h = price;
             if (ohlcv1h && ohlcv1h.length >= 15) {
               const highs1h = ohlcv1h.map(h => h[2] as number);
               const lows1h = ohlcv1h.map(h => h[3] as number);
@@ -351,8 +353,8 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
               const lastIdx1h = highs1h.length - 1;
               const prevHighs1h = highs1h.slice(Math.max(0, lastIdx1h - 15), lastIdx1h);
               const prevLows1h = lows1h.slice(Math.max(0, lastIdx1h - 15), lastIdx1h);
-              const swingHigh1h = prevHighs1h.length > 0 ? Math.max(...prevHighs1h) : price;
-              const swingLow1h = prevLows1h.length > 0 ? Math.min(...prevLows1h) : price;
+              swingHigh1h = prevHighs1h.length > 0 ? Math.max(...prevHighs1h) : price;
+              swingLow1h = prevLows1h.length > 0 ? Math.min(...prevLows1h) : price;
               const currentHigh1h = highs1h[lastIdx1h];
               const currentLow1h = lows1h[lastIdx1h];
               const currentClose1h = closes1h[lastIdx1h];
@@ -434,6 +436,8 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
                 trend1d,
                 isLiquiditySweep1h,
                 isLiquiditySweepLow1h,
+                swingHigh1h,
+                swingLow1h,
                 localHigh5m,
                 localLow5m,
                 isLiquiditySweep5m,
