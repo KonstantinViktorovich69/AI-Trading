@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response, Router } from 'express';
 import ccxt from 'ccxt';
+import { sanitizeSettingsForClient, CONFIGURED_SECRET_MASK } from '../utils/settingsSanitizer.ts';
 
 export interface SettingsRouterContext {
   getGlobalSettings: () => any;
@@ -38,7 +39,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     const status = ctx.getLastSanitizationStatus();
     res.json({
       success: true,
-      data: ctx.getGlobalSettings(),
+      data: sanitizeSettingsForClient(ctx.getGlobalSettings()),
       instructionsSanitized: status.sanitized,
       sanitizeReason: status.reason
     });
@@ -49,7 +50,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     const status = ctx.getLastSanitizationStatus();
     res.json({
       success: true,
-      data: ctx.getGlobalSettings(),
+      data: sanitizeSettingsForClient(ctx.getGlobalSettings()),
       instructionsSanitized: status.sanitized,
       sanitizeReason: status.reason
     });
@@ -77,7 +78,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     res.json({
       success: true,
       message: 'Успешный откат инструкции!',
-      data: ctx.getGlobalSettings(),
+      data: sanitizeSettingsForClient(ctx.getGlobalSettings()),
       instructionsSanitized: status.sanitized,
       sanitizeReason: status.reason
     });
@@ -112,14 +113,45 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     if (isAutopilotEnabled !== undefined) {
       globalSettings.isAutopilotEnabled = !!isAutopilotEnabled;
     }
-    if (telegramBots) globalSettings.telegramBots = telegramBots;
+    if (telegramBots) {
+      if (Array.isArray(telegramBots)) {
+        const existingBots = globalSettings.telegramBots || [];
+        globalSettings.telegramBots = telegramBots.map((b: any, idx: number) => {
+          if (!b || typeof b !== 'object') return b;
+          const existingBot = existingBots.find((eb: any) => eb && eb.id === b.id) || existingBots[idx];
+          return {
+            ...b,
+            botToken: b.botToken === CONFIGURED_SECRET_MASK ? (existingBot?.botToken ?? '') : b.botToken,
+            chatId: b.chatId === CONFIGURED_SECRET_MASK ? (existingBot?.chatId ?? '') : b.chatId
+          };
+        });
+      } else {
+        globalSettings.telegramBots = telegramBots;
+      }
+    }
     if (discordWebhooks) globalSettings.discordWebhooks = discordWebhooks;
     if (exchangeApiConfig) {
+      const existingConfig = globalSettings.exchangeApiConfig || {
+        exchange: 'mexc',
+        apiKey: '',
+        apiSecret: '',
+        password: '',
+        isEnabled: false
+      };
+      const rawApiKey = exchangeApiConfig.apiKey !== undefined ? exchangeApiConfig.apiKey?.trim() : undefined;
+      const rawApiSecret = exchangeApiConfig.apiSecret !== undefined ? exchangeApiConfig.apiSecret?.trim() : undefined;
+      const rawPassword = exchangeApiConfig.password !== undefined ? exchangeApiConfig.password?.trim() : undefined;
+
+      const finalApiKey = rawApiKey === CONFIGURED_SECRET_MASK ? existingConfig.apiKey : (rawApiKey ?? existingConfig.apiKey);
+      const finalApiSecret = rawApiSecret === CONFIGURED_SECRET_MASK ? existingConfig.apiSecret : (rawApiSecret ?? existingConfig.apiSecret);
+      const finalPassword = rawPassword === CONFIGURED_SECRET_MASK ? existingConfig.password : (rawPassword ?? existingConfig.password);
+
       globalSettings.exchangeApiConfig = {
+        ...existingConfig,
         ...exchangeApiConfig,
-        apiKey: exchangeApiConfig.apiKey?.trim(),
-        apiSecret: exchangeApiConfig.apiSecret?.trim(),
-        password: exchangeApiConfig.password?.trim()
+        apiKey: finalApiKey,
+        apiSecret: finalApiSecret,
+        password: finalPassword
       };
       autopilotFailedSymbols.clear();
     }
@@ -206,7 +238,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     const status = ctx.getLastSanitizationStatus();
     res.json({
       success: true,
-      data: globalSettings,
+      data: sanitizeSettingsForClient(globalSettings),
       instructionsSanitized: status.sanitized,
       sanitizeReason: status.reason
     });
@@ -243,7 +275,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       globalSettings.tradingMode = tradingMode;
       ctx.saveSettings();
       console.log(`[SETTINGS] Server trade mode modified dynamically: ${tradingMode}`);
-      res.json({ success: true, data: globalSettings });
+      res.json({ success: true, data: sanitizeSettingsForClient(globalSettings) });
     } else {
       res.status(400).json({ success: false, error: 'Invalid trading mode' });
     }
@@ -256,7 +288,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     autopilotFailedSymbols.clear();
     globalSettings.failedAutopilotSymbols = [];
     ctx.saveSettings();
-    res.json({ success: true, data: globalSettings });
+    res.json({ success: true, data: sanitizeSettingsForClient(globalSettings) });
   });
 
   // POST /api/settings/failed-symbols/remove
@@ -269,14 +301,16 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       globalSettings.failedAutopilotSymbols = Array.from(autopilotFailedSymbols);
       ctx.saveSettings();
     }
-    res.json({ success: true, data: globalSettings });
+    res.json({ success: true, data: sanitizeSettingsForClient(globalSettings) });
   });
 
   // GET /api/settings/telegram
   router.get('/settings/telegram', (req: Request, res: Response) => {
     const globalSettings = ctx.getGlobalSettings();
     const bot = (globalSettings.telegramBots && globalSettings.telegramBots[0]) || { botToken: '', chatId: '', isEnabled: false };
-    res.json({ success: true, data: bot });
+    const sanitizedSettings = sanitizeSettingsForClient(globalSettings);
+    const sanitizedBot = (sanitizedSettings.telegramBots && sanitizedSettings.telegramBots[0]) || bot;
+    res.json({ success: true, data: sanitizedBot });
   });
 
   // POST /api/settings/telegram
@@ -284,17 +318,38 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     const { botToken, chatId, isEnabled } = req.body;
     const globalSettings = ctx.getGlobalSettings();
     if (!globalSettings.telegramBots || globalSettings.telegramBots.length === 0) {
-      globalSettings.telegramBots = [{ id: '1', name: 'Bot 1', botToken, chatId, isEnabled }];
+      globalSettings.telegramBots = [{
+        id: '1',
+        name: 'Bot 1',
+        botToken: botToken === CONFIGURED_SECRET_MASK ? '' : botToken,
+        chatId: chatId === CONFIGURED_SECRET_MASK ? '' : chatId,
+        isEnabled
+      }];
     } else {
-      globalSettings.telegramBots[0] = { ...globalSettings.telegramBots[0], botToken, chatId, isEnabled };
+      const existingBot = globalSettings.telegramBots[0];
+      globalSettings.telegramBots[0] = {
+        ...existingBot,
+        botToken: botToken === CONFIGURED_SECRET_MASK ? existingBot.botToken : botToken,
+        chatId: chatId === CONFIGURED_SECRET_MASK ? existingBot.chatId : chatId,
+        isEnabled
+      };
     }
     ctx.saveSettings();
-    res.json({ success: true, data: globalSettings.telegramBots[0] });
+    const sanitizedSettings = sanitizeSettingsForClient(globalSettings);
+    res.json({ success: true, data: sanitizedSettings.telegramBots[0] });
   });
 
   // POST /api/settings/telegram/test
   router.post('/settings/telegram/test', async (req: Request, res: Response) => {
-    const { botToken, chatId } = req.body;
+    let { botToken, chatId } = req.body;
+    const globalSettings = ctx.getGlobalSettings();
+    const existingBot = globalSettings.telegramBots && globalSettings.telegramBots[0];
+    if (botToken === CONFIGURED_SECRET_MASK && existingBot) {
+      botToken = existingBot.botToken;
+    }
+    if (chatId === CONFIGURED_SECRET_MASK && existingBot) {
+      chatId = existingBot.chatId;
+    }
     const result = await ctx.sendTelegramTestMessage(botToken, chatId);
     if (!result.success) {
       return res.status(400).json({ success: false, error: result.error });
@@ -305,9 +360,19 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
   // POST /api/settings/exchange/test
   router.post('/settings/exchange/test', async (req: Request, res: Response) => {
     const exchange = req.body.exchange;
-    const apiKey = req.body.apiKey?.trim();
-    const apiSecret = req.body.apiSecret?.trim();
-    const password = req.body.password?.trim();
+    let apiKey = req.body.apiKey?.trim();
+    let apiSecret = req.body.apiSecret?.trim();
+    let password = req.body.password?.trim();
+    const existingConfig = ctx.getGlobalSettings().exchangeApiConfig;
+    if (apiKey === CONFIGURED_SECRET_MASK && existingConfig) {
+      apiKey = existingConfig.apiKey;
+    }
+    if (apiSecret === CONFIGURED_SECRET_MASK && existingConfig) {
+      apiSecret = existingConfig.apiSecret;
+    }
+    if (password === CONFIGURED_SECRET_MASK && existingConfig) {
+      password = existingConfig.password;
+    }
     try {
       if (exchange === 'mexc' && apiKey && apiKey.toLowerCase().includes('weex')) {
         return res.json({ success: false, error: 'Вы выбрали биржу MEXC, но используете ключи от WEEX. Пожалуйста, выберите WEEX в списке бирж выше.' });
@@ -443,7 +508,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       res.json({
         success: true,
         explanation: resultJson.explanation || "Настройки успешно проанализированы и применены.",
-        updatedSettings: globalSettings,
+        updatedSettings: sanitizeSettingsForClient(globalSettings),
         instructionsSanitized: status.sanitized,
         sanitizeReason: status.reason
       });

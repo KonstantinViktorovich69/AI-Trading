@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response, Router } from 'express';
 import { getAuthMode, validateApiKey } from '../middleware/auth.ts';
 import { DirectionalMemoryAnalyticsService } from '../services/directionalMemoryAnalyticsService.ts';
+import { sanitizeSettingsForClient } from '../utils/settingsSanitizer.ts';
 
 export interface SystemRouterContext {
   getVirtualTrades: () => any[];
@@ -266,10 +267,14 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
   // GET /api/database/export
   router.get('/database/export', (req: Request, res: Response) => {
     try {
-      const data = ctx.getCachedDB();
+      const data = ctx.getCachedDB() || {};
+      const exportData = {
+        ...data,
+        globalSettings: data.globalSettings ? sanitizeSettingsForClient(data.globalSettings) : data.globalSettings
+      };
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', 'attachment; filename=crypto-ai-agent-db-backup.json');
-      res.json(data);
+      res.json(exportData);
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

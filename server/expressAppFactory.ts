@@ -30,6 +30,15 @@ export function createExpressApp(contexts: ExpressAppFactoryContexts): Express {
 
   // Basic Middlewares
   app.use(express.json());
+
+  // Debug router guard: in production, all debug routes return 404 Not Found regardless of API key
+  app.use('/api', (req, res, next) => {
+    if (process.env.NODE_ENV === 'production' && (req.path.startsWith('/debug') || req.path === '/debug-ohlcv' || req.path === '/debug-mexc')) {
+      return res.status(404).json({ success: false, error: `API endpoint not found: ${req.method} ${req.path}` });
+    }
+    next();
+  });
+
   app.use(authMiddleware);
 
   // Fast health-check endpoint for root load-balancer / platform health checks
@@ -58,7 +67,9 @@ export function createExpressApp(contexts: ExpressAppFactoryContexts): Express {
   app.use('/api', createKnowledgeRouter(contexts.knowledgeContext));
   app.use('/api', createSettingsRouter(contexts.settingsContext));
   app.use('/api', createSystemRouter(contexts.systemContext));
-  app.use('/api', createDebugRouter(contexts.debugContext));
+  if (process.env.NODE_ENV !== 'production') {
+    app.use('/api', createDebugRouter(contexts.debugContext));
+  }
 
   // Catch-all JSON 404 for any unmatched /api/* route to prevent Vite SPA HTML fallback
   app.all('/api/*', (req, res) => {
