@@ -104,7 +104,7 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
       while (attempt < maxRetries) {
         try {
           // Subtle sub-second delay per call inside individual coin routines to restrict raw frequency peaks
-          const delay = exchange.id === 'weex' ? 250 : 150;
+          const delay = exchange.id === 'weex' ? 350 : 150;
           await new Promise(resolve => setTimeout(resolve, delay));
           return await exchange.fetchOHLCV(fSymbol, timeframe, undefined, limit);
         } catch (e: any) {
@@ -118,7 +118,7 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
               ? (1500 * attempt + Math.floor(Math.random() * 1000))
               : (400 + Math.floor(Math.random() * 300));
             
-            console.warn(`[OHLCV RETRY] Soft retry ${attempt}/${maxRetries} for ${fSymbol} (${timeframe}) due to: ${errorMsg.slice(0, 80)}. Sleeping for ${sleepMs}ms...`);
+            console.log(`[OHLCV RETRY] Soft retry ${attempt}/${maxRetries} for ${fSymbol} (${timeframe}). Sleeping for ${sleepMs}ms...`);
             await new Promise(resolve => setTimeout(resolve, sleepMs));
           } else {
             console.log(`[OHLCV-ADAPTIVE] ${fSymbol} (${timeframe}) is temporarily unavailable after ${maxRetries} attempts on ${exchange.id || 'exchange'} (${errorMsg.slice(0, 150)}). System fell back to real-time ticker data.`);
@@ -129,8 +129,8 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
       return [];
     };
 
-    // Faster concurrent batch routing (batch size 3) designed for public rate endpoints limits
-    const batchSize = 3; 
+    // Safe throttled concurrent batch routing designed for public rate endpoints limits
+    const batchSize = 2; 
     for (let i = 0; i < symbolsToUpdate.length; i += batchSize) {
       const batch = symbolsToUpdate.slice(i, i + batchSize);
       await Promise.all(batch.map(async (symbol) => {
@@ -252,13 +252,18 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
               }
             }
 
-            // 15m Liquidity Sweep Pattern (Swing High)
+            // 15m Liquidity Sweep Pattern (Swing High & Swing Low)
             const lastIdx = highs15.length - 1;
             const prevHighs = highs15.slice(Math.max(0, lastIdx - 20), lastIdx);
             const swingHigh = prevHighs.length > 0 ? Math.max(...prevHighs) : price;
             const currentHigh = highs15[lastIdx];
             const currentClose = closes15[lastIdx];
             const isLiquiditySweep = currentHigh > swingHigh && currentClose < swingHigh;
+
+            const prevLows = lows15.slice(Math.max(0, lastIdx - 20), lastIdx);
+            const swingLow = prevLows.length > 0 ? Math.min(...prevLows) : price;
+            const currentLow = lows15[lastIdx];
+            const isLiquiditySweepLow = currentLow < swingLow && currentClose > swingLow;
 
             // BB 15m
             let bbStatus = 'INSIDE';
@@ -433,6 +438,7 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
                 hasBullishFvgBelow,
                 hasBearishFvgAbove,
                 isLiquiditySweep,
+                isLiquiditySweepLow,
                 trend1d,
                 isLiquiditySweep1h,
                 isLiquiditySweepLow1h,
@@ -678,6 +684,11 @@ export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketData
     const currentHigh = highs15[lastIdx];
     const currentClose = closes15[lastIdx];
     const isLiquiditySweep = currentHigh > swingHigh && currentClose < swingHigh;
+
+    const prevLows = lows15.slice(Math.max(0, lastIdx - 20), lastIdx);
+    const swingLow = prevLows.length > 0 ? Math.min(...prevLows) : price;
+    const currentLow = lows15[lastIdx];
+    const isLiquiditySweepLow = currentLow < swingLow && currentClose > swingLow;
     
     // BB 15m
     let bbStatus = 'INSIDE';
@@ -774,7 +785,8 @@ export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketData
         ema50: ema50Result,
         ema200: ema200Result,
         is48hBreakout: (price < Math.min(...lows15)) ? 1 : 0,
-        isLiquiditySweep
+        isLiquiditySweep,
+        isLiquiditySweepLow
     };
 
     if (ctx.onIndicatorsUpdated) {

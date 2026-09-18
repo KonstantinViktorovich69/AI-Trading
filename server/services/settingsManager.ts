@@ -60,6 +60,7 @@ export interface GlobalSettings {
   isAutopilotEnabled: boolean;
   isSymmetricConfidenceFilterEnabled: boolean;
   isCommitteeConsensusCheckEnabled: boolean;
+  isOteEntryEnabled?: boolean;
   maxActivePositionsVirtual: number;
   maxActivePositionsReal: number;
   maxSameDirectionPositions: number;

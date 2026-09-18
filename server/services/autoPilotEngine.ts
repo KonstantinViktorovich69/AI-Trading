@@ -297,16 +297,18 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             }
 
             // Mandatory checklist rule: Liquidity Sweep verification
-            const liquidityFactor = dt.factors?.find((f: any) => f.name === 'LIQUIDITY_SWEEP');
-            if (liquidityFactor && liquidityFactor.passed === false) {
-                console.log(`[AUTOPILOT CHECKLIST GUARD] Rejected entry for ${symbol}: LIQUIDITY_SWEEP check failed (liquidity sweep not confirmed)`);
-                continue;
+            if (globalSettings.isLiquiditySweepFilterEnabled !== false) {
+                const liquidityFactor = dt.factors?.find((f: any) => f.name === 'LIQUIDITY_SWEEP');
+                if (liquidityFactor && liquidityFactor.passed === false) {
+                    console.log(`[AUTOPILOT CHECKLIST GUARD] Skipping entry for ${symbol}: LIQUIDITY_SWEEP unconfirmed (waiting for liquidity sweep)`);
+                    continue;
+                }
             }
 
             // Mandatory checklist rule: Candlestick Wick Rejection verification
             const wickFactor = dt.factors?.find((f: any) => f.name && f.name.includes('WICK_REJECTION'));
             if (wickFactor && wickFactor.passed === false) {
-                console.log(`[AUTOPILOT CHECKLIST GUARD] Rejected entry for ${symbol}: WICK_REJECTION check failed (insufficient candlestick wick rejection)`);
+                console.log(`[AUTOPILOT CHECKLIST GUARD] Skipping entry for ${symbol}: WICK_REJECTION unconfirmed (insufficient candlestick wick rejection)`);
                 continue;
             }
         }

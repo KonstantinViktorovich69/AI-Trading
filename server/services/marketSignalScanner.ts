@@ -338,11 +338,19 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
 
       // 3. Фильтр Снятия Ликвидности (симметричный для SHORT и LONG)
       const sweepWickThreshold = globalSettings.liquiditySweepWickThreshold ?? 0.25;
-      if (globalSettings.isLiquiditySweepFilterEnabled !== false && !cachedIndicators.isLiquiditySweep && !isVerifiedReversal) {
-        if (signalSide === 'SHORT' && wicks.topPct < sweepWickThreshold) {
+      const isLiquiditySweepConfirmed = globalSettings.isLiquiditySweepFilterEnabled === false || (
+        signalSide === 'SHORT'
+          ? !!(cachedIndicators.isLiquiditySweep || cachedIndicators.isLiquiditySweep1h || cachedIndicators.isLiquiditySweep5m || wicks.topPct >= sweepWickThreshold || isVerifiedReversal)
+          : signalSide === 'LONG'
+          ? !!(cachedIndicators.isLiquiditySweepLow || cachedIndicators.isLiquiditySweepLow1h || cachedIndicators.isLiquiditySweepLow5m || wicks.bottomPct >= sweepWickThreshold || isVerifiedReversal)
+          : !!(cachedIndicators.isLiquiditySweep || cachedIndicators.isLiquiditySweepLow || cachedIndicators.isLiquiditySweep1h || cachedIndicators.isLiquiditySweepLow1h || cachedIndicators.isLiquiditySweep5m || cachedIndicators.isLiquiditySweepLow5m || isVerifiedReversal)
+      );
+
+      if (globalSettings.isLiquiditySweepFilterEnabled !== false && !isLiquiditySweepConfirmed) {
+        if (signalSide === 'SHORT') {
           blockLocks.push("Sweep/Wick");
           blockDetails.push(`Нет подтвержденного Свипа ликвидности сверху (фитиль ${(wicks.topPct * 100).toFixed(0)}% < ${(sweepWickThreshold * 100).toFixed(0)}%)`);
-        } else if (signalSide === 'LONG' && wicks.bottomPct < sweepWickThreshold) {
+        } else if (signalSide === 'LONG') {
           blockLocks.push("Sweep/Wick");
           blockDetails.push(`Нет подтвержденного Свипа ликвидности снизу (фитиль ${(wicks.bottomPct * 100).toFixed(0)}% < ${(sweepWickThreshold * 100).toFixed(0)}%)`);
         }
@@ -382,8 +390,8 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
           bottomWickPct: wicks.bottomPct,
           vwapDistancePct: vwapInfo?.distancePct,
           sarReversal: true,
-          bosChoch: !!cachedIndicators.isLiquiditySweep,
-          liquiditySweep: !!cachedIndicators.isLiquiditySweep
+          bosChoch: isLiquiditySweepConfirmed,
+          liquiditySweep: isLiquiditySweepConfirmed
         },
         rawAgentScores: {
           scout: {
@@ -402,8 +410,8 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
             vote: signalSide === 'SHORT' ? 'APPROVE_SHORT' : 'REJECT'
           },
           liquidity: {
-            score: cachedIndicators.isLiquiditySweep ? 90 : 65,
-            reason: cachedIndicators.isLiquiditySweep ? 'Снятие ликвидности подтверждено' : 'Умеренный профиль ликвидности',
+            score: isLiquiditySweepConfirmed ? 90 : 65,
+            reason: isLiquiditySweepConfirmed ? 'Снятие ликвидности подтверждено' : 'Умеренный профиль ликвидности',
             vote: signalSide === 'SHORT' ? 'APPROVE_SHORT' : (signalSide === 'LONG' ? 'APPROVE_LONG' : 'HOLD')
           },
           risk: {
@@ -418,7 +426,7 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
           // Dynamic adaptive required score based on market regime and trend alignment:
           const isTrendAligned = (signalSide === 'LONG' && marketRegime === 'TREND_UP') ||
                                  (signalSide === 'SHORT' && marketRegime === 'TREND_DOWN') ||
-                                 (cachedIndicators.isLiquiditySweep && isVerifiedReversal);
+                                 (isLiquiditySweepConfirmed && isVerifiedReversal);
           if (isTrendAligned) {
             return 68; // Calibrated for high-conviction trend-aligned setups
           }
@@ -479,12 +487,12 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
           bottomWickPct: wicks.bottomPct,
           volumeSpike,
           ema200_1h: ema200_1hVal,
-          isLiquiditySweep: !!cachedIndicators.isLiquiditySweep,
+          isLiquiditySweep: isLiquiditySweepConfirmed,
           hasBullishFvgBelow: !!cachedIndicators.hasBullishFvgBelow,
           hasFvgAbove: !!cachedIndicators.hasFvgAbove
         },
         smartLimitTarget: signalSide === 'SHORT' ? tickerPrice * 1.002 : (signalSide === 'LONG' ? tickerPrice * 0.998 : tickerPrice),
-        isLiquiditySweep: !!cachedIndicators.isLiquiditySweep,
+        isLiquiditySweep: isLiquiditySweepConfirmed,
         isBinanceCrossListed: isBinanceCrossed,
         timestamp: Date.now()
       });
