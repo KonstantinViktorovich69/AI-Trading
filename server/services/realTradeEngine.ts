@@ -1,5 +1,6 @@
 import ccxt from 'ccxt';
 import { logStructured } from '../utils/logger.ts';
+import { DEFAULT_OTE_TIMEOUT_MS, hasOteEntryTimedOut } from './oteEntryCalculator.ts';
 
 export interface ExchangeApiConfig {
   id?: string;
@@ -817,3 +818,119 @@ export async function executeRealCloseOnExchange(
     return { success: false, error: deps.enrichExchangeError(err) };
   }
 }
+
+export interface LimitOrderWithTimeoutParams {
+  client: any;                    // уже инициализированный ccxt-клиент
+  formattedSymbol: string;
+  orderSide: 'buy' | 'sell';
+  contracts: number;               // уже посчитанный размер позиции
+  targetPrice: number;             // цена лимитного ордера (из calculateOteEntryZone.targetPrice)
+  timeoutMs?: number;              // по умолчанию DEFAULT_OTE_TIMEOUT_MS
+  pollIntervalMs?: number;         // по умолчанию 5000 (5 секунд между проверками статуса)
+  deps?: RealTradeEngineDependencies;
+}
+
+export type LimitOrderOutcome =
+  | { status: 'filled'; order: any; entryPrice: number }
+  | { status: 'timed_out' }
+  | { status: 'error'; error: string };
+
+export async function executeLimitOrderWithTimeout(
+  params: LimitOrderWithTimeoutParams
+): Promise<LimitOrderOutcome> {
+  try {
+    const { client, formattedSymbol, orderSide, contracts, targetPrice } = params;
+    const timeoutMs = params.timeoutMs ?? DEFAULT_OTE_TIMEOUT_MS;
+    const pollIntervalMs = params.pollIntervalMs ?? 5000;
+
+    const defaultDeps: RealTradeEngineDependencies = {
+      isRealTradingAllowed: () => true,
+      getGlobalSettings: () => ({}),
+      formatFuturesSymbol: (s: string) => s,
+      enrichExchangeError: (err: any) => err?.message || String(err)
+    };
+    const effectiveDeps = params.deps || defaultDeps;
+
+    let order: any;
+    try {
+      order = await executeWithRetry(
+        () => client.createOrder(formattedSymbol, 'limit', orderSide, contracts, targetPrice, {}),
+        `createLimitOrder (${orderSide}) for ${formattedSymbol}`,
+        effectiveDeps
+      );
+    } catch (createErr: any) {
+      const errMsg = effectiveDeps.enrichExchangeError
+        ? effectiveDeps.enrichExchangeError(createErr)
+        : (createErr?.message || String(createErr));
+      return { status: 'error', error: errMsg };
+    }
+
+    const orderId = order?.id;
+    if (!orderId) {
+      return {
+        status: 'error',
+        error: 'Order was created but no order id returned by exchange'
+      };
+    }
+
+    if (order.status === 'closed') {
+      return {
+        status: 'filled',
+        order,
+        entryPrice: order.average || order.price || targetPrice
+      };
+    }
+
+    const startedAtMs = Date.now();
+
+    while (true) {
+      if (hasOteEntryTimedOut(startedAtMs, Date.now(), timeoutMs)) {
+        break;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+
+      if (hasOteEntryTimedOut(startedAtMs, Date.now(), timeoutMs)) {
+        break;
+      }
+
+      const fetchedOrder = await executeWithRetry(
+        () => client.fetchOrder(orderId, formattedSymbol),
+        `fetchOrder ${orderId} for ${formattedSymbol}`,
+        effectiveDeps
+      );
+
+      if (fetchedOrder?.status === 'closed') {
+        return {
+          status: 'filled',
+          order: fetchedOrder,
+          entryPrice: fetchedOrder.average || fetchedOrder.price || targetPrice
+        };
+      }
+
+      if (fetchedOrder?.status === 'canceled' || fetchedOrder?.status === 'rejected') {
+        return {
+          status: 'error',
+          error: `Order ${orderId} was ${fetchedOrder.status} externally`
+        };
+      }
+    }
+
+    try {
+      await executeWithRetry(
+        () => client.cancelOrder(orderId, formattedSymbol),
+        `cancelOrder ${orderId} for ${formattedSymbol} on OTE timeout`,
+        effectiveDeps,
+        1
+      );
+    } catch (_) {
+      // Игнорируем ошибку отмены (ордер мог исполниться в последний момент)
+    }
+
+    return { status: 'timed_out' };
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    return { status: 'error', error: errMsg };
+  }
+}
+

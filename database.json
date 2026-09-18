@@ -1,17 +1,17 @@
 {
   "settings": {
     "main": {
-      "virtualBalance": 115.44,
+      "virtualBalance": 110.58,
       "startOfDayBalance": 146.38,
       "lastResetDate": "2026-09-18",
-      "startOfWeekBalance": 116.61,
+      "startOfWeekBalance": 89.44,
       "lastWeekCheckTime": 1788680629276,
       "userId": "polyakovats3110@gmail.com",
-      "updatedAt": 1789759461137,
-      "virtualEquity": 141.41
+      "updatedAt": 1789761143584,
+      "virtualEquity": 140.44
     },
     "globalConfig": {
-      "virtualBalance": 135.09,
+      "virtualBalance": 89.44,
       "startOfDayBalance": 146.38,
       "telegramBots": [
         {
@@ -80,9 +80,9 @@
         "totalLearnedTrades": 0,
         "lastRetrained": 0
       },
-      "stateRevision": 108,
-      "updatedAt": 1789756906069,
-      "virtualEquity": 141.41
+      "stateRevision": 109,
+      "updatedAt": 1789759670673,
+      "virtualEquity": 140.44
     }
   },
   "trades": [
@@ -22452,7 +22452,7 @@
       "initialMargin": 2,
       "leverage": 5,
       "side": "SHORT",
-      "status": "OPEN",
+      "status": "CLOSED",
       "openTime": 1789717014982,
       "signalAiScore": 93,
       "history": [
@@ -22462,6 +22462,12 @@
           "price": 61.82907,
           "amount": 10,
           "margin": 2
+        },
+        {
+          "time": 1789761041509,
+          "type": "CLOSE",
+          "price": 60.22,
+          "amount": 10
         }
       ],
       "mode": "AUTO",
@@ -22490,12 +22496,24 @@
       "lowestPrice": 59.66,
       "maxReachedUnleveragedPnl": 3.5081718033281186,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789759446533,
+      "lastAiCheck": 1789761013271,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
       "maxReachedPnl": 17.459990907189773,
       "isProtected": true,
       "userId": "polyakovats3110@gmail.com",
-      "protectionLevel": 2
+      "protectionLevel": 2,
+      "closeReasonCode": "PTTP",
+      "isClosing": true,
+      "closeTime": 1789761041509,
+      "closePrice": 60.22,
+      "closeReason": "Защита пиковой прибыли PTTP: сброс 27.1% от пика +16.74% (Текущий PnL: +12.21%)",
+      "notes": "Защита пиковой прибыли PTTP: сброс 27.1% от пика +16.74% (Текущий PnL: +12.21%)",
+      "pnl": 1.251224488739684,
+      "pnlPercent": 12.51224488739684,
+      "outcome": 1,
+      "hasRetrospectiveAnalysis": true,
+      "aiEvaluation": "Сделка закрыта и зафиксирована квантовой системой. Защитные механизмы волатильности и лимиты депозита отработали корректно.",
+      "learnedRule": "Соблюдать жесткое соответствие входов правилу фильтрации спреда и снятию ликвидности."
     },
     {
       "id": "FT-1789717532921-AP3H",
@@ -23628,7 +23646,7 @@
       "margin": 12.8,
       "initialMargin": 12.8,
       "leverage": 4,
-      "status": "OPEN",
+      "status": "CLOSED",
       "openTime": 1789756907005,
       "mode": "AUTO",
       "isReal": false,
@@ -23840,6 +23858,12 @@
           "type": "OPEN",
           "price": 53.07282,
           "amount": 12.8
+        },
+        {
+          "time": 1789760319896,
+          "type": "CLOSE",
+          "price": 52.64,
+          "amount": 12.8
         }
       ],
       "marketType": "FUTURES",
@@ -23865,12 +23889,24 @@
       },
       "sourcePath": "MAIN_VIRTUAL",
       "highestPrice": 53.35,
-      "lowestPrice": 52.97,
+      "lowestPrice": 52.64,
       "maxReachedUnleveragedPnl": 0.5222635616498262,
-      "slViolationSeconds": 0,
-      "lastAiCheck": 1789759416531,
+      "slViolationSeconds": 1,
+      "lastAiCheck": 1789760263041,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
-      "userId": "polyakovats3110@gmail.com"
+      "userId": "polyakovats3110@gmail.com",
+      "closeReasonCode": "STOP_LOSS",
+      "isClosing": true,
+      "closeTime": 1789760319896,
+      "closePrice": 52.64,
+      "closeReason": "Сработал стоп-лосс на уровне $52.64824 (PnL: -3.90%)",
+      "notes": "Сработал стоп-лосс на уровне $52.64824 (PnL: -3.90%)",
+      "pnl": -0.4687467593393375,
+      "pnlPercent": -3.6620840573385744,
+      "outcome": 0,
+      "hasRetrospectiveAnalysis": true,
+      "aiEvaluation": "Сделка закрыта и зафиксирована квантовой системой. Защитные механизмы волатильности и лимиты депозита отработали корректно.",
+      "learnedRule": "Соблюдать жесткое соответствие входов правилу фильтрации спреда и снятию ликвидности."
     },
     {
       "id": "VT-1789756907383-1W2U",
@@ -24065,11 +24101,11 @@
       "strategyId": "CANONICAL_QUANT_SCALP_V2",
       "strategyVersion": "2.1.0",
       "stateRevision": 626913,
-      "highestPrice": 0.019816,
+      "highestPrice": 0.019844,
       "lowestPrice": 0.019592,
       "maxReachedUnleveragedPnl": 0.19358125318391903,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789759446533,
+      "lastAiCheck": 1789761133397,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
       "maxReachedPnl": 0.7131940906775405,
       "userId": "polyakovats3110@gmail.com"
@@ -24085,7 +24121,7 @@
       "margin": 8.2,
       "initialMargin": 8.2,
       "leverage": 4,
-      "status": "OPEN",
+      "status": "CLOSED",
       "openTime": 1789757471670,
       "mode": "AUTO",
       "isReal": false,
@@ -24297,6 +24333,12 @@
           "type": "OPEN",
           "price": 0.66647,
           "amount": 8.2
+        },
+        {
+          "time": 1789759841205,
+          "type": "CLOSE",
+          "price": 0.654179,
+          "amount": 8.2
         }
       ],
       "marketType": "FUTURES",
@@ -24322,10 +24364,586 @@
       },
       "sourcePath": "MAIN_VIRTUAL",
       "highestPrice": 0.666538,
-      "lowestPrice": 0.6587,
+      "lowestPrice": 0.654179,
       "maxReachedUnleveragedPnl": 0.010203009887910482,
+      "slViolationSeconds": 1,
+      "lastAiCheck": 1789759802628,
+      "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
+      "userId": "polyakovats3110@gmail.com",
+      "closeReasonCode": "STOP_LOSS",
+      "isClosing": true,
+      "closeTime": 1789759841205,
+      "closePrice": 0.654179,
+      "closeReason": "Сработал стоп-лосс на уровне $0.65447 (PnL: -8.02%)",
+      "notes": "Сработал стоп-лосс на уровне $0.65447 (PnL: -8.02%)",
+      "pnl": -0.6376956442150459,
+      "pnlPercent": -7.776776148963975,
+      "outcome": 0,
+      "hasRetrospectiveAnalysis": true,
+      "aiEvaluation": "Сделка закрыта и зафиксирована квантовой системой. Защитные механизмы волатильности и лимиты депозита отработали корректно.",
+      "learnedRule": "Соблюдать жесткое соответствие входов правилу фильтрации спреда и снятию ликвидности."
+    },
+    {
+      "id": "TR-1789759491562-8H",
+      "symbol": "CIEN/USDT:USDT",
+      "side": "LONG",
+      "action": "BUY",
+      "entryPrice": 345.03772,
+      "amount": 13,
+      "initialAmount": 13,
+      "margin": 13,
+      "initialMargin": 13,
+      "leverage": 4,
+      "status": "OPEN",
+      "openTime": 1789759491591,
+      "mode": "AUTO",
+      "isReal": false,
+      "isPaper": true,
+      "dataOrigin": "PAPER",
+      "decisionSource": "COMMITTEE",
+      "marketRegime": "TREND_UP",
+      "decisionTrace": {
+        "id": "dt_1789759491534_ysx1w3",
+        "timestamp": 1789759491534,
+        "symbol": "CIEN/USDT:USDT",
+        "side": "LONG",
+        "marketRegime": "TREND_UP",
+        "regimeConfidence": 0.95,
+        "factors": [
+          {
+            "name": "RSI_15M",
+            "category": "TECHNICAL",
+            "value": 44.967349999999996,
+            "weight": 15,
+            "direction": "NEUTRAL",
+            "passed": false,
+            "notes": "RSI на уровне 45.0 (Нейтральный)"
+          },
+          {
+            "name": "SAR_REVERSAL_TRIGGER",
+            "category": "TECHNICAL",
+            "value": 1,
+            "weight": 20,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Parabolic SAR переключился в сторону входа"
+          },
+          {
+            "name": "VOLUME_CLIMAX_SPIKE",
+            "category": "VOLUME",
+            "value": "3.5x",
+            "weight": 18,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Аномальный всплеск объема торгов: 3.5x от среднего"
+          },
+          {
+            "name": "BOTTOM_WICK_REJECTION",
+            "category": "STRUCTURE",
+            "value": "33.4%",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Размер разворотного фитиля: 33.4% от диапазона свечи"
+          },
+          {
+            "name": "LIQUIDITY_SWEEP",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
+          },
+          {
+            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Локальный слом структуры (BOS/ChoCh) подтвержден"
+          }
+        ],
+        "agentVotes": [
+          {
+            "agentId": "scout_agent",
+            "agentName": "ИИ-Сканер (Scout Agent)",
+            "role": "SCOUT",
+            "vote": "APPROVE_LONG",
+            "confidence": 91,
+            "assignedWeight": 1,
+            "weightedScore": 91,
+            "reason": "Обнаружен паттерн \"💥 ПРОЛИВ (SAR Bottom Reversal)\"",
+            "timestamp": 1789759491534
+          },
+          {
+            "agentId": "bull_analyst",
+            "agentName": "Бычий Аналитик (Bull Analyst)",
+            "role": "BULL_ANALYST",
+            "vote": "APPROVE_LONG",
+            "confidence": 91,
+            "assignedWeight": 1,
+            "weightedScore": 91,
+            "reason": "Бычий импульс с RSI 45.0",
+            "timestamp": 1789759491534
+          },
+          {
+            "agentId": "bear_analyst",
+            "agentName": "Медвежий Аналитик (Bear Analyst)",
+            "role": "BEAR_ANALYST",
+            "vote": "REJECT",
+            "confidence": 20,
+            "assignedWeight": 1,
+            "weightedScore": 20,
+            "reason": "Продажи иссякли",
+            "timestamp": 1789759491534
+          },
+          {
+            "agentId": "liquidity_hunter",
+            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
+            "role": "LIQUIDITY_HUNTER",
+            "vote": "APPROVE_LONG",
+            "confidence": 90,
+            "assignedWeight": 1,
+            "weightedScore": 90,
+            "reason": "Снятие ликвидности подтверждено",
+            "timestamp": 1789759491534
+          },
+          {
+            "agentId": "risk_sentinel",
+            "agentName": "Риск-Страж (Risk Sentinel)",
+            "role": "RISK_SENTINEL",
+            "vote": "APPROVE_LONG",
+            "confidence": 85,
+            "assignedWeight": 1.2,
+            "weightedScore": 102,
+            "reason": "Риск-фильтры пройдены успешно",
+            "timestamp": 1789759491534
+          }
+        ],
+        "consensusScore": 72,
+        "requiredScore": 68,
+        "passedConsensus": true,
+        "rejectionReasons": [],
+        "executionMode": "PAPER",
+        "triggerPattern": "💥 ПРОЛИВ (SAR Bottom Reversal)",
+        "metadata": {}
+      },
+      "stopLoss": 345.21024,
+      "takeProfit": 369.19036,
+      "tpStages": [
+        {
+          "targetPrice": 348.66062,
+          "targetPercent": 1.05,
+          "closeRatio": 0.55,
+          "executed": false
+        },
+        {
+          "targetPrice": 352.28351,
+          "targetPercent": 2.1,
+          "closeRatio": 0.25,
+          "executed": false
+        },
+        {
+          "targetPrice": 358.32167,
+          "targetPercent": 3.85,
+          "closeRatio": 0.12,
+          "executed": false
+        },
+        {
+          "targetPrice": 369.19036,
+          "targetPercent": 7,
+          "closeRatio": 0.08,
+          "executed": false
+        }
+      ],
+      "gridOrders": [
+        {
+          "price": 340.89727,
+          "amount": 2.6,
+          "executed": false
+        },
+        {
+          "price": 336.75681,
+          "amount": 3.9,
+          "executed": false
+        }
+      ],
+      "correlationId": "corr_mv_1789759491560_nxvc6",
+      "correlationContext": {
+        "correlationId": "corr_mv_1789759491560_nxvc6",
+        "proposedTradeId": "TR-1789759491562-8H",
+        "entryIntentId": "intent_1789759491561_wufroof",
+        "signalId": "sig_1789759491560",
+        "strategyId": "CANONICAL_QUANT_SCALP_V2",
+        "strategyVersion": "2.1.0",
+        "stateRevision": 629648,
+        "emittedAt": 1789759491565
+      },
+      "entryIntentId": "intent_1789759491561_wufroof",
+      "intentId": "intent_1789759491561_wufroof",
+      "tradeIntentId": "intent_1789759491561_wufroof",
+      "signalId": "sig_1789759491560",
+      "strategyId": "CANONICAL_QUANT_SCALP_V2",
+      "strategyVersion": "2.1.0",
+      "matchedRuleIds": [
+        "RULE_SAR_M1_M15",
+        "RULE_VWAP_ALIGNMENT",
+        "PAT_EXPLICIT_LONG_STRATEGY_SIGNAL"
+      ],
+      "committeeDecisionId": "comm_1789759491565_a6qu3",
+      "agentDecisionIds": [
+        "dec_hunter_1789759491565_p1cqs",
+        "dec_bear_1789759491565_uq84v",
+        "comm_1789759491565_a6qu3"
+      ],
+      "stateRevision": 629648,
+      "lineageStatus": "COMPLIANT",
+      "history": [
+        {
+          "time": 1789759491591,
+          "type": "OPEN",
+          "price": 345.03772,
+          "amount": 13
+        }
+      ],
+      "marketType": "FUTURES",
+      "resolvedMarketType": "FUTURES",
+      "requestedMode": "FUTURES",
+      "allowedDirections": "BOTH",
+      "scannerSide": "LONG",
+      "strategySide": "LONG",
+      "committeeSide": "LONG",
+      "executionSide": "LONG",
+      "gateDiagnostics": {
+        "dataCompleteness": true,
+        "spreadSafety": true,
+        "spreadGate": true,
+        "liquiditySafety": true,
+        "volumeGate": true,
+        "fundingSafety": true,
+        "fundingGate": true,
+        "sideInvariantMatch": true,
+        "directionAllowed": true,
+        "patternNotBlacklisted": true,
+        "confidenceGate": true
+      },
+      "sourcePath": "MAIN_VIRTUAL",
+      "highestPrice": 348.54,
+      "lowestPrice": 344.33,
+      "maxReachedUnleveragedPnl": 1.0150426451925436,
       "slViolationSeconds": 0,
-      "lastAiCheck": 1789759426532,
+      "lastAiCheck": 1789761143397,
+      "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
+      "isProtected": true,
+      "userId": "polyakovats3110@gmail.com"
+    },
+    {
+      "id": "TR-1789759491727-D6",
+      "symbol": "PANW/USDT:USDT",
+      "side": "LONG",
+      "action": "BUY",
+      "entryPrice": 363.10025,
+      "amount": 13,
+      "initialAmount": 13,
+      "margin": 13,
+      "initialMargin": 13,
+      "leverage": 4,
+      "status": "OPEN",
+      "openTime": 1789759491753,
+      "mode": "AUTO",
+      "isReal": false,
+      "isPaper": true,
+      "dataOrigin": "PAPER",
+      "decisionSource": "COMMITTEE",
+      "marketRegime": "TREND_UP",
+      "decisionTrace": {
+        "id": "dt_1789759491702_sbwemx",
+        "timestamp": 1789759491702,
+        "symbol": "PANW/USDT:USDT",
+        "side": "LONG",
+        "marketRegime": "TREND_UP",
+        "regimeConfidence": 0.95,
+        "factors": [
+          {
+            "name": "RSI_15M",
+            "category": "TECHNICAL",
+            "value": 36.8176,
+            "weight": 15,
+            "direction": "NEUTRAL",
+            "passed": true,
+            "notes": "RSI на уровне 36.8 (Нейтральный)"
+          },
+          {
+            "name": "SAR_REVERSAL_TRIGGER",
+            "category": "TECHNICAL",
+            "value": 1,
+            "weight": 20,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Parabolic SAR переключился в сторону входа"
+          },
+          {
+            "name": "VOLUME_CLIMAX_SPIKE",
+            "category": "VOLUME",
+            "value": "3.5x",
+            "weight": 18,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Аномальный всплеск объема торгов: 3.5x от среднего"
+          },
+          {
+            "name": "BOTTOM_WICK_REJECTION",
+            "category": "STRUCTURE",
+            "value": "30.9%",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Размер разворотного фитиля: 30.9% от диапазона свечи"
+          },
+          {
+            "name": "LIQUIDITY_SWEEP",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
+          },
+          {
+            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Локальный слом структуры (BOS/ChoCh) подтвержден"
+          }
+        ],
+        "agentVotes": [
+          {
+            "agentId": "scout_agent",
+            "agentName": "ИИ-Сканер (Scout Agent)",
+            "role": "SCOUT",
+            "vote": "APPROVE_LONG",
+            "confidence": 91,
+            "assignedWeight": 1,
+            "weightedScore": 91,
+            "reason": "Обнаружен паттерн \"💥 ПРОЛИВ (SAR Bottom Reversal)\"",
+            "timestamp": 1789759491702
+          },
+          {
+            "agentId": "bull_analyst",
+            "agentName": "Бычий Аналитик (Bull Analyst)",
+            "role": "BULL_ANALYST",
+            "vote": "APPROVE_LONG",
+            "confidence": 91,
+            "assignedWeight": 1,
+            "weightedScore": 91,
+            "reason": "Бычий импульс с RSI 36.8",
+            "timestamp": 1789759491702
+          },
+          {
+            "agentId": "bear_analyst",
+            "agentName": "Медвежий Аналитик (Bear Analyst)",
+            "role": "BEAR_ANALYST",
+            "vote": "REJECT",
+            "confidence": 20,
+            "assignedWeight": 1,
+            "weightedScore": 20,
+            "reason": "Продажи иссякли",
+            "timestamp": 1789759491702
+          },
+          {
+            "agentId": "liquidity_hunter",
+            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
+            "role": "LIQUIDITY_HUNTER",
+            "vote": "APPROVE_LONG",
+            "confidence": 90,
+            "assignedWeight": 1,
+            "weightedScore": 90,
+            "reason": "Снятие ликвидности подтверждено",
+            "timestamp": 1789759491702
+          },
+          {
+            "agentId": "risk_sentinel",
+            "agentName": "Риск-Страж (Risk Sentinel)",
+            "role": "RISK_SENTINEL",
+            "vote": "APPROVE_LONG",
+            "confidence": 85,
+            "assignedWeight": 1.2,
+            "weightedScore": 102,
+            "reason": "Риск-фильтры пройдены успешно",
+            "timestamp": 1789759491702
+          }
+        ],
+        "consensusScore": 72,
+        "requiredScore": 68,
+        "passedConsensus": true,
+        "rejectionReasons": [],
+        "executionMode": "PAPER",
+        "triggerPattern": "💥 ПРОЛИВ (SAR Bottom Reversal)",
+        "metadata": {}
+      },
+      "stopLoss": 360.19545,
+      "takeProfit": 388.51727,
+      "tpStages": [
+        {
+          "targetPrice": 366.9128,
+          "targetPercent": 1.05,
+          "closeRatio": 0.55,
+          "executed": false
+        },
+        {
+          "targetPrice": 370.72536,
+          "targetPercent": 2.1,
+          "closeRatio": 0.25,
+          "executed": false
+        },
+        {
+          "targetPrice": 377.07961,
+          "targetPercent": 3.85,
+          "closeRatio": 0.12,
+          "executed": false
+        },
+        {
+          "targetPrice": 388.51727,
+          "targetPercent": 7,
+          "closeRatio": 0.08,
+          "executed": false
+        }
+      ],
+      "gridOrders": [
+        {
+          "price": 358.74305,
+          "amount": 2.6,
+          "executed": false
+        },
+        {
+          "price": 354.38584,
+          "amount": 3.9,
+          "executed": false
+        }
+      ],
+      "correlationId": "corr_mv_1789759491727_scl8b",
+      "correlationContext": {
+        "correlationId": "corr_mv_1789759491727_scl8b",
+        "proposedTradeId": "TR-1789759491727-D6",
+        "entryIntentId": "intent_1789759491727_2zwr2jc",
+        "signalId": "sig_1789759491727",
+        "strategyId": "CANONICAL_QUANT_SCALP_V2",
+        "strategyVersion": "2.1.0",
+        "stateRevision": 629649,
+        "emittedAt": 1789759491727
+      },
+      "entryIntentId": "intent_1789759491727_2zwr2jc",
+      "intentId": "intent_1789759491727_2zwr2jc",
+      "tradeIntentId": "intent_1789759491727_2zwr2jc",
+      "signalId": "sig_1789759491727",
+      "strategyId": "CANONICAL_QUANT_SCALP_V2",
+      "strategyVersion": "2.1.0",
+      "matchedRuleIds": [
+        "RULE_SAR_M1_M15",
+        "RULE_VWAP_ALIGNMENT",
+        "PAT_FUTURES_LONG_(SPOT_OVERSOLD_DIP_RECOVERY_(ОТКУП_ДНА))"
+      ],
+      "committeeDecisionId": "comm_1789759491727_njnd0",
+      "agentDecisionIds": [
+        "dec_hunter_1789759491727_zi4i0",
+        "dec_bear_1789759491727_pan3p",
+        "comm_1789759491727_njnd0"
+      ],
+      "stateRevision": 629649,
+      "lineageStatus": "COMPLIANT",
+      "history": [
+        {
+          "time": 1789759491753,
+          "type": "OPEN",
+          "price": 363.10025,
+          "amount": 13
+        }
+      ],
+      "marketType": "FUTURES",
+      "resolvedMarketType": "FUTURES",
+      "requestedMode": "FUTURES",
+      "allowedDirections": "BOTH",
+      "scannerSide": "LONG",
+      "strategySide": "LONG",
+      "committeeSide": "LONG",
+      "executionSide": "LONG",
+      "gateDiagnostics": {
+        "dataCompleteness": true,
+        "spreadSafety": true,
+        "spreadGate": true,
+        "liquiditySafety": true,
+        "volumeGate": true,
+        "fundingSafety": true,
+        "fundingGate": true,
+        "sideInvariantMatch": true,
+        "directionAllowed": true,
+        "patternNotBlacklisted": true,
+        "confidenceGate": true
+      },
+      "sourcePath": "MAIN_VIRTUAL",
+      "highestPrice": 362.94,
+      "lowestPrice": 361.03,
+      "maxReachedUnleveragedPnl": 0,
+      "slViolationSeconds": 0,
+      "lastAiCheck": 1789761143397,
+      "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
+      "userId": "polyakovats3110@gmail.com"
+    },
+    {
+      "id": "VT-1789761044878-C5B",
+      "symbol": "ARX/USDT:USDT",
+      "exchange": "weex",
+      "entryPrice": 0.18747,
+      "amount": 10,
+      "initialAmount": 10,
+      "margin": 2,
+      "initialMargin": 2,
+      "leverage": 5,
+      "side": "SHORT",
+      "status": "OPEN",
+      "openTime": 1789761044884,
+      "signalAiScore": 93,
+      "history": [
+        {
+          "time": 1789761044884,
+          "type": "OPEN",
+          "price": 0.18747,
+          "amount": 10,
+          "margin": 2
+        }
+      ],
+      "mode": "AUTO",
+      "takeProfit": 0.15943,
+      "stopLoss": 0.22164,
+      "gridOrders": [
+        {
+          "price": 0.19731312,
+          "amount": 20,
+          "executed": false
+        },
+        {
+          "price": 0.20757340224,
+          "amount": 40,
+          "executed": false
+        }
+      ],
+      "isReal": false,
+      "correlationId": "VT-1789761044878-C5B",
+      "dataOrigin": "PAPER",
+      "decisionSource": "AUTOPILOT_CANONICAL",
+      "strategyId": "CANONICAL_QUANT_SCALP_V2",
+      "strategyVersion": "2.1.0",
+      "stateRevision": 631355,
+      "highestPrice": 0.18787,
+      "lowestPrice": 0.18747,
+      "maxReachedUnleveragedPnl": 0,
+      "slViolationSeconds": 0,
+      "lastAiCheck": 1789761143397,
       "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
       "userId": "polyakovats3110@gmail.com"
     }
@@ -27015,189 +27633,43 @@
       "archivedAt": "2026-09-18T19:23:41.349Z",
       "archiveReason": "Квотирование базы знаний: архивация избыточных правил для обеспечения Lean-структуры",
       "marketRegimeAtArchive": "TREND_UP"
+    },
+    {
+      "id": "al_1789759841462_69",
+      "agent": "SCANNER",
+      "text": "[Авто-Обучение | BTW/USDT:USDT | PnL -7.8%] Соблюдать жесткое соответствие входов правилу фильтрации спреда и снятию ликвидности.",
+      "impact": -12,
+      "successRate": 0.15,
+      "usageCount": 1,
+      "stateRevision": 630045,
+      "userId": "polyakovats3110@gmail.com",
+      "isArchived": true,
+      "archivedAt": "2026-09-18T19:36:50.631Z",
+      "archiveReason": "Убыточность: винрейт правила составляет 15% (< 50%)",
+      "marketRegimeAtArchive": "TREND_UP"
+    },
+    {
+      "id": "al_1789760320161_397",
+      "agent": "SCANNER",
+      "text": "[Авто-Обучение | QNTX/USDT:USDT | PnL -3.7%] Соблюдать жесткое соответствие входов правилу фильтрации спреда и снятию ликвидности.",
+      "impact": -12,
+      "successRate": 0.15,
+      "usageCount": 1,
+      "stateRevision": 630572,
+      "userId": "polyakovats3110@gmail.com"
+    },
+    {
+      "id": "al_1789761041860_225",
+      "agent": "SCANNER",
+      "text": "[Авто-Обучение | HPE/USDT:USDT | PnL 12.5%] Соблюдать жесткое соответствие входов правилу фильтрации спреда и снятию ликвидности.",
+      "impact": 8,
+      "successRate": 0.85,
+      "usageCount": 1,
+      "stateRevision": 631349,
+      "userId": "polyakovats3110@gmail.com"
     }
   ],
   "agentExchangeLogs": [
-    {
-      "id": "el_1789727337107_0ebh8",
-      "timestamp": 1789727337107,
-      "fromAgent": "RETROSPECTIVE",
-      "toAgent": "EXPERT",
-      "message": "Проведен аудит закрытых сделок.",
-      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
-      "type": "info"
-    },
-    {
-      "id": "el_1789727337108_gz56p",
-      "timestamp": 1789727337108,
-      "fromAgent": "ARCHIVIST",
-      "toAgent": "ALL",
-      "message": "Оптимизирована база знаний.",
-      "details": "Проведена программная дедупликация авто-правил.",
-      "type": "success"
-    },
-    {
-      "id": "el_1789727337108_a7g1j",
-      "timestamp": 1789727337108,
-      "fromAgent": "EXPERT",
-      "toAgent": "ALL",
-      "message": "Регламент эксперту актуализирован.",
-      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
-      "type": "warning"
-    },
-    {
-      "id": "el_1789727337109_jn1zv",
-      "timestamp": 1789727337109,
-      "fromAgent": "EXPERT",
-      "toAgent": "RETROSPECTIVE",
-      "message": "Приняты адаптивные ретроспективные корректировки",
-      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
-      "type": "success"
-    },
-    {
-      "id": "el_1789728147468_qqdpg",
-      "timestamp": 1789728147468,
-      "fromAgent": "RETROSPECTIVE",
-      "toAgent": "EXPERT",
-      "message": "Проведен аудит закрытых сделок.",
-      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
-      "type": "info"
-    },
-    {
-      "id": "el_1789728147469_tmhhy",
-      "timestamp": 1789728147469,
-      "fromAgent": "ARCHIVIST",
-      "toAgent": "ALL",
-      "message": "Оптимизирована база знаний.",
-      "details": "Проведена программная дедупликация авто-правил.",
-      "type": "success"
-    },
-    {
-      "id": "el_1789728147469_2bh3b",
-      "timestamp": 1789728147469,
-      "fromAgent": "EXPERT",
-      "toAgent": "ALL",
-      "message": "Регламент эксперту актуализирован.",
-      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
-      "type": "warning"
-    },
-    {
-      "id": "el_1789728147470_3qy0m",
-      "timestamp": 1789728147470,
-      "fromAgent": "EXPERT",
-      "toAgent": "RETROSPECTIVE",
-      "message": "Приняты адаптивные ретроспективные корректировки",
-      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
-      "type": "success"
-    },
-    {
-      "id": "el_1789729047469_v4gdz",
-      "timestamp": 1789729047469,
-      "fromAgent": "RETROSPECTIVE",
-      "toAgent": "EXPERT",
-      "message": "Проведен аудит закрытых сделок.",
-      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
-      "type": "info"
-    },
-    {
-      "id": "el_1789729047470_0h4hh",
-      "timestamp": 1789729047470,
-      "fromAgent": "ARCHIVIST",
-      "toAgent": "ALL",
-      "message": "Оптимизирована база знаний.",
-      "details": "Проведена программная дедупликация авто-правил.",
-      "type": "success"
-    },
-    {
-      "id": "el_1789729047470_1z24t",
-      "timestamp": 1789729047470,
-      "fromAgent": "EXPERT",
-      "toAgent": "ALL",
-      "message": "Регламент эксперту актуализирован.",
-      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
-      "type": "warning"
-    },
-    {
-      "id": "el_1789729047471_0gg6n",
-      "timestamp": 1789729047471,
-      "fromAgent": "EXPERT",
-      "toAgent": "RETROSPECTIVE",
-      "message": "Приняты адаптивные ретроспективные корректировки",
-      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
-      "type": "success"
-    },
-    {
-      "id": "el_1789729150717_1i6yb",
-      "timestamp": 1789729150717,
-      "fromAgent": "RETROSPECTIVE",
-      "toAgent": "EXPERT",
-      "message": "Проведен аудит закрытых сделок.",
-      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
-      "type": "info"
-    },
-    {
-      "id": "el_1789729150718_2zxuv",
-      "timestamp": 1789729150718,
-      "fromAgent": "ARCHIVIST",
-      "toAgent": "ALL",
-      "message": "Оптимизирована база знаний.",
-      "details": "Проведена программная дедупликация авто-правил.",
-      "type": "success"
-    },
-    {
-      "id": "el_1789729150718_fo5jb",
-      "timestamp": 1789729150718,
-      "fromAgent": "EXPERT",
-      "toAgent": "ALL",
-      "message": "Регламент эксперту актуализирован.",
-      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
-      "type": "warning"
-    },
-    {
-      "id": "el_1789729150718_6sho1",
-      "timestamp": 1789729150718,
-      "fromAgent": "EXPERT",
-      "toAgent": "RETROSPECTIVE",
-      "message": "Приняты адаптивные ретроспективные корректировки",
-      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
-      "type": "success"
-    },
-    {
-      "id": "el_1789729376595_wwiuv",
-      "timestamp": 1789729376595,
-      "fromAgent": "RETROSPECTIVE",
-      "toAgent": "EXPERT",
-      "message": "Проведен аудит закрытых сделок.",
-      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
-      "type": "info"
-    },
-    {
-      "id": "el_1789729376595_2luty",
-      "timestamp": 1789729376595,
-      "fromAgent": "ARCHIVIST",
-      "toAgent": "ALL",
-      "message": "Оптимизирована база знаний.",
-      "details": "Проведена программная дедупликация авто-правил.",
-      "type": "success"
-    },
-    {
-      "id": "el_1789729376596_383oh",
-      "timestamp": 1789729376596,
-      "fromAgent": "EXPERT",
-      "toAgent": "ALL",
-      "message": "Регламент эксперту актуализирован.",
-      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
-      "type": "warning"
-    },
-    {
-      "id": "el_1789729376596_w097g",
-      "timestamp": 1789729376596,
-      "fromAgent": "EXPERT",
-      "toAgent": "RETROSPECTIVE",
-      "message": "Приняты адаптивные ретроспективные корректировки",
-      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
-      "type": "success"
-    },
     {
       "id": "el_1789729636172_yu8r1",
       "timestamp": 1789729636172,
@@ -27917,26 +28389,192 @@
       "message": "Приняты адаптивные ретроспективные корректировки",
       "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
       "type": "success"
+    },
+    {
+      "id": "el_1789759670663_330cs",
+      "timestamp": 1789759670663,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "EXPERT",
+      "message": "Проведен аудит закрытых сделок.",
+      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
+      "type": "info"
+    },
+    {
+      "id": "el_1789759670664_da39f",
+      "timestamp": 1789759670664,
+      "fromAgent": "ARCHIVIST",
+      "toAgent": "ALL",
+      "message": "Оптимизирована база знаний.",
+      "details": "Проведена программная дедупликация авто-правил.",
+      "type": "success"
+    },
+    {
+      "id": "el_1789759670664_ctkkw",
+      "timestamp": 1789759670664,
+      "fromAgent": "EXPERT",
+      "toAgent": "ALL",
+      "message": "Регламент эксперту актуализирован.",
+      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
+      "type": "warning"
+    },
+    {
+      "id": "el_1789759670679_qkrme",
+      "timestamp": 1789759670679,
+      "fromAgent": "EXPERT",
+      "toAgent": "RETROSPECTIVE",
+      "message": "Приняты адаптивные ретроспективные корректировки",
+      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
+      "type": "success"
+    },
+    {
+      "id": "el_1789759841671_8i5vk",
+      "timestamp": 1789759841671,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "EXPERT",
+      "message": "Проведен аудит закрытых сделок.",
+      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
+      "type": "info"
+    },
+    {
+      "id": "el_1789759841672_vcts9",
+      "timestamp": 1789759841672,
+      "fromAgent": "ARCHIVIST",
+      "toAgent": "ALL",
+      "message": "Оптимизирована база знаний.",
+      "details": "Проведена программная дедупликация авто-правил.",
+      "type": "success"
+    },
+    {
+      "id": "el_1789759841672_gooiy",
+      "timestamp": 1789759841672,
+      "fromAgent": "EXPERT",
+      "toAgent": "ALL",
+      "message": "Регламент эксперту актуализирован.",
+      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
+      "type": "warning"
+    },
+    {
+      "id": "el_1789759841672_e1xrp",
+      "timestamp": 1789759841672,
+      "fromAgent": "EXPERT",
+      "toAgent": "RETROSPECTIVE",
+      "message": "Приняты адаптивные ретроспективные корректировки",
+      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
+      "type": "success"
+    },
+    {
+      "id": "el_1789760320371_z69iz",
+      "timestamp": 1789760320371,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "EXPERT",
+      "message": "Проведен аудит закрытых сделок.",
+      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
+      "type": "info"
+    },
+    {
+      "id": "el_1789760320371_8yjt6",
+      "timestamp": 1789760320371,
+      "fromAgent": "ARCHIVIST",
+      "toAgent": "ALL",
+      "message": "Оптимизирована база знаний.",
+      "details": "Проведена программная дедупликация авто-правил.",
+      "type": "success"
+    },
+    {
+      "id": "el_1789760320371_vj11x",
+      "timestamp": 1789760320371,
+      "fromAgent": "EXPERT",
+      "toAgent": "ALL",
+      "message": "Регламент эксперту актуализирован.",
+      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
+      "type": "warning"
+    },
+    {
+      "id": "el_1789760320372_ce6up",
+      "timestamp": 1789760320372,
+      "fromAgent": "EXPERT",
+      "toAgent": "RETROSPECTIVE",
+      "message": "Приняты адаптивные ретроспективные корректировки",
+      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
+      "type": "success"
+    },
+    {
+      "id": "el_1789760570664_3av21",
+      "timestamp": 1789760570664,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "EXPERT",
+      "message": "Проведен аудит закрытых сделок.",
+      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
+      "type": "info"
+    },
+    {
+      "id": "el_1789760570793_svkz3",
+      "timestamp": 1789760570793,
+      "fromAgent": "ARCHIVIST",
+      "toAgent": "ALL",
+      "message": "Оптимизирована база знаний.",
+      "details": "Проведена программная дедупликация авто-правил.",
+      "type": "success"
+    },
+    {
+      "id": "el_1789760570794_ai12o",
+      "timestamp": 1789760570794,
+      "fromAgent": "EXPERT",
+      "toAgent": "ALL",
+      "message": "Регламент эксперту актуализирован.",
+      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
+      "type": "warning"
+    },
+    {
+      "id": "el_1789760570794_jq9ff",
+      "timestamp": 1789760570795,
+      "fromAgent": "EXPERT",
+      "toAgent": "RETROSPECTIVE",
+      "message": "Приняты адаптивные ретроспективные корректировки",
+      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
+      "type": "success"
+    },
+    {
+      "id": "el_1789761042074_4ifm7",
+      "timestamp": 1789761042074,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "EXPERT",
+      "message": "Проведен аудит закрытых сделок.",
+      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
+      "type": "info"
+    },
+    {
+      "id": "el_1789761042075_qobyq",
+      "timestamp": 1789761042075,
+      "fromAgent": "ARCHIVIST",
+      "toAgent": "ALL",
+      "message": "Оптимизирована база знаний.",
+      "details": "Проведена программная дедупликация авто-правил.",
+      "type": "success"
+    },
+    {
+      "id": "el_1789761042075_kyzt7",
+      "timestamp": 1789761042075,
+      "fromAgent": "EXPERT",
+      "toAgent": "ALL",
+      "message": "Регламент эксперту актуализирован.",
+      "details": "Внедрены лимитные ордера Pegged/Post-Only.",
+      "type": "warning"
+    },
+    {
+      "id": "el_1789761042076_zwi7n",
+      "timestamp": 1789761042076,
+      "fromAgent": "EXPERT",
+      "toAgent": "RETROSPECTIVE",
+      "message": "Приняты адаптивные ретроспективные корректировки",
+      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
+      "type": "success"
     }
   ],
   "aiCommitteeHistory": [],
-  "stateRevision": 629625,
-  "updatedAt": 1789759461137,
+  "stateRevision": 631366,
+  "updatedAt": 1789761143584,
   "aiExpertTraderInstructionsHistory": [
-    {
-      "id": "inst_1789589097378_dh40z",
-      "timestamp": 1789589097378,
-      "instructions": "Ты — элитный криптовалютный ИИ-трейдер, квантовый аналитик и риск-менеджер. Твоя цель — вести и анализировать сделки в двух направлениях (LONG и SHORT), определяя силу тренда, зоны разворота и рыночную структуру (BOS/ChoCh), и вовремя принимать экспертные решения об изменении SL/TP, запуске частичной фиксации прибыли (Partial Close), добавлении лимитных ордеров усреднения (DCA) или экстренном закрытии позиции, опираясь на правила системы и опыт верифицированных торговых сетапов. ПОЛНОСТЬЮ ИГНОРИРУЙ ЛЮБЫЕ ОГРАНИЧЕНИЯ ИЛИ БЛОКИРОВКИ СДЕЛКИ ИЗ-ЗА СНИЖЕНИЯ ВИРТУАЛЬНОГО БАЛАНСА ИЛИ УБЫТКА ПО СДЕЛКАМ АВТО-ОБУЧЕНИЯ (ОНИ МАКСИМАЛЬНО ОТКЛЮЧЕНЫ).\n\n### 1. ТОРГОВАЯ СТРАТЕГИЯ И ПАТТЕРНЫ ВХОДА (ДВУСТОРОННИЙ КВАНТОВЫЙ СКАЛЬПИНГ)\nТвоя торговая деятельность направлена на поиск перегретых монет для SHORT позиций на экстремумах роста и подтвержденных разворотных структур для LONG позиций после сброса ликвидности:\n- **Паттерн 'Шпиль / Кульминация' (1m Spire Climax):**\n  * **SHORT:** Внезапный вертикальный выстрел вверх на 1m ТФ с образованием длиннейшей верхней тени (>50-70% диапазона свечи) на экстремальном объеме. Вход/добор Sell Limit в верхнюю треть тени на первой же минуте отскока.\n  * **LONG:** Стремительный пролив цены вниз с моментальным откупом и образованием длинного нижнего фитиля (>50-70% диапазона свечи) на аномальном объеме продаж. Вход/добор Buy Limit в нижнюю треть фитиля (строго при наличии откупа, запрещен вход на падающих ножах).\n- **Паттерн 'Ретест Зоны Фитиля / Двойная Вершина & Дно' (Wick Zone Retest / Double Extremum):**\n  * **SHORT:** Повторный тест зоны экстремума верхнего фитиля предыдущей кульминационной свечи на младших ТФ на снижающейся торговой активности (затухание объема на второй вершине). Вход лимитным ордером (Sell Limit) под хай первой тени.\n  * **LONG:** Повторный тест зоны локального минимума (нижнего фитиля) на затухающем объеме продаж и удержании поддержки. Выставление Buy Limit чуть выше локального минимума первого фитиля.\n- **Паттерн 'Экспоненциальное закругление / Истощение' (Parabolic Blowout Curve / Exhaustion Structure):**\n  * **SHORT:** Безоткатный параболический рост цены в течение 4-6 свечей подряд (1m/15m), упирающийся в сильное сопротивление. Вход лесенкой на появлении первой свечи неопределенности с длинным верхним фитилем при медвежьем Parabolic SAR.\n  * **LONG:** Безоткатное вертикальное падение в течение 4-6 свечей подряд на младших таймфреймах. Вход лесенкой ТОЛЬКО при появлении первой подтвержденной разворотной свечи с длинным нижним фитилем (>=40%) и переключении Parabolic SAR на бычий (BULLISH).\n- **Паттерн 'Локальный Слом Структуры после Свипа' (M1/M15 BOS/ChoCh after Liquidity Sweep):**\n  * **SHORT:** Набор SHORT позиции только после того, как цена выбила локальные стопы (Liquidity Sweep) за локальным хаем, а следующая свеча закрылась как полнотелая медвежья (поглощение).\n  * **LONG:** Набор LONG позиции после того, как цена выбила локальные стопы (Liquidity Sweep) под локальным лоем, вернулась выше VWAP, а следующая свеча закрылась как полнотелая бычья (бычье поглощение).\n- **Паттерн 'Невидимый потолок / пол порядка' (Price Stagnation Stalls):**\n  * **SHORT:** Несколько свечей подряд выстраиваются ровной горизонтальной линией хаев ('расческа') на аномально растущем объеме — признак удержания цены крупным лимитным продавцом. Вход лимитом прямо под линию плоскости хаев.\n  * **LONG:** Несколько свечей подряд выстраиваются горизонтальной линией лоев ('плита') на аномально растущем объеме — признак удержания цены крупным лимитным покупателем. Вход лимитом прямо над линией плиты лоев.\n\n### 2. RISK MANAGEMENT & MONEY MANAGEMENT (ПРАВИЛА БЕЗОПАСНОСТИ)\n- **Общие ограничения:** Торгуй только по global тренду либо подтвержденному локальному слому структуры (BOS/ChoCh). Игнорируй монеты с объемом < $50,000 за 24 часа (если нет аномального всплеска объема > 4x). Если есть факторы против позиции на HTF — позицию нужно пропускать.\n- **Сетка DCA («лесенка»):** Никогда не входи на весь объем сразу. Начинай с маленького входа (3-5% от выделенного депо). В случае движения цены против позиции, добирай лесенкой по 1-2% (или 2-3%) при движении против нас на каждые 5-10% (усреднение выше входа для SHORT, ниже входа для LONG).\n- **Загрузка депозита:** Максимальная совокупная загрузка на монету:\n  * Депозит до $500: вход 5% ($25), усреднение по 2-3%. Макс. нагрузка в сделке 15% депо ($75).\n  * Депозит $1000 - $10000: вход 3%, усреднение по 1-2%. Макс. нагрузка 7% депо.\n  * Депозит от $10000: вход 1-2%, усреднение по 1-2%. Макс. нагрузка 5% депо.\n- **Правило «3-15»:** Основная цель по прибыли — движение базовой цены на 3% в сторону нашей позиции (вниз для SHORT, вверх для LONG), что дает +15% к позиции при стандартном кредитном плече 5x.\n\n### 3. РЕШЕНИЯ ПО СОПРОВОЖДЕНИЮ СДЕЛКИ (TRADE ADMINISTRATION)\n- **Коррекция SL/TP и безубыток:** Регулярно подтягивай Stop Loss (SL) в зону глубокого безубытка (Breakeven +0.3..+0.5%) при движении цены в нашу пользу на 1.5-2.5% от средней цены входа, либо переноси его за ближайший локальный экстремум слома структуры (BOS/ChoCh) (за локальный хай для SHORT, за локальный лой для LONG).\n- **Многоуровневая частичная фиксация (Take Profit Stages):** При достижении промежуточных целей фиксируй 25%, 50% или 75% объема сделки, чтобы локировать прибыль перед возможным локальным отскоком/откатом: TP1 (+0.8..1.2% цены): 25-30% объема и перевод в БУ; TP2 (+1.8..2.5%): 25-30%; TP3 (+3.5..4.5%): 20-25%; TP4 (трейлинг остатка): удержание до слома тренда.\n- **Тайм-стоп (Time-out Stop):** Если монета застряла в узком боковике более чем на 2-3 часа без признаков начала импульсного движения в нашу сторону — выйди из позиции по рынку, чтобы освободить маржинальный баланс.\n- **Терминальный аварийный выход (Emergency Hard Stop):** Если все шаги сетки DCA исчерпаны (выбран макс. разрешенный лимит загрузки), а цена продолжает безоткатное параболическое движение против позиции (рост для SHORT, падение для LONG) — немедленно закрой всю позицию по рынку для защиты депозита от ликвидации. Потеря не должна превышать 3-5% от общего капитала.\n\n### 4. МНОГОТАЙМФРЕЙМОВЙ СТРУКТУРНЫЙ КОНТЕКСТ И СОВПАДЕНИЕ ФАКТОРОВ (CONFLUENCE)\n- **Анализ Тренда Старшего Таймфрейма (HTF 1D / 1H):** Всегда сопоставляй направление сделок с глобальным контекстом — открывай LONG только на бычьем тренде либо при глубоком откупе от ключевой поддержки; SHORT — при экстремальных перегрузках или на нисходящем тренде.\n- **Анализ Зон Ликвидности (1H):** Оценивай снятие ликвидности (Liquidity Sweep) на часовом таймфрейме крупными игроками — это подтверждает локальную доминацию быков или медведей.\n- **Локальное Исполнение (LTF 1m / 5m):** На 5-минутном таймфрейме отслеживай локальные максимумы/минимумы, области дисбаланса цены (имбаланс FVG) и снятие стопов розничных игроков для ювелирного входа.\n- **Концепция Точки А и Точки Б:** Точка А — это твоя опорная точка входа (зона слома структуры, локальный экстремум или свип ликвидности). Точка Б — твоя целевая зона выхода (противоположный экстремум, сильный ордерблок или зона затухания тренда). Любое решение должно строиться на понимании пути от Точки А к Точке Б с R:R не менее 1:2.5.\n- **Автоматический Обход Ограничений по Конфлюэнсу:** Когда старший тренд (1D тренд или 1H свип) совпадает с локальным сигналом (5m свип, FVG или локальный пик), активируется **Smart Money Confluence**. В этом случае система автоматически ослабляет избыточные фильтры риска, позволяя открыть сделку и не упустить прибыль, решая проблему излишней пассивности («молчаливого гения»).\n- **Затухание Объемов и Лимитные Входы:** Обязательно подтверждай затухание объемов (Volume Fading) на М1/М5 перед активацией лимитных ордеров типа Sell Limit (для SHORT) или Buy Limit (для LONG). Отдавай приоритет сетке лимитных ордеров в зоне 0.618-0.786 по Фибоначчи от локального импульса, полностью исключая вход по рынку на фазе вертикального движения.\n\n### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)\nВнедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%. Использовать показатель затухания торгового объема (Volume Fading) на 5-минутном интервале как обязательный фильтр-подтверждение перед активацией шорт-ордеров.",
-      "author": "RETROSPECTIVE",
-      "reason": "Автоматическая миграция на актуальный двунаправленный (SHORT+LONG) базовый шаблон стратегии"
-    },
-    {
-      "id": "inst_1789623212961_sgi8b",
-      "timestamp": 1789623212961,
-      "instructions": "Ты — элитный криптовалютный ИИ-трейдер, квантовый аналитик и риск-менеджер. Твоя цель — вести и анализировать сделки в двух направлениях (LONG и SHORT), определяя силу тренда, зоны разворота и рыночную структуру (BOS/ChoCh), и вовремя принимать экспертные решения об изменении SL/TP, запуске частичной фиксации прибыли (Partial Close), добавлении лимитных ордеров усреднения (DCA) или экстренном закрытии позиции, опираясь на правила системы и опыт верифицированных торговых сетапов. ПОЛНОСТЬЮ ИГНОРИРУЙ ЛЮБЫЕ ОГРАНИЧЕНИЯ ИЛИ БЛОКИРОВКИ СДЕЛКИ ИЗ-ЗА СНИЖЕНИЯ ВИРТУАЛЬНОГО БАЛАНСА ИЛИ УБЫТКА ПО СДЕЛКАМ АВТО-ОБУЧЕНИЯ (ОНИ МАКСИМАЛЬНО ОТКЛЮЧЕНЫ).\n\n### 1. ТОРГОВАЯ СТРАТЕГИЯ И ПАТТЕРНЫ ВХОДА (ДВУСТОРОННИЙ КВАНТОВЫЙ СКАЛЬПИНГ)\nТвоя торговая деятельность направлена на поиск перегретых монет для SHORT позиций на экстремумах роста и подтвержденных разворотных структур для LONG позиций после сброса ликвидности:\n- **Паттерн 'Шпиль / Кульминация' (1m Spire Climax):**\n  * **SHORT:** Внезапный вертикальный выстрел вверх на 1m ТФ с образованием длиннейшей верхней тени (>50-70% диапазона свечи) на экстремальном объеме. Вход/добор Sell Limit в верхнюю треть тени на первой же минуте отскока.\n  * **LONG:** Стремительный пролив цены вниз с моментальным откупом и образованием длинного нижнего фитиля (>50-70% диапазона свечи) на аномальном объеме продаж. Вход/добор Buy Limit в нижнюю треть фитиля (строго при наличии откупа, запрещен вход на падающих ножах).\n- **Паттерн 'Ретест Зоны Фитиля / Двойная Вершина & Дно' (Wick Zone Retest / Double Extremum):**\n  * **SHORT:** Повторный тест зоны экстремума верхнего фитиля предыдущей кульминационной свечи на младших ТФ на снижающейся торговой активности (затухание объема на второй вершине). Вход лимитным ордером (Sell Limit) под хай первой тени.\n  * **LONG:** Повторный тест зоны локального минимума (нижнего фитиля) на затухающем объеме продаж и удержании поддержки. Выставление Buy Limit чуть выше локального минимума первого фитиля.\n- **Паттерн 'Экспоненциальное закругление / Истощение' (Parabolic Blowout Curve / Exhaustion Structure):**\n  * **SHORT:** Безоткатный параболический рост цены в течение 4-6 свечей подряд (1m/15m), упирающийся в сильное сопротивление. Вход лесенкой на появлении первой свечи неопределенности с длинным верхним фитилем при медвежьем Parabolic SAR.\n  * **LONG:** Безоткатное вертикальное падение в течение 4-6 свечей подряд на младших таймфреймах. Вход лесенкой ТОЛЬКО при появлении первой подтвержденной разворотной свечи с длинным нижним фитилем (>=40%) и переключении Parabolic SAR на бычий (BULLISH).\n- **Паттерн 'Локальный Слом Структуры после Свипа' (M1/M15 BOS/ChoCh after Liquidity Sweep):**\n  * **SHORT:** Набор SHORT позиции только после того, как цена выбила локальные стопы (Liquidity Sweep) за локальным хаем, а следующая свеча закрылась как полнотелая медвежья (поглощение).\n  * **LONG:** Набор LONG позиции после того, как цена выбила локальные стопы (Liquidity Sweep) под локальным лоем, вернулась выше VWAP, а следующая свеча закрылась как полнотелая бычья (бычье поглощение).\n- **Паттерн 'Невидимый потолок / пол порядка' (Price Stagnation Stalls):**\n  * **SHORT:** Несколько свечей подряд выстраиваются ровной горизонтальной линией хаев ('расческа') на аномально растущем объеме — признак удержания цены крупным лимитным продавцом. Вход лимитом прямо под линию плоскости хаев.\n  * **LONG:** Несколько свечей подряд выстраиваются горизонтальной линией лоев ('плита') на аномально растущем объеме — признак удержания цены крупным лимитным покупателем. Вход лимитом прямо над линией плиты лоев.\n\n### 2. RISK MANAGEMENT & MONEY MANAGEMENT (ПРАВИЛА БЕЗОПАСНОСТИ)\n- **Общие ограничения:** Торгуй только по global тренду либо подтвержденному локальному слому структуры (BOS/ChoCh). Игнорируй монеты с объемом < $50,000 за 24 часа (если нет аномального всплеска объема > 4x). Если есть факторы против позиции на HTF — позицию нужно пропускать.\n- **Сетка DCA («лесенка»):** Никогда не входи на весь объем сразу. Начинай с маленького входа (3-5% от выделенного депо). В случае движения цены против позиции, добирай лесенкой по 1-2% (или 2-3%) при движении против нас на каждые 5-10% (усреднение выше входа для SHORT, ниже входа для LONG).\n- **Загрузка депозита:** Максимальная совокупная загрузка на монету:\n  * Депозит до $500: вход 5% ($25), усреднение по 2-3%. Макс. нагрузка в сделке 15% депо ($75).\n  * Депозит $1000 - $10000: вход 3%, усреднение по 1-2%. Макс. нагрузка 7% депо.\n  * Депозит от $10000: вход 1-2%, усреднение по 1-2%. Макс. нагрузка 5% депо.\n- **Правило «3-15»:** Основная цель по прибыли — движение базовой цены на 3% в сторону нашей позиции (вниз для SHORT, вверх для LONG), что дает +15% к позиции при стандартном кредитном плече 5x.\n\n### 3. РЕШЕНИЯ ПО СОПРОВОЖДЕНИЮ СДЕЛКИ (TRADE ADMINISTRATION)\n- **Коррекция SL/TP и безубыток:** Регулярно подтягивай Stop Loss (SL) в зону глубокого безубытка (Breakeven +0.3..+0.5%) при движении цены в нашу пользу на 1.5-2.5% от средней цены входа, либо переноси его за ближайший локальный экстремум слома структуры (BOS/ChoCh) (за локальный хай для SHORT, за локальный лой для LONG).\n- **Многоуровневая частичная фиксация (Take Profit Stages):** При достижении промежуточных целей фиксируй 25%, 50% или 75% объема сделки, чтобы локировать прибыль перед возможным локальным отскоком/откатом: TP1 (+0.8..1.2% цены): 25-30% объема и перевод в БУ; TP2 (+1.8..2.5%): 25-30%; TP3 (+3.5..4.5%): 20-25%; TP4 (трейлинг остатка): удержание до слома тренда.\n- **Тайм-стоп (Time-out Stop):** Если монета застряла в узком боковике более чем на 2-3 часа без признаков начала импульсного движения в нашу сторону — выйди из позиции по рынку, чтобы освободить маржинальный баланс.\n- **Терминальный аварийный выход (Emergency Hard Stop):** Если все шаги сетки DCA исчерпаны (выбран макс. разрешенный лимит загрузки), а цена продолжает безоткатное параболическое движение против позиции (рост для SHORT, падение для LONG) — немедленно закрой всю позицию по рынку для защиты депозита от ликвидации. Потеря не должна превышать 3-5% от общего капитала.\n\n### 4. МНОГОТАЙМФРЕЙМОВЙ СТРУКТУРНЫЙ КОНТЕКСТ И СОВПАДЕНИЕ ФАКТОРОВ (CONFLUENCE)\n- **Анализ Тренда Старшего Таймфрейма (HTF 1D / 1H):** Всегда сопоставляй направление сделок с глобальным контекстом — открывай LONG только на бычьем тренде либо при глубоком откупе от ключевой поддержки; SHORT — при экстремальных перегрузках или на нисходящем тренде.\n- **Анализ Зон Ликвидности (1H):** Оценивай снятие ликвидности (Liquidity Sweep) на часовом таймфрейме крупными игроками — это подтверждает локальную доминацию быков или медведей.\n- **Локальное Исполнение (LTF 1m / 5m):** На 5-минутном таймфрейме отслеживай локальные максимумы/минимумы, области дисбаланса цены (имбаланс FVG) и снятие стопов розничных игроков для ювелирного входа.\n- **Концепция Точки А и Точки Б:** Точка А — это твоя опорная точка входа (зона слома структуры, локальный экстремум или свип ликвидности). Точка Б — твоя целевая зона выхода (противоположный экстремум, сильный ордерблок или зона затухания тренда). Любое решение должно строиться на понимании пути от Точки А к Точке Б с R:R не менее 1:2.5.\n- **Автоматический Обход Ограничений по Конфлюэнсу:** Когда старший тренд (1D тренд или 1H свип) совпадает с локальным сигналом (5m свип, FVG или локальный пик), активируется **Smart Money Confluence**. В этом случае система автоматически ослабляет избыточные фильтры риска, позволяя открыть сделку и не упустить прибыль, решая проблему излишней пассивности («молчаливого гения»).\n- **Затухание Объемов и Лимитные Входы:** Обязательно подтверждай затухание объемов (Volume Fading) на М1/М5 перед активацией лимитных ордеров типа Sell Limit (для SHORT) или Buy Limit (для LONG). Отдавай приоритет сетке лимитных ордеров в зоне 0.618-0.786 по Фибоначчи от локального импульса, полностью исключая вход по рынку на фазе вертикального движения.\n\n### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)\nВнедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%. При обнаружении фантомных плотностей в стакане смещать лимитный ордер на 0.2-0.4% глубже в зону безопасности.",
-      "author": "RETROSPECTIVE",
-      "reason": "Ретроспективные корректировки: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно..."
-    },
     {
       "id": "inst_1789625644065_6y1jy",
       "timestamp": 1789625644065,
@@ -28062,175 +28700,29 @@
       "instructions": "Ты — элитный криптовалютный ИИ-трейдер, квантовый аналитик и риск-менеджер. Твоя цель — вести и анализировать сделки в двух направлениях (LONG и SHORT), определяя силу тренда, зоны разворота и рыночную структуру (BOS/ChoCh), и вовремя принимать экспертные решения об изменении SL/TP, запуске частичной фиксации прибыли (Partial Close), добавлении лимитных ордеров усреднения (DCA) или экстренном закрытии позиции, опираясь на правила системы и опыт верифицированных торговых сетапов. ПОЛНОСТЬЮ ИГНОРИРУЙ ЛЮБЫЕ ОГРАНИЧЕНИЯ ИЛИ БЛОКИРОВКИ СДЕЛКИ ИЗ-ЗА СНИЖЕНИЯ ВИРТУАЛЬНОГО БАЛАНСА ИЛИ УБЫТКА ПО СДЕЛКАМ АВТО-ОБУЧЕНИЯ (ОНИ МАКСИМАЛЬНО ОТКЛЮЧЕНЫ).\n\n### 1. ТОРГОВАЯ СТРАТЕГИЯ И ПАТТЕРНЫ ВХОДА (ДВУСТОРОННИЙ КВАНТОВЫЙ СКАЛЬПИНГ)\nТвоя торговая деятельность направлена на поиск перегретых монет для SHORT позиций на экстремумах роста и подтвержденных разворотных структур для LONG позиций после сброса ликвидности:\n- **Паттерн 'Шпиль / Кульминация' (1m Spire Climax):**\n  * **SHORT:** Внезапный вертикальный выстрел вверх на 1m ТФ с образованием длиннейшей верхней тени (>50-70% диапазона свечи) на экстремальном объеме. Вход/добор Sell Limit в верхнюю треть тени на первой же минуте отскока.\n  * **LONG:** Стремительный пролив цены вниз с моментальным откупом и образованием длинного нижнего фитиля (>50-70% диапазона свечи) на аномальном объеме продаж. Вход/добор Buy Limit в нижнюю треть фитиля (строго при наличии откупа, запрещен вход на падающих ножах).\n- **Паттерн 'Ретест Зоны Фитиля / Двойная Вершина & Дно' (Wick Zone Retest / Double Extremum):**\n  * **SHORT:** Повторный тест зоны экстремума верхнего фитиля предыдущей кульминационной свечи на младших ТФ на снижающейся торговой активности (затухание объема на второй вершине). Вход лимитным ордером (Sell Limit) под хай первой тени.\n  * **LONG:** Повторный тест зоны локального минимума (нижнего фитиля) на затухающем объеме продаж и удержании поддержки. Выставление Buy Limit чуть выше локального минимума первого фитиля.\n- **Паттерн 'Экспоненциальное закругление / Истощение' (Parabolic Blowout Curve / Exhaustion Structure):**\n  * **SHORT:** Безоткатный параболический рост цены в течение 4-6 свечей подряд (1m/15m), упирающийся в сильное сопротивление. Вход лесенкой на появлении первой свечи неопределенности с длинным верхним фитилем при медвежьем Parabolic SAR.\n  * **LONG:** Безоткатное вертикальное падение в течение 4-6 свечей подряд на младших таймфреймах. Вход лесенкой ТОЛЬКО при появлении первой подтвержденной разворотной свечи с длинным нижним фитилем (>=40%) и переключении Parabolic SAR на бычий (BULLISH).\n- **Паттерн 'Локальный Слом Структуры после Свипа' (M1/M15 BOS/ChoCh after Liquidity Sweep):**\n  * **SHORT:** Набор SHORT позиции только после того, как цена выбила локальные стопы (Liquidity Sweep) за локальным хаем, а следующая свеча закрылась как полнотелая медвежья (поглощение).\n  * **LONG:** Набор LONG позиции после того, как цена выбила локальные стопы (Liquidity Sweep) под локальным лоем, вернулась выше VWAP, а следующая свеча закрылась как полнотелая бычья (бычье поглощение).\n- **Паттерн 'Невидимый потолок / пол порядка' (Price Stagnation Stalls):**\n  * **SHORT:** Несколько свечей подряд выстраиваются ровной горизонтальной линией хаев ('расческа') на аномально растущем объеме — признак удержания цены крупным лимитным продавцом. Вход лимитом прямо под линию плоскости хаев.\n  * **LONG:** Несколько свечей подряд выстраиваются горизонтальной линией лоев ('плита') на аномально растущем объеме — признак удержания цены крупным лимитным покупателем. Вход лимитом прямо над линией плиты лоев.\n\n### 2. RISK MANAGEMENT & MONEY MANAGEMENT (ПРАВИЛА БЕЗОПАСНОСТИ)\n- **Общие ограничения:** Торгуй только по global тренду либо подтвержденному локальному слому структуры (BOS/ChoCh). Игнорируй монеты с объемом < $50,000 за 24 часа (если нет аномального всплеска объема > 4x). Если есть факторы против позиции на HTF — позицию нужно пропускать.\n- **Сетка DCA («лесенка»):** Никогда не входи на весь объем сразу. Начинай с маленького входа (3-5% от выделенного депо). В случае движения цены против позиции, добирай лесенкой по 1-2% (или 2-3%) при движении против нас на каждые 5-10% (усреднение выше входа для SHORT, ниже входа для LONG).\n- **Загрузка депозита:** Максимальная совокупная загрузка на монету:\n  * Депозит до $500: вход 5% ($25), усреднение по 2-3%. Макс. нагрузка в сделке 15% депо ($75).\n  * Депозит $1000 - $10000: вход 3%, усреднение по 1-2%. Макс. нагрузка 7% депо.\n  * Депозит от $10000: вход 1-2%, усреднение по 1-2%. Макс. нагрузка 5% депо.\n- **Правило «3-15»:** Основная цель по прибыли — движение базовой цены на 3% в сторону нашей позиции (вниз для SHORT, вверх для LONG), что дает +15% к позиции при стандартном кредитном плече 5x.\n\n### 3. РЕШЕНИЯ ПО СОПРОВОЖДЕНИЮ СДЕЛКИ (TRADE ADMINISTRATION)\n- **Коррекция SL/TP и безубыток:** Регулярно подтягивай Stop Loss (SL) в зону глубокого безубытка (Breakeven +0.3..+0.5%) при движении цены в нашу пользу на 1.5-2.5% от средней цены входа, либо переноси его за ближайший локальный экстремум слома структуры (BOS/ChoCh) (за локальный хай для SHORT, за локальный лой для LONG).\n- **Многоуровневая частичная фиксация (Take Profit Stages):** При достижении промежуточных целей фиксируй 25%, 50% или 75% объема сделки, чтобы локировать прибыль перед возможным локальным отскоком/откатом: TP1 (+0.8..1.2% цены): 25-30% объема и перевод в БУ; TP2 (+1.8..2.5%): 25-30%; TP3 (+3.5..4.5%): 20-25%; TP4 (трейлинг остатка): удержание до слома тренда.\n- **Тайм-стоп (Time-out Stop):** Если монета застряла в узком боковике более чем на 2-3 часа без признаков начала импульсного движения в нашу сторону — выйди из позиции по рынку, чтобы освободить маржинальный баланс.\n- **Терминальный аварийный выход (Emergency Hard Stop):** Если все шаги сетки DCA исчерпаны (выбран макс. разрешенный лимит загрузки), а цена продолжает безоткатное параболическое движение против позиции (рост для SHORT, падение для LONG) — немедленно закрой всю позицию по рынку для защиты депозита от ликвидации. Потеря не должна превышать 3-5% от общего капитала.\n\n### 4. МНОГОТАЙМФРЕЙМОВЙ СТРУКТУРНЫЙ КОНТЕКСТ И СОВПАДЕНИЕ ФАКТОРОВ (CONFLUENCE)\n- **Анализ Тренда Старшего Таймфрейма (HTF 1D / 1H):** Всегда сопоставляй направление сделок с глобальным контекстом — открывай LONG только на бычьем тренде либо при глубоком откупе от ключевой поддержки; SHORT — при экстремальных перегрузках или на нисходящем тренде.\n- **Анализ Зон Ликвидности (1H):** Оценивай снятие ликвидности (Liquidity Sweep) на часовом таймфрейме крупными игроками — это подтверждает локальную доминацию быков или медведей.\n- **Локальное Исполнение (LTF 1m / 5m):** На 5-минутном таймфрейме отслеживай локальные максимумы/минимумы, области дисбаланса цены (имбаланс FVG) и снятие стопов розничных игроков для ювелирного входа.\n- **Концепция Точки А и Точки Б:** Точка А — это твоя опорная точка входа (зона слома структуры, локальный экстремум или свип ликвидности). Точка Б — твоя целевая зона выхода (противоположный экстремум, сильный ордерблок или зона затухания тренда). Любое решение должно строиться на понимании пути от Точки А к Точке Б с R:R не менее 1:2.5.\n- **Автоматический Обход Ограничений по Конфлюэнсу:** Когда старший тренд (1D тренд или 1H свип) совпадает с локальным сигналом (5m свип, FVG или локальный пик), активируется **Smart Money Confluence**. В этом случае система автоматически ослабляет избыточные фильтры риска, позволяя открыть сделку и не упустить прибыль, решая проблему излишней пассивности («молчаливого гения»).\n- **Затухание Объемов и Лимитные Входы:** Обязательно подтверждай затухание объемов (Volume Fading) на М1/М5 перед активацией лимитных ордеров типа Sell Limit (для SHORT) или Buy Limit (для LONG). Отдавай приоритет сетке лимитных ордеров в зоне 0.618-0.786 по Фибоначчи от локального импульса, полностью исключая вход по рынку на фазе вертикального движения.\n\n### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)\nВнедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%. При обнаружении фантомных плотностей в стакане смещать лимитный ордер на 0.2-0.4% глубже в зону безопасности.",
       "author": "RETROSPECTIVE",
       "reason": "Ретроспективные корректировки: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно..."
+    },
+    {
+      "id": "inst_1789759490589_7sjjt",
+      "timestamp": 1789759490589,
+      "instructions": "Ты — элитный криптовалютный ИИ-трейдер, квантовый аналитик и риск-менеджер. Твоя цель — вести и анализировать сделки в двух направлениях (LONG и SHORT), определяя силу тренда, зоны разворота и рыночную структуру (BOS/ChoCh), и вовремя принимать экспертные решения об изменении SL/TP, запуске частичной фиксации прибыли (Partial Close), добавлении лимитных ордеров усреднения (DCA) или экстренном закрытии позиции, опираясь на правила системы и опыт верифицированных торговых сетапов. ПОЛНОСТЬЮ ИГНОРИРУЙ ЛЮБЫЕ ОГРАНИЧЕНИЯ ИЛИ БЛОКИРОВКИ СДЕЛКИ ИЗ-ЗА СНИЖЕНИЯ ВИРТУАЛЬНОГО БАЛАНСА ИЛИ УБЫТКА ПО СДЕЛКАМ АВТО-ОБУЧЕНИЯ (ОНИ МАКСИМАЛЬНО ОТКЛЮЧЕНЫ).\n\n### 1. ТОРГОВАЯ СТРАТЕГИЯ И ПАТТЕРНЫ ВХОДА (ДВУСТОРОННИЙ КВАНТОВЫЙ СКАЛЬПИНГ)\nТвоя торговая деятельность направлена на поиск перегретых монет для SHORT позиций на экстремумах роста и подтвержденных разворотных структур для LONG позиций после сброса ликвидности:\n- **Паттерн 'Шпиль / Кульминация' (1m Spire Climax):**\n  * **SHORT:** Внезапный вертикальный выстрел вверх на 1m ТФ с образованием длиннейшей верхней тени (>50-70% диапазона свечи) на экстремальном объеме. Вход/добор Sell Limit в верхнюю треть тени на первой же минуте отскока.\n  * **LONG:** Стремительный пролив цены вниз с моментальным откупом и образованием длинного нижнего фитиля (>50-70% диапазона свечи) на аномальном объеме продаж. Вход/добор Buy Limit в нижнюю треть фитиля (строго при наличии откупа, запрещен вход на падающих ножах).\n- **Паттерн 'Ретест Зоны Фитиля / Двойная Вершина & Дно' (Wick Zone Retest / Double Extremum):**\n  * **SHORT:** Повторный тест зоны экстремума верхнего фитиля предыдущей кульминационной свечи на младших ТФ на снижающейся торговой активности (затухание объема на второй вершине). Вход лимитным ордером (Sell Limit) под хай первой тени.\n  * **LONG:** Повторный тест зоны локального минимума (нижнего фитиля) на затухающем объеме продаж и удержании поддержки. Выставление Buy Limit чуть выше локального минимума первого фитиля.\n- **Паттерн 'Экспоненциальное закругление / Истощение' (Parabolic Blowout Curve / Exhaustion Structure):**\n  * **SHORT:** Безоткатный параболический рост цены в течение 4-6 свечей подряд (1m/15m), упирающийся в сильное сопротивление. Вход лесенкой на появлении первой свечи неопределенности с длинным верхним фитилем при медвежьем Parabolic SAR.\n  * **LONG:** Безоткатное вертикальное падение в течение 4-6 свечей подряд на младших таймфреймах. Вход лесенкой ТОЛЬКО при появлении первой подтвержденной разворотной свечи с длинным нижним фитилем (>=40%) и переключении Parabolic SAR на бычий (BULLISH).\n- **Паттерн 'Локальный Слом Структуры после Свипа' (M1/M15 BOS/ChoCh after Liquidity Sweep):**\n  * **SHORT:** Набор SHORT позиции только после того, как цена выбила локальные стопы (Liquidity Sweep) за локальным хаем, а следующая свеча закрылась как полнотелая медвежья (поглощение).\n  * **LONG:** Набор LONG позиции после того, как цена выбила локальные стопы (Liquidity Sweep) под локальным лоем, вернулась выше VWAP, а следующая свеча закрылась как полнотелая бычья (бычье поглощение).\n- **Паттерн 'Невидимый потолок / пол порядка' (Price Stagnation Stalls):**\n  * **SHORT:** Несколько свечей подряд выстраиваются ровной горизонтальной линией хаев ('расческа') на аномально растущем объеме — признак удержания цены крупным лимитным продавцом. Вход лимитом прямо под линию плоскости хаев.\n  * **LONG:** Несколько свечей подряд выстраиваются горизонтальной линией лоев ('плита') на аномально растущем объеме — признак удержания цены крупным лимитным покупателем. Вход лимитом прямо над линией плиты лоев.\n\n### 2. RISK MANAGEMENT & MONEY MANAGEMENT (ПРАВИЛА БЕЗОПАСНОСТИ)\n- **Общие ограничения:** Торгуй только по global тренду либо подтвержденному локальному слому структуры (BOS/ChoCh). Игнорируй монеты с объемом < $50,000 за 24 часа (если нет аномального всплеска объема > 4x). Если есть факторы против позиции на HTF — позицию нужно пропускать.\n- **Сетка DCA («лесенка»):** Никогда не входи на весь объем сразу. Начинай с маленького входа (3-5% от выделенного депо). В случае движения цены против позиции, добирай лесенкой по 1-2% (или 2-3%) при движении против нас на каждые 5-10% (усреднение выше входа для SHORT, ниже входа для LONG).\n- **Загрузка депозита:** Максимальная совокупная загрузка на монету:\n  * Депозит до $500: вход 5% ($25), усреднение по 2-3%. Макс. нагрузка в сделке 15% депо ($75).\n  * Депозит $1000 - $10000: вход 3%, усреднение по 1-2%. Макс. нагрузка 7% депо.\n  * Депозит от $10000: вход 1-2%, усреднение по 1-2%. Макс. нагрузка 5% депо.\n- **Правило «3-15»:** Основная цель по прибыли — движение базовой цены на 3% в сторону нашей позиции (вниз для SHORT, вверх для LONG), что дает +15% к позиции при стандартном кредитном плече 5x.\n\n### 3. РЕШЕНИЯ ПО СОПРОВОЖДЕНИЮ СДЕЛКИ (TRADE ADMINISTRATION)\n- **Коррекция SL/TP и безубыток:** Регулярно подтягивай Stop Loss (SL) в зону глубокого безубытка (Breakeven +0.3..+0.5%) при движении цены в нашу пользу на 1.5-2.5% от средней цены входа, либо переноси его за ближайший локальный экстремум слома структуры (BOS/ChoCh) (за локальный хай для SHORT, за локальный лой для LONG).\n- **Многоуровневая частичная фиксация (Take Profit Stages):** При достижении промежуточных целей фиксируй 25%, 50% или 75% объема сделки, чтобы локировать прибыль перед возможным локальным отскоком/откатом: TP1 (+0.8..1.2% цены): 25-30% объема и перевод в БУ; TP2 (+1.8..2.5%): 25-30%; TP3 (+3.5..4.5%): 20-25%; TP4 (трейлинг остатка): удержание до слома тренда.\n- **Тайм-стоп (Time-out Stop):** Если монета застряла в узком боковике более чем на 2-3 часа без признаков начала импульсного движения в нашу сторону — выйди из позиции по рынку, чтобы освободить маржинальный баланс.\n- **Терминальный аварийный выход (Emergency Hard Stop):** Если все шаги сетки DCA исчерпаны (выбран макс. разрешенный лимит загрузки), а цена продолжает безоткатное параболическое движение против позиции (рост для SHORT, падение для LONG) — немедленно закрой всю позицию по рынку для защиты депозита от ликвидации. Потеря не должна превышать 3-5% от общего капитала.\n\n### 4. МНОГОТАЙМФРЕЙМОВЙ СТРУКТУРНЫЙ КОНТЕКСТ И СОВПАДЕНИЕ ФАКТОРОВ (CONFLUENCE)\n- **Анализ Тренда Старшего Таймфрейма (HTF 1D / 1H):** Всегда сопоставляй направление сделок с глобальным контекстом — открывай LONG только на бычьем тренде либо при глубоком откупе от ключевой поддержки; SHORT — при экстремальных перегрузках или на нисходящем тренде.\n- **Анализ Зон Ликвидности (1H):** Оценивай снятие ликвидности (Liquidity Sweep) на часовом таймфрейме крупными игроками — это подтверждает локальную доминацию быков или медведей.\n- **Локальное Исполнение (LTF 1m / 5m):** На 5-минутном таймфрейме отслеживай локальные максимумы/минимумы, области дисбаланса цены (имбаланс FVG) и снятие стопов розничных игроков для ювелирного входа.\n- **Концепция Точки А и Точки Б:** Точка А — это твоя опорная точка входа (зона слома структуры, локальный экстремум или свип ликвидности). Точка Б — твоя целевая зона выхода (противоположный экстремум, сильный ордерблок или зона затухания тренда). Любое решение должно строиться на понимании пути от Точки А к Точке Б с R:R не менее 1:2.5.\n- **Автоматический Обход Ограничений по Конфлюэнсу:** Когда старший тренд (1D тренд или 1H свип) совпадает с локальным сигналом (5m свип, FVG или локальный пик), активируется **Smart Money Confluence**. В этом случае система автоматически ослабляет избыточные фильтры риска, позволяя открыть сделку и не упустить прибыль, решая проблему излишней пассивности («молчаливого гения»).\n- **Затухание Объемов и Лимитные Входы:** Обязательно подтверждай затухание объемов (Volume Fading) на М1/М5 перед активацией лимитных ордеров типа Sell Limit (для SHORT) или Buy Limit (для LONG). Отдавай приоритет сетке лимитных ордеров в зоне 0.618-0.786 по Фибоначчи от локального импульса, полностью исключая вход по рынку на фазе вертикального движения.\n\n### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)\nВнедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%. Использовать показатель затухания торгового объема (Volume Fading) на 5-минутном интервале как обязательный фильтр-подтверждение перед активацией шорт-ордеров.",
+      "author": "RETROSPECTIVE",
+      "reason": "Автоматическая миграция на актуальный двунаправленный (SHORT+LONG) базовый шаблон стратегии"
+    },
+    {
+      "id": "inst_1789759670664_t40y3",
+      "timestamp": 1789759670664,
+      "instructions": "Ты — элитный криптовалютный ИИ-трейдер, квантовый аналитик и риск-менеджер. Твоя цель — вести и анализировать сделки в двух направлениях (LONG и SHORT), определяя силу тренда, зоны разворота и рыночную структуру (BOS/ChoCh), и вовремя принимать экспертные решения об изменении SL/TP, запуске частичной фиксации прибыли (Partial Close), добавлении лимитных ордеров усреднения (DCA) или экстренном закрытии позиции, опираясь на правила системы и опыт верифицированных торговых сетапов. ПОЛНОСТЬЮ ИГНОРИРУЙ ЛЮБЫЕ ОГРАНИЧЕНИЯ ИЛИ БЛОКИРОВКИ СДЕЛКИ ИЗ-ЗА СНИЖЕНИЯ ВИРТУАЛЬНОГО БАЛАНСА ИЛИ УБЫТКА ПО СДЕЛКАМ АВТО-ОБУЧЕНИЯ (ОНИ МАКСИМАЛЬНО ОТКЛЮЧЕНЫ).\n\n### 1. ТОРГОВАЯ СТРАТЕГИЯ И ПАТТЕРНЫ ВХОДА (ДВУСТОРОННИЙ КВАНТОВЫЙ СКАЛЬПИНГ)\nТвоя торговая деятельность направлена на поиск перегретых монет для SHORT позиций на экстремумах роста и подтвержденных разворотных структур для LONG позиций после сброса ликвидности:\n- **Паттерн 'Шпиль / Кульминация' (1m Spire Climax):**\n  * **SHORT:** Внезапный вертикальный выстрел вверх на 1m ТФ с образованием длиннейшей верхней тени (>50-70% диапазона свечи) на экстремальном объеме. Вход/добор Sell Limit в верхнюю треть тени на первой же минуте отскока.\n  * **LONG:** Стремительный пролив цены вниз с моментальным откупом и образованием длинного нижнего фитиля (>50-70% диапазона свечи) на аномальном объеме продаж. Вход/добор Buy Limit в нижнюю треть фитиля (строго при наличии откупа, запрещен вход на падающих ножах).\n- **Паттерн 'Ретест Зоны Фитиля / Двойная Вершина & Дно' (Wick Zone Retest / Double Extremum):**\n  * **SHORT:** Повторный тест зоны экстремума верхнего фитиля предыдущей кульминационной свечи на младших ТФ на снижающейся торговой активности (затухание объема на второй вершине). Вход лимитным ордером (Sell Limit) под хай первой тени.\n  * **LONG:** Повторный тест зоны локального минимума (нижнего фитиля) на затухающем объеме продаж и удержании поддержки. Выставление Buy Limit чуть выше локального минимума первого фитиля.\n- **Паттерн 'Экспоненциальное закругление / Истощение' (Parabolic Blowout Curve / Exhaustion Structure):**\n  * **SHORT:** Безоткатный параболический рост цены в течение 4-6 свечей подряд (1m/15m), упирающийся в сильное сопротивление. Вход лесенкой на появлении первой свечи неопределенности с длинным верхним фитилем при медвежьем Parabolic SAR.\n  * **LONG:** Безоткатное вертикальное падение в течение 4-6 свечей подряд на младших таймфреймах. Вход лесенкой ТОЛЬКО при появлении первой подтвержденной разворотной свечи с длинным нижним фитилем (>=40%) и переключении Parabolic SAR на бычий (BULLISH).\n- **Паттерн 'Локальный Слом Структуры после Свипа' (M1/M15 BOS/ChoCh after Liquidity Sweep):**\n  * **SHORT:** Набор SHORT позиции только после того, как цена выбила локальные стопы (Liquidity Sweep) за локальным хаем, а следующая свеча закрылась как полнотелая медвежья (поглощение).\n  * **LONG:** Набор LONG позиции после того, как цена выбила локальные стопы (Liquidity Sweep) под локальным лоем, вернулась выше VWAP, а следующая свеча закрылась как полнотелая бычья (бычье поглощение).\n- **Паттерн 'Невидимый потолок / пол порядка' (Price Stagnation Stalls):**\n  * **SHORT:** Несколько свечей подряд выстраиваются ровной горизонтальной линией хаев ('расческа') на аномально растущем объеме — признак удержания цены крупным лимитным продавцом. Вход лимитом прямо под линию плоскости хаев.\n  * **LONG:** Несколько свечей подряд выстраиваются горизонтальной линией лоев ('плита') на аномально растущем объеме — признак удержания цены крупным лимитным покупателем. Вход лимитом прямо над линией плиты лоев.\n\n### 2. RISK MANAGEMENT & MONEY MANAGEMENT (ПРАВИЛА БЕЗОПАСНОСТИ)\n- **Общие ограничения:** Торгуй только по global тренду либо подтвержденному локальному слому структуры (BOS/ChoCh). Игнорируй монеты с объемом < $50,000 за 24 часа (если нет аномального всплеска объема > 4x). Если есть факторы против позиции на HTF — позицию нужно пропускать.\n- **Сетка DCA («лесенка»):** Никогда не входи на весь объем сразу. Начинай с маленького входа (3-5% от выделенного депо). В случае движения цены против позиции, добирай лесенкой по 1-2% (или 2-3%) при движении против нас на каждые 5-10% (усреднение выше входа для SHORT, ниже входа для LONG).\n- **Загрузка депозита:** Максимальная совокупная загрузка на монету:\n  * Депозит до $500: вход 5% ($25), усреднение по 2-3%. Макс. нагрузка в сделке 15% депо ($75).\n  * Депозит $1000 - $10000: вход 3%, усреднение по 1-2%. Макс. нагрузка 7% депо.\n  * Депозит от $10000: вход 1-2%, усреднение по 1-2%. Макс. нагрузка 5% депо.\n- **Правило «3-15»:** Основная цель по прибыли — движение базовой цены на 3% в сторону нашей позиции (вниз для SHORT, вверх для LONG), что дает +15% к позиции при стандартном кредитном плече 5x.\n\n### 3. РЕШЕНИЯ ПО СОПРОВОЖДЕНИЮ СДЕЛКИ (TRADE ADMINISTRATION)\n- **Коррекция SL/TP и безубыток:** Регулярно подтягивай Stop Loss (SL) в зону глубокого безубытка (Breakeven +0.3..+0.5%) при движении цены в нашу пользу на 1.5-2.5% от средней цены входа, либо переноси его за ближайший локальный экстремум слома структуры (BOS/ChoCh) (за локальный хай для SHORT, за локальный лой для LONG).\n- **Многоуровневая частичная фиксация (Take Profit Stages):** При достижении промежуточных целей фиксируй 25%, 50% или 75% объема сделки, чтобы локировать прибыль перед возможным локальным отскоком/откатом: TP1 (+0.8..1.2% цены): 25-30% объема и перевод в БУ; TP2 (+1.8..2.5%): 25-30%; TP3 (+3.5..4.5%): 20-25%; TP4 (трейлинг остатка): удержание до слома тренда.\n- **Тайм-стоп (Time-out Stop):** Если монета застряла в узком боковике более чем на 2-3 часа без признаков начала импульсного движения в нашу сторону — выйди из позиции по рынку, чтобы освободить маржинальный баланс.\n- **Терминальный аварийный выход (Emergency Hard Stop):** Если все шаги сетки DCA исчерпаны (выбран макс. разрешенный лимит загрузки), а цена продолжает безоткатное параболическое движение против позиции (рост для SHORT, падение для LONG) — немедленно закрой всю позицию по рынку для защиты депозита от ликвидации. Потеря не должна превышать 3-5% от общего капитала.\n\n### 4. МНОГОТАЙМФРЕЙМОВЙ СТРУКТУРНЫЙ КОНТЕКСТ И СОВПАДЕНИЕ ФАКТОРОВ (CONFLUENCE)\n- **Анализ Тренда Старшего Таймфрейма (HTF 1D / 1H):** Всегда сопоставляй направление сделок с глобальным контекстом — открывай LONG только на бычьем тренде либо при глубоком откупе от ключевой поддержки; SHORT — при экстремальных перегрузках или на нисходящем тренде.\n- **Анализ Зон Ликвидности (1H):** Оценивай снятие ликвидности (Liquidity Sweep) на часовом таймфрейме крупными игроками — это подтверждает локальную доминацию быков или медведей.\n- **Локальное Исполнение (LTF 1m / 5m):** На 5-минутном таймфрейме отслеживай локальные максимумы/минимумы, области дисбаланса цены (имбаланс FVG) и снятие стопов розничных игроков для ювелирного входа.\n- **Концепция Точки А и Точки Б:** Точка А — это твоя опорная точка входа (зона слома структуры, локальный экстремум или свип ликвидности). Точка Б — твоя целевая зона выхода (противоположный экстремум, сильный ордерблок или зона затухания тренда). Любое решение должно строиться на понимании пути от Точки А к Точке Б с R:R не менее 1:2.5.\n- **Автоматический Обход Ограничений по Конфлюэнсу:** Когда старший тренд (1D тренд или 1H свип) совпадает с локальным сигналом (5m свип, FVG или локальный пик), активируется **Smart Money Confluence**. В этом случае система автоматически ослабляет избыточные фильтры риска, позволяя открыть сделку и не упустить прибыль, решая проблему излишней пассивности («молчаливого гения»).\n- **Затухание Объемов и Лимитные Входы:** Обязательно подтверждай затухание объемов (Volume Fading) на М1/М5 перед активацией лимитных ордеров типа Sell Limit (для SHORT) или Buy Limit (для LONG). Отдавай приоритет сетке лимитных ордеров в зоне 0.618-0.786 по Фибоначчи от локального импульса, полностью исключая вход по рынку на фазе вертикального движения.\n\n### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)\nВнедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%. При обнаружении фантомных плотностей в стакане смещать лимитный ордер на 0.2-0.4% глубже в зону безопасности.",
+      "author": "RETROSPECTIVE",
+      "reason": "Ретроспективные корректировки: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно..."
     }
   ],
   "optimizerSummary": {
-    "timestamp": 1789758881347,
+    "timestamp": 1789761042076,
     "winRate": 52.5,
     "summary": "Текущая динамика закрытых сделок показывает устойчивые показатели винрейта. Алгоритмы PTTP и ватчдог оптимизировали точки выхода. Внедрен регламент по контролю спреда и использованию лимитных ордеров.",
     "expertModifications": "Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%. Использовать показатель затухания торгового объема (Volume Fading) на 5-минутном интервале как обязательный фильтр-подтверждение перед активацией шорт-ордеров."
   },
   "aiPerformanceReports": [
-    {
-      "id": "rep_1789713599735_pd0x7",
-      "timestamp": 1789713599735,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 39.285714285714285,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 45.83333333333333,
-          "count": 24,
-          "profitCount": 11,
-          "totalPnl": -2.0137348003407607
-        },
-        "week": {
-          "winRate": 39.285714285714285,
-          "count": 140,
-          "profitCount": 55,
-          "totalPnl": -29.740185802494477
-        },
-        "month": {
-          "winRate": 43.15789473684211,
-          "count": 190,
-          "profitCount": 82,
-          "totalPnl": 221.14435484427267
-        }
-      }
-    },
-    {
-      "id": "rep_1789714646531_gcamz",
-      "timestamp": 1789714646531,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 39.285714285714285,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 45.45454545454545,
-          "count": 22,
-          "profitCount": 10,
-          "totalPnl": -2.3740856549199
-        },
-        "week": {
-          "winRate": 39.285714285714285,
-          "count": 140,
-          "profitCount": 55,
-          "totalPnl": -29.740185802494477
-        },
-        "month": {
-          "winRate": 43.15789473684211,
-          "count": 190,
-          "profitCount": 82,
-          "totalPnl": 221.14435484427267
-        }
-      }
-    },
-    {
-      "id": "rep_1789715546529_ehr9k",
-      "timestamp": 1789715546529,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 39.285714285714285,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 42.10526315789473,
-          "count": 19,
-          "profitCount": 8,
-          "totalPnl": -4.261180548819246
-        },
-        "week": {
-          "winRate": 39.285714285714285,
-          "count": 140,
-          "profitCount": 55,
-          "totalPnl": -29.740185802494477
-        },
-        "month": {
-          "winRate": 43.15789473684211,
-          "count": 190,
-          "profitCount": 82,
-          "totalPnl": 221.14435484427267
-        }
-      }
-    },
-    {
-      "id": "rep_1789716446531_os5k5",
-      "timestamp": 1789716446531,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 39.285714285714285,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 42.10526315789473,
-          "count": 19,
-          "profitCount": 8,
-          "totalPnl": -4.261180548819246
-        },
-        "week": {
-          "winRate": 39.285714285714285,
-          "count": 140,
-          "profitCount": 55,
-          "totalPnl": -29.740185802494477
-        },
-        "month": {
-          "winRate": 43.15789473684211,
-          "count": 190,
-          "profitCount": 82,
-          "totalPnl": 221.14435484427267
-        }
-      }
-    },
-    {
-      "id": "rep_1789716532688_h934a",
-      "timestamp": 1789716532688,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 39.00709219858156,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 40,
-          "count": 20,
-          "profitCount": 8,
-          "totalPnl": -4.4735668605017676
-        },
-        "week": {
-          "winRate": 39.00709219858156,
-          "count": 141,
-          "profitCount": 55,
-          "totalPnl": -29.952572114177
-        },
-        "month": {
-          "winRate": 42.93193717277487,
-          "count": 191,
-          "profitCount": 82,
-          "totalPnl": 220.93196853259013
-        }
-      }
-    },
     {
       "id": "rep_1789716536423_r4bna",
       "timestamp": 1789716536423,
@@ -29670,36 +30162,169 @@
           "totalPnl": -48.408696390764064
         }
       }
+    },
+    {
+      "id": "rep_1789759670680_lwxz1",
+      "timestamp": 1789759670680,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 37.57961783439491,
+      "winRateAfter": 52.5,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
+      "impactAssessment": "Сохранение устойчивости торговых показателей",
+      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
+      "stats": {
+        "day": {
+          "winRate": 36.11111111111111,
+          "count": 36,
+          "profitCount": 13,
+          "totalPnl": -266.0811289780153
+        },
+        "week": {
+          "winRate": 37.57961783439491,
+          "count": 157,
+          "profitCount": 59,
+          "totalPnl": -285.3998690761264
+        },
+        "month": {
+          "winRate": 41.31455399061033,
+          "count": 213,
+          "profitCount": 88,
+          "totalPnl": -48.408696390764064
+        }
+      }
+    },
+    {
+      "id": "rep_1789759841673_614ou",
+      "timestamp": 1789759841673,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 37.34177215189873,
+      "winRateAfter": 52.5,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
+      "impactAssessment": "Сохранение устойчивости торговых показателей",
+      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
+      "stats": {
+        "day": {
+          "winRate": 35.13513513513514,
+          "count": 37,
+          "profitCount": 13,
+          "totalPnl": -266.71882462223033
+        },
+        "week": {
+          "winRate": 37.34177215189873,
+          "count": 158,
+          "profitCount": 59,
+          "totalPnl": -286.03756472034144
+        },
+        "month": {
+          "winRate": 41.1214953271028,
+          "count": 214,
+          "profitCount": 88,
+          "totalPnl": -49.04639203497911
+        }
+      }
+    },
+    {
+      "id": "rep_1789760320372_ifvcn",
+      "timestamp": 1789760320372,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 37.10691823899371,
+      "winRateAfter": 52.5,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
+      "impactAssessment": "Сохранение устойчивости торговых показателей",
+      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
+      "stats": {
+        "day": {
+          "winRate": 34.21052631578947,
+          "count": 38,
+          "profitCount": 13,
+          "totalPnl": -267.1875713815697
+        },
+        "week": {
+          "winRate": 37.10691823899371,
+          "count": 159,
+          "profitCount": 59,
+          "totalPnl": -286.5063114796808
+        },
+        "month": {
+          "winRate": 40.93023255813954,
+          "count": 215,
+          "profitCount": 88,
+          "totalPnl": -49.515138794318446
+        }
+      }
+    },
+    {
+      "id": "rep_1789760570795_3mfhm",
+      "timestamp": 1789760570795,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 37.10691823899371,
+      "winRateAfter": 52.5,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
+      "impactAssessment": "Сохранение устойчивости торговых показателей",
+      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
+      "stats": {
+        "day": {
+          "winRate": 34.21052631578947,
+          "count": 38,
+          "profitCount": 13,
+          "totalPnl": -267.1875713815697
+        },
+        "week": {
+          "winRate": 37.10691823899371,
+          "count": 159,
+          "profitCount": 59,
+          "totalPnl": -286.5063114796808
+        },
+        "month": {
+          "winRate": 40.93023255813954,
+          "count": 215,
+          "profitCount": 88,
+          "totalPnl": -49.515138794318446
+        }
+      }
+    },
+    {
+      "id": "rep_1789761042076_gfnl9",
+      "timestamp": 1789761042076,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 37.5,
+      "winRateAfter": 52.5,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
+      "impactAssessment": "Сохранение устойчивости торговых показателей",
+      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
+      "stats": {
+        "day": {
+          "winRate": 35.8974358974359,
+          "count": 39,
+          "profitCount": 14,
+          "totalPnl": -265.93634689283
+        },
+        "week": {
+          "winRate": 37.5,
+          "count": 160,
+          "profitCount": 60,
+          "totalPnl": -285.25508699094115
+        },
+        "month": {
+          "winRate": 41.2037037037037,
+          "count": 216,
+          "profitCount": 89,
+          "totalPnl": -48.26391430557875
+        }
+      }
     }
   ],
   "retrospectiveMemory": [
-    {
-      "id": "retro_1789635867727_802",
-      "symbol": "AALUSDT",
-      "pnlPercent": 0.3792547284278708,
-      "pnlUsd": 0.03792547284278708,
-      "actionTaken": "AI_AUTO",
-      "lesson": "Сделка завершена с результатом 0.4%. Соблюдайте риск-политику.",
-      "timestamp": 1789635867727
-    },
-    {
-      "id": "retro_1789637000047_894",
-      "symbol": "AXPUSDT",
-      "pnlPercent": -0.955416432507651,
-      "pnlUsd": -0.0955416432507651,
-      "actionTaken": "AI_AUTO",
-      "lesson": "Сделка завершена с результатом -1.0%. Соблюдайте риск-политику.",
-      "timestamp": 1789637000047
-    },
-    {
-      "id": "retro_1789640096313_415",
-      "symbol": "ZEREBROUSDT",
-      "pnlPercent": 5.563068920676175,
-      "pnlUsd": 0.5563068920676175,
-      "actionTaken": "AI_AUTO",
-      "lesson": "Сделка завершена с результатом 5.6%. Соблюдайте риск-политику.",
-      "timestamp": 1789640096313
-    },
     {
       "id": "retro_1789641116523_254",
       "symbol": "ALABUSDT",
@@ -30032,6 +30657,33 @@
       "actionTaken": "AI_AUTO",
       "lesson": "Сделка завершена с результатом 4.5%. Соблюдайте риск-политику.",
       "timestamp": 1789758203214
+    },
+    {
+      "id": "retro_1789759841513_539",
+      "symbol": "BTWUSDT",
+      "pnlPercent": -7.776776148963975,
+      "pnlUsd": -0.6376956442150459,
+      "actionTaken": "AI_AUTO",
+      "lesson": "Сделка завершена с результатом -7.8%. Соблюдайте риск-политику.",
+      "timestamp": 1789759841513
+    },
+    {
+      "id": "retro_1789760320215_164",
+      "symbol": "QNTXUSDT",
+      "pnlPercent": -3.6620840573385744,
+      "pnlUsd": -0.4687467593393375,
+      "actionTaken": "AI_AUTO",
+      "lesson": "Сделка завершена с результатом -3.7%. Соблюдайте риск-политику.",
+      "timestamp": 1789760320215
+    },
+    {
+      "id": "retro_1789761041914_401",
+      "symbol": "HPEUSDT",
+      "pnlPercent": 12.51224488739684,
+      "pnlUsd": 1.251224488739684,
+      "actionTaken": "AI_AUTO",
+      "lesson": "Сделка завершена с результатом 12.5%. Соблюдайте риск-политику.",
+      "timestamp": 1789761041914
     }
   ],
   "decisionBundles": [
@@ -41413,6 +42065,16 @@
       "peakPrice": 0.18657,
       "dumpTime": 1789758202844,
       "pnlPercent": 4.538323417484109,
+      "status": "SAVED"
+    },
+    {
+      "id": "peak_1789761041582_102",
+      "symbol": "HPEUSDT",
+      "rawSymbol": "HPE/USDT:USDT",
+      "exchange": "weex",
+      "peakPrice": 62.04,
+      "dumpTime": 1789761041582,
+      "pnlPercent": 12.51224488739684,
       "status": "SAVED"
     }
   ],
