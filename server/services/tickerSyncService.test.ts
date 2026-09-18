@@ -85,7 +85,17 @@ describe('tickerSyncService', () => {
         isFetching: () => isFetchingState,
         setIsFetching: (v) => { isFetchingState = v; },
         isInitialOhlcvFetched: () => isInitialOhlcvState,
-        setInitialOhlcvFetched: (v) => { isInitialOhlcvState = v; }
+        setInitialOhlcvFetched: (v) => { isInitialOhlcvState = v; },
+        fetchWeexTickersDirect: vi.fn().mockResolvedValue({
+          'BTC/USDT': {
+            symbol: 'BTC/USDT',
+            last: 50000,
+            bid: 49999,
+            ask: 50001,
+            percentage: 2.5
+          }
+        }),
+        fetchMexcTickersDirect: vi.fn().mockResolvedValue({})
       };
     });
 
@@ -104,7 +114,8 @@ describe('tickerSyncService', () => {
         expect(globalCcxtTickers.weex).toBeDefined();
         const btcTicker = globalCcxtTickers.weex['BTC/USDT:USDT'] || globalCcxtTickers.weex['BTC/USDT'] || Object.values(globalCcxtTickers.weex)[0];
         expect(btcTicker).toBeDefined();
-        expect(btcTicker.last).toBeGreaterThan(0);
+        expect(btcTicker.last).toBe(50000);
+        expect(btcTicker.symbol).toBe('BTC/USDT');
       } finally {
         if (originalTestMode) process.env.TEST_MODE = originalTestMode;
       }

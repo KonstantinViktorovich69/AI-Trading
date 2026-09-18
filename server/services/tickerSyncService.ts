@@ -17,6 +17,8 @@ export interface TickerSyncContext {
   setIsFetching: (val: boolean) => void;
   isInitialOhlcvFetched: () => boolean;
   setInitialOhlcvFetched: (val: boolean) => void;
+  fetchWeexTickersDirect?: () => Promise<Record<string, any>>;
+  fetchMexcTickersDirect?: () => Promise<Record<string, any>>;
 }
 
 /**
@@ -139,8 +141,8 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
             while (!success && attempt < maxAttempts) {
               try {
                 const fetchPromise = exName === 'mexc' 
-                  ? fetchMexcTickersDirect() 
-                  : (exName === 'weex' ? fetchWeexTickersDirect() : ex.fetchTickers());
+                  ? (ctx.fetchMexcTickersDirect || fetchMexcTickersDirect)() 
+                  : (exName === 'weex' ? (ctx.fetchWeexTickersDirect || fetchWeexTickersDirect)() : ex.fetchTickers());
                 _tickers = await Promise.race([
                   fetchPromise,
                   new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), fetchTimeout))
