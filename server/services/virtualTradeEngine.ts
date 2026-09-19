@@ -2,6 +2,7 @@ import { evaluateExitPolicy } from './exitPolicy.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
 import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
+import { getOtePendingCandidates, processOtePendingQueue } from './oteVirtualQueue.ts';
 
 export interface VirtualTradeEngineDependencies {
   getVirtualTrades: () => any[];
@@ -53,6 +54,30 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
   const globalTrueOhlcv = deps.getGlobalTrueOhlcv();
   const globalMarketPulse = deps.getGlobalMarketPulse();
   const aiKnowledgeBase = deps.getAiKnowledgeBase();
+
+  const pending = getOtePendingCandidates();
+  if (pending.length > 0) {
+    const currentPrices: Record<string, number> = {};
+    for (const c of pending) {
+      const t = findTickerInMap(c.symbol, globalCcxtTickers ? globalCcxtTickers['weex'] : undefined);
+      if (t && typeof t.last === 'number') currentPrices[c.symbol] = t.last;
+    }
+    const result = processOtePendingQueue(currentPrices);
+    for (const candidate of result.filled) {
+      try {
+        if (candidate.context && typeof candidate.context.executeVirtualEntry === 'function') {
+          await candidate.context.executeVirtualEntry(currentPrices[candidate.symbol]);
+        } else {
+          console.log(`[OTE VIRTUAL FILLED] Missing executeVirtualEntry in context for candidate ${candidate.id}`);
+        }
+      } catch (err: any) {
+        console.log(`[OTE VIRTUAL FILLED ERROR] Failed to execute entry for candidate ${candidate.id}:`, err?.message || err);
+      }
+    }
+    for (const candidate of result.timedOut) {
+      console.log(`[OTE VIRTUAL TIMEOUT] ${candidate.symbol} ${candidate.id}`);
+    }
+  }
 
   let openTradesCache: any[] = [];
   if (typeof virtualTrades !== 'undefined' && Array.isArray(virtualTrades)) {

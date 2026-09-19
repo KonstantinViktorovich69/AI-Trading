@@ -9,6 +9,7 @@ import { createAutopilotTradeIntentFromScanner } from './autopilotIntentFactory.
 import { type AutoEntryExecutionPort } from './autoEntryService.ts';
 import { calculateStructuralStopLoss, calculateStructuralTpLadder } from './structuralExitLevels.ts';
 import { calculateOteEntryZone } from './oteEntryCalculator.ts';
+import { addOtePendingCandidate } from './oteVirtualQueue.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -708,67 +709,92 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                     console.log(`[AUTOPILOT] [MAIN_VIRTUAL] Rejection before entry: ${rej?.reasonCode} - ${rej?.reason}`);
                 } else {
                     const validatedIntent = mainVirtualIntentResult.intent;
-                    const autoEntryRes = await deps.executeMainVirtualAutoEntry({
-                        symbol,
-                        tradeIntent: validatedIntent,
-                        marketInput: {
+                    const executeVirtualEntryNow = async (entryPriceOverride?: number) => {
+                        const autoEntryRes = await deps.executeMainVirtualAutoEntry({
                             symbol,
-                            marketType: validatedIntent.marketType,
-                            tradingMode: validatedIntent.requestedMode,
-                            price: optimizedEntryPrice,
-                            high: validatedIntent.marketSnapshot.high,
-                            low: validatedIntent.marketSnapshot.low,
-                            open: validatedIntent.marketSnapshot.open,
-                            vwap: validatedIntent.marketSnapshot.vwap,
-                            sar: validatedIntent.marketSnapshot.sar,
-                            rsi: validatedIntent.marketSnapshot.rsi,
-                            change24h: validatedIntent.marketSnapshot.change24h,
-                            volume24h: validatedIntent.marketSnapshot.volume24h,
-                            avgVolume: validatedIntent.marketSnapshot.avgVolume,
-                            orderBookImbalance: (autoImbVal - 50) / 50,
+                            tradeIntent: validatedIntent,
+                            marketInput: {
+                                symbol,
+                                marketType: validatedIntent.marketType,
+                                tradingMode: validatedIntent.requestedMode,
+                                price: entryPriceOverride ?? optimizedEntryPrice,
+                                high: validatedIntent.marketSnapshot.high,
+                                low: validatedIntent.marketSnapshot.low,
+                                open: validatedIntent.marketSnapshot.open,
+                                vwap: validatedIntent.marketSnapshot.vwap,
+                                sar: validatedIntent.marketSnapshot.sar,
+                                rsi: validatedIntent.marketSnapshot.rsi,
+                                change24h: validatedIntent.marketSnapshot.change24h,
+                                volume24h: validatedIntent.marketSnapshot.volume24h,
+                                avgVolume: validatedIntent.marketSnapshot.avgVolume,
+                                orderBookImbalance: (autoImbVal - 50) / 50,
+                                isCommitteeConsensusEnabled: (globalSettings as any).isCommitteeConsensusCheckEnabled !== false
+                            },
+                            currentSig,
+                            finalAiScore,
+                            calculatedAmount,
+                            leverage: adaptiveLeverageVirtual,
+                            stopLoss: formatNumericPrice(structuralSlVirtual.stopLoss),
+                            takeProfit: adjustedTakeProfit,
+                            tpStages: [
+                                { targetPrice: stage1Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.15).toFixed(2)), closeRatio: autoRatios[0], executed: false },
+                                { targetPrice: stage2Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.30).toFixed(2)), closeRatio: autoRatios[1], executed: false },
+                                { targetPrice: stage3Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.55).toFixed(2)), closeRatio: autoRatios[2], executed: false },
+                                { targetPrice: stage4Target, targetPercent: Number(tpLadderVirtual.tp4DistancePct.toFixed(2)), closeRatio: autoRatios[3], executed: false }
+                            ],
+                            gridOrders: (() => {
+                                const cleanSym = (symbol || '').replace(/[\/:]/g, '');
+                                const assetAtr = currentSig?.atr ? Number(currentSig.atr) : (GLOBAL_ATR[cleanSym] || (optimizedEntryPrice * 0.015));
+                                const dcaStepPct = Math.max(0.012, (assetAtr / optimizedEntryPrice) * 0.8);
+                                const p1 = validatedIntent.side === 'SHORT' ? optimizedEntryPrice * (1 + dcaStepPct) : optimizedEntryPrice * (1 - dcaStepPct);
+                                const p2 = validatedIntent.side === 'SHORT' ? optimizedEntryPrice * (1 + 2 * dcaStepPct) : optimizedEntryPrice * (1 - 2 * dcaStepPct);
+                                const dcaMultFactor = Math.min(1.0, globalSettings.dcaMultiplierFactor || 1.0);
+                                return [
+                                    { price: formatNumericPrice(p1), amount: Number((calculatedAmount * 0.20 * dcaMultFactor).toFixed(1)), executed: false },
+                                    { price: formatNumericPrice(p2), amount: Number((calculatedAmount * 0.30 * dcaMultFactor).toFixed(1)), executed: false }
+                                ];
+                            })(),
+                            targetIsAutoLearning,
+                            virtualBalance
+                        }, {
+                            executionPort: autoEntryPort,
+                            hunterDecision: mainVirtualHunterDecision,
+                            bearDecision: mainVirtualBearDecision,
                             isCommitteeConsensusEnabled: (globalSettings as any).isCommitteeConsensusCheckEnabled !== false
-                        },
-                        currentSig,
-                        finalAiScore,
-                        calculatedAmount,
-                        leverage: adaptiveLeverageVirtual,
-                        stopLoss: formatNumericPrice(structuralSlVirtual.stopLoss),
-                        takeProfit: adjustedTakeProfit,
-                        tpStages: [
-                            { targetPrice: stage1Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.15).toFixed(2)), closeRatio: autoRatios[0], executed: false },
-                            { targetPrice: stage2Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.30).toFixed(2)), closeRatio: autoRatios[1], executed: false },
-                            { targetPrice: stage3Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.55).toFixed(2)), closeRatio: autoRatios[2], executed: false },
-                            { targetPrice: stage4Target, targetPercent: Number(tpLadderVirtual.tp4DistancePct.toFixed(2)), closeRatio: autoRatios[3], executed: false }
-                        ],
-                        gridOrders: (() => {
-                            const cleanSym = (symbol || '').replace(/[\/:]/g, '');
-                            const assetAtr = currentSig?.atr ? Number(currentSig.atr) : (GLOBAL_ATR[cleanSym] || (optimizedEntryPrice * 0.015));
-                            const dcaStepPct = Math.max(0.012, (assetAtr / optimizedEntryPrice) * 0.8);
-                            const p1 = validatedIntent.side === 'SHORT' ? optimizedEntryPrice * (1 + dcaStepPct) : optimizedEntryPrice * (1 - dcaStepPct);
-                            const p2 = validatedIntent.side === 'SHORT' ? optimizedEntryPrice * (1 + 2 * dcaStepPct) : optimizedEntryPrice * (1 - 2 * dcaStepPct);
-                            const dcaMultFactor = Math.min(1.0, globalSettings.dcaMultiplierFactor || 1.0);
-                            return [
-                                { price: formatNumericPrice(p1), amount: Number((calculatedAmount * 0.20 * dcaMultFactor).toFixed(1)), executed: false },
-                                { price: formatNumericPrice(p2), amount: Number((calculatedAmount * 0.30 * dcaMultFactor).toFixed(1)), executed: false }
-                            ];
-                        })(),
-                        targetIsAutoLearning,
-                        virtualBalance
-                    }, {
-                        executionPort: autoEntryPort,
-                        hunterDecision: mainVirtualHunterDecision,
-                        bearDecision: mainVirtualBearDecision,
-                        isCommitteeConsensusEnabled: (globalSettings as any).isCommitteeConsensusCheckEnabled !== false
-                    });
+                        });
 
-                    if (autoEntryRes.executed && autoEntryRes.trade) {
-                        deps.pushVirtualTrade(autoEntryRes.trade);
-                        virtualTrades.push(autoEntryRes.trade);
-                        if (targetIsAutoLearning) {
-                            console.log(`[AUTO-LEARNING] [MAIN-THREAD] Started tracking ${validatedIntent.side === 'SHORT' ? 'SHORT' : 'LONG'} trade for ${symbol} with dynamic required score ${dynamicRequiredAutoScoreVirtual}% (WinRate: ${(autoWinRate * 100).toFixed(1)}%). CorrelationID: ${autoEntryRes.trade.id}`);
-                        } else {
-                            console.log(`[VIRTUAL AUTOPILOT] [MAIN-THREAD] Opened virtual trade for ${symbol} with dynamic required score ${dynamicRequiredAutoScoreVirtual}% (WinRate: ${(autoWinRate * 100).toFixed(1)}%). CorrelationID: ${autoEntryRes.trade.id}`);
+                        if (autoEntryRes.executed && autoEntryRes.trade) {
+                            deps.pushVirtualTrade(autoEntryRes.trade);
+                            virtualTrades.push(autoEntryRes.trade);
+                            if (targetIsAutoLearning) {
+                                console.log(`[AUTO-LEARNING] [MAIN-THREAD] Started tracking ${validatedIntent.side === 'SHORT' ? 'SHORT' : 'LONG'} trade for ${symbol} with dynamic required score ${dynamicRequiredAutoScoreVirtual}% (WinRate: ${(autoWinRate * 100).toFixed(1)}%). CorrelationID: ${autoEntryRes.trade.id}`);
+                            } else {
+                                console.log(`[VIRTUAL AUTOPILOT] [MAIN-THREAD] Opened virtual trade for ${symbol} with dynamic required score ${dynamicRequiredAutoScoreVirtual}% (WinRate: ${(autoWinRate * 100).toFixed(1)}%). CorrelationID: ${autoEntryRes.trade.id}`);
+                            }
                         }
+                    };
+
+                    if (globalSettings.isOteEntryEnabled === true) {
+                        const oteResult = calculateOteEntryZone({
+                            isSellSignal,
+                            price,
+                            localLow5m: cachedIndicators.localLow5m ?? price,
+                            localHigh5m: cachedIndicators.localHigh5m ?? price
+                        });
+                        if (oteResult.isValid) {
+                            addOtePendingCandidate({
+                                id: `ote_virtual_${symbol}_${Date.now()}`,
+                                symbol,
+                                zoneLow: oteResult.zoneLow,
+                                zoneHigh: oteResult.zoneHigh,
+                                startedAtMs: Date.now(),
+                                context: { executeVirtualEntry: executeVirtualEntryNow }
+                            });
+                        } else {
+                            await executeVirtualEntryNow();
+                        }
+                    } else {
+                        await executeVirtualEntryNow();
                     }
                 }
             }

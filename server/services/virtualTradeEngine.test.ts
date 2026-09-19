@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { manageActiveTrades, VirtualTradeEngineDependencies } from './virtualTradeEngine.ts';
 import { executeRuleBasedTradeFallback, runAiExpertTraderLoop, ExpertAdvisorDependencies } from './expertAdvisorService.ts';
+import { addOtePendingCandidate, clearOtePendingCandidates, getOtePendingCandidates } from './oteVirtualQueue.ts';
 
 describe('virtualTradeEngine service', () => {
   let mockDeps: VirtualTradeEngineDependencies;
@@ -11,6 +12,7 @@ describe('virtualTradeEngine service', () => {
   beforeEach(() => {
     savedTrades = [];
     signalsEmitted = false;
+    clearOtePendingCandidates();
 
     sampleTrade = {
       id: 'trade_test_1',
@@ -170,6 +172,72 @@ describe('virtualTradeEngine service', () => {
     expect(sampleTrade.stopLoss).toBeLessThanOrEqual(65200);
     expect(sampleTrade.dcaBreakEvenSet).toBe(true);
     expect(sampleTrade.isProtected).toBe(true);
+  });
+
+  it('processes filled OTE candidates in manageActiveTrades watchdog loop', async () => {
+    const executeVirtualEntry = vi.fn();
+    addOtePendingCandidate({
+      id: 'ote_cand_1',
+      symbol: 'BTC/USDT',
+      zoneLow: 64000,
+      zoneHigh: 64500,
+      startedAtMs: Date.now(),
+      context: { executeVirtualEntry }
+    });
+
+    mockDeps.getGlobalCcxtTickers = () => ({
+      weex: {
+        'BTC/USDT': { last: 64200 }
+      }
+    });
+
+    await manageActiveTrades(mockDeps);
+
+    expect(executeVirtualEntry).toHaveBeenCalledWith(64200);
+    expect(getOtePendingCandidates().length).toBe(0);
+  });
+
+  it('handles timed out candidates in manageActiveTrades watchdog loop without executing them', async () => {
+    const executeVirtualEntry = vi.fn();
+    addOtePendingCandidate({
+      id: 'ote_cand_timeout',
+      symbol: 'BTC/USDT',
+      zoneLow: 64000,
+      zoneHigh: 64500,
+      startedAtMs: Date.now() - 300000, // 5 min ago (exceeds default timeout)
+      context: { executeVirtualEntry }
+    });
+
+    mockDeps.getGlobalCcxtTickers = () => ({
+      weex: {
+        'BTC/USDT': { last: 65000 }
+      }
+    });
+
+    await manageActiveTrades(mockDeps);
+
+    expect(executeVirtualEntry).not.toHaveBeenCalled();
+    expect(getOtePendingCandidates().length).toBe(0);
+  });
+
+  it('safely handles candidates without context or executeVirtualEntry function without crashing', async () => {
+    addOtePendingCandidate({
+      id: 'ote_cand_bad',
+      symbol: 'BTC/USDT',
+      zoneLow: 64000,
+      zoneHigh: 64500,
+      startedAtMs: Date.now(),
+      context: {}
+    });
+
+    mockDeps.getGlobalCcxtTickers = () => ({
+      weex: {
+        'BTC/USDT': { last: 64200 }
+      }
+    });
+
+    await expect(manageActiveTrades(mockDeps)).resolves.not.toThrow();
+    expect(getOtePendingCandidates().length).toBe(0);
   });
 });
 

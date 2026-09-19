@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildBalancedCandidateQueue, runAutopilotAndVirtualTradeEntry, type AutoPilotEngineDependencies } from './autoPilotEngine.ts';
+import { clearOtePendingCandidates, getOtePendingCandidates } from './oteVirtualQueue.ts';
 
 describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests', () => {
   describe('1. buildBalancedCandidateQueue', () => {
@@ -484,6 +485,106 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
       expect(executeRealOpenOnExchange).toHaveBeenCalledTimes(1);
       const callArgs = executeRealOpenOnExchange.mock.calls[0];
       expect(callArgs.length).toBe(4);
+    });
+
+    it('queues candidate into oteVirtualQueue when isOteEntryEnabled is true and OTE zone is valid on virtual path', async () => {
+      clearOtePendingCandidates();
+      const mockSignals = [
+        { rawSymbol: 'BTC/USDT', signal: 'LONG', aiScore: 98, price: 100, type: 'SAR', volumeSpike: 2.0, volume24h: 500000 }
+      ];
+
+      const executeMainVirtualAutoEntry = vi.fn(async (params) => {
+        return { executed: true, status: 'OPEN', trade: { id: 'VT-OTE-1', symbol: params.symbol } };
+      });
+
+      const { deps } = createMockAutopilotDeps({
+        getGlobalSettings: () => ({
+          isAutopilotEnabled: true,
+          isOteEntryEnabled: true,
+          tradingMode: 'virtual',
+          tradingExecutionMode: 'auto',
+          autopilotAggressiveness: 'aggressive',
+          allowedTradingDirections: 'BOTH',
+          maxActivePositionsVirtual: 6,
+          maxSameDirectionPositions: 3,
+          isCommitteeConsensusCheckEnabled: false
+        }),
+        getGlobalTrueOhlcv: () => ({
+          'BTCUSDT': { localLow5m: 90, localHigh5m: 110 }
+        }),
+        executeMainVirtualAutoEntry,
+        isCircuitBreakerActive: () => false,
+        getCacheSignals: () => ({
+          data: mockSignals,
+          lastUpdated: Date.now(),
+          marketRegime: 'RANGING',
+          marketHealth: 80,
+          btcTrend24h: 0.5
+        })
+      });
+
+      await runAutopilotAndVirtualTradeEntry(deps);
+      await new Promise(r => setTimeout(r, 50));
+
+      // Immediate virtual auto entry should NOT have been called because it was queued
+      expect(executeMainVirtualAutoEntry).not.toHaveBeenCalled();
+
+      // Should be in pending queue
+      const pending = getOtePendingCandidates();
+      expect(pending.length).toBe(1);
+      expect(pending[0].symbol).toBe('BTC/USDT');
+      expect(pending[0].context).toBeDefined();
+      expect(typeof pending[0].context.executeVirtualEntry).toBe('function');
+
+      // Now execute the queued candidate with price override
+      await pending[0].context.executeVirtualEntry(95.5);
+      expect(executeMainVirtualAutoEntry).toHaveBeenCalledTimes(1);
+      const entryParams = executeMainVirtualAutoEntry.mock.calls[0][0];
+      expect(entryParams.marketInput.price).toBe(95.5);
+    });
+
+    it('executes immediately without queueing when isOteEntryEnabled is false on virtual path', async () => {
+      clearOtePendingCandidates();
+      const mockSignals = [
+        { rawSymbol: 'BTC/USDT', signal: 'LONG', aiScore: 98, price: 100, type: 'SAR', volumeSpike: 2.0, volume24h: 500000 }
+      ];
+
+      const executeMainVirtualAutoEntry = vi.fn(async (params) => {
+        return { executed: true, status: 'OPEN', trade: { id: 'VT-DIRECT-1', symbol: params.symbol } };
+      });
+
+      const { deps } = createMockAutopilotDeps({
+        getGlobalSettings: () => ({
+          isAutopilotEnabled: true,
+          isOteEntryEnabled: false,
+          tradingMode: 'virtual',
+          tradingExecutionMode: 'auto',
+          autopilotAggressiveness: 'aggressive',
+          allowedTradingDirections: 'BOTH',
+          maxActivePositionsVirtual: 6,
+          maxSameDirectionPositions: 3,
+          isCommitteeConsensusCheckEnabled: false
+        }),
+        getGlobalTrueOhlcv: () => ({
+          'BTCUSDT': { localLow5m: 90, localHigh5m: 110 }
+        }),
+        executeMainVirtualAutoEntry,
+        isCircuitBreakerActive: () => false,
+        getCacheSignals: () => ({
+          data: mockSignals,
+          lastUpdated: Date.now(),
+          marketRegime: 'RANGING',
+          marketHealth: 80,
+          btcTrend24h: 0.5
+        })
+      });
+
+      await runAutopilotAndVirtualTradeEntry(deps);
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(executeMainVirtualAutoEntry).toHaveBeenCalledTimes(1);
+      const pending = getOtePendingCandidates();
+      expect(pending.length).toBe(0);
     });
   });
 });
