@@ -8,6 +8,7 @@ import { type AgentDecisionEnvelope, evaluateCommitteeConsensus } from './agentE
 import { createAutopilotTradeIntentFromScanner } from './autopilotIntentFactory.ts';
 import { type AutoEntryExecutionPort } from './autoEntryService.ts';
 import { calculateStructuralStopLoss, calculateStructuralTpLadder } from './structuralExitLevels.ts';
+import { calculateOteEntryZone } from './oteEntryCalculator.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -33,7 +34,7 @@ export interface AutoPilotEngineDependencies {
   isWeexApiSupported: (symbol: string) => boolean;
   getCcxtClient: (config: any) => any;
   fetchCachedRealBalance: (client: any, type: string, force: boolean, context: string) => Promise<any>;
-  executeRealOpenOnExchange: (symbol: string, side: 'LONG' | 'SHORT', amount: number, leverage: number) => Promise<any>;
+  executeRealOpenOnExchange: (symbol: string, side: 'LONG' | 'SHORT', amount: number, leverage: number, oteOptions?: { targetPrice: number; timeoutMs?: number }) => Promise<any>;
   setRealTradeSlTpOnExchange: (symbol: string, side: 'LONG' | 'SHORT', stopLoss?: number, takeProfit?: number) => Promise<boolean>;
   saveTradeDB: (trade: any, immediate?: boolean) => Promise<void>;
   saveBalanceDB: () => Promise<void>;
@@ -1026,6 +1027,20 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
                                 const realExecutionPort: AutoEntryExecutionPort = {
                                     executeRealOpenOnExchange: async (sym, side, amt, lev) => {
+                                        if (globalSettings.isOteEntryEnabled === true) {
+                                            const oteResult = calculateOteEntryZone({
+                                                isSellSignal,
+                                                price,
+                                                localLow5m: cachedIndicatorsReal.localLow5m ?? price,
+                                                localHigh5m: cachedIndicatorsReal.localHigh5m ?? price
+                                            });
+                                            if (oteResult.isValid) {
+                                                return deps.executeRealOpenOnExchange(sym, side, amt, lev, {
+                                                    targetPrice: oteResult.targetPrice,
+                                                    timeoutMs: undefined
+                                                });
+                                            }
+                                        }
                                         return deps.executeRealOpenOnExchange(sym, side, amt, lev);
                                     },
                                     setRealTradeSlTpOnExchange: async (sym, side, sl, tp) => {

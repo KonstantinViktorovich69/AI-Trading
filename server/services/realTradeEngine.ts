@@ -373,7 +373,8 @@ export async function executeSingleAccountOpen(
   leverage: number,
   stopLoss?: number,
   takeProfit?: number,
-  deps?: RealTradeEngineDependencies
+  deps?: RealTradeEngineDependencies,
+  oteOptions?: { targetPrice: number; timeoutMs?: number; pollIntervalMs?: number }
 ): Promise<RealTradeExecutionResult> {
   const isRealAllowed = deps ? deps.isRealTradingAllowed() : true;
   try {
@@ -476,6 +477,40 @@ export async function executeSingleAccountOpen(
       return { accountName: config.name, success: false, error: 'Некорректный объем позиции (NaN или <= 0)' };
     }
 
+    if (oteOptions) {
+      const outcome = await executeLimitOrderWithTimeout({
+        client,
+        formattedSymbol,
+        orderSide,
+        contracts,
+        targetPrice: oteOptions.targetPrice,
+        timeoutMs: oteOptions.timeoutMs,
+        pollIntervalMs: oteOptions.pollIntervalMs,
+        deps: effectiveDeps
+      });
+
+      if (outcome.status === 'filled') {
+        return {
+          accountName: config.name,
+          success: true,
+          data: outcome.order,
+          entryPrice: outcome.entryPrice
+        };
+      } else if (outcome.status === 'timed_out') {
+        return {
+          accountName: config.name,
+          success: false,
+          error: 'OTE_TIMEOUT: price did not retrace into target zone within timeout window'
+        };
+      } else {
+        return {
+          accountName: config.name,
+          success: false,
+          error: outcome.error
+        };
+      }
+    }
+
     const params: any = {};
     if (stopLoss && isFinite(stopLoss) && stopLoss > 0) params.stopLossPrice = stopLoss;
     if (takeProfit && isFinite(takeProfit) && takeProfit > 0) params.takeProfitPrice = takeProfit;
@@ -498,11 +533,22 @@ export async function executeRealOpenOnExchange(
   side: string,
   amount: number,
   leverage: number,
-  stopLoss?: number,
+  stopLoss?: number | { targetPrice: number; timeoutMs?: number; pollIntervalMs?: number },
   takeProfit?: number,
-  deps?: RealTradeEngineDependencies
+  deps?: RealTradeEngineDependencies,
+  oteOptions?: { targetPrice: number; timeoutMs?: number; pollIntervalMs?: number }
 ): Promise<RealTradeExecutionResult> {
   try {
+    let effectiveStopLoss: number | undefined;
+    let effectiveOteOptions: { targetPrice: number; timeoutMs?: number; pollIntervalMs?: number } | undefined = oteOptions;
+
+    if (typeof stopLoss === 'object' && stopLoss !== null && 'targetPrice' in stopLoss) {
+      effectiveOteOptions = stopLoss as { targetPrice: number; timeoutMs?: number; pollIntervalMs?: number };
+      effectiveStopLoss = undefined;
+    } else {
+      effectiveStopLoss = typeof stopLoss === 'number' ? stopLoss : undefined;
+    }
+
     if (deps && !deps.isRealTradingAllowed()) {
       return { success: false, error: 'Реальная торговля заблокирована системным флагом ENABLE_REAL_TRADING=false' };
     }
@@ -514,7 +560,7 @@ export async function executeRealOpenOnExchange(
     }
 
     const results = await Promise.allSettled(
-      activeAccounts.map(acc => executeSingleAccountOpen(acc, symbol, side, amount, leverage, stopLoss, takeProfit, deps))
+      activeAccounts.map(acc => executeSingleAccountOpen(acc, symbol, side, amount, leverage, effectiveStopLoss, takeProfit, deps, effectiveOteOptions))
     );
 
     const successfulRuns = results

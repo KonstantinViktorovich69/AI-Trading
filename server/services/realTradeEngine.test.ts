@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import ccxt from 'ccxt';
 import {
   executeLimitOrderWithTimeout,
-  LimitOrderWithTimeoutParams
+  LimitOrderWithTimeoutParams,
+  executeSingleAccountOpen,
+  executeRealOpenOnExchange,
+  resetCcxtClientPool
 } from './realTradeEngine.ts';
 
 describe('executeLimitOrderWithTimeout', () => {
@@ -262,3 +266,230 @@ describe('executeLimitOrderWithTimeout', () => {
     });
   });
 });
+
+describe('executeSingleAccountOpen and executeRealOpenOnExchange with OTE', () => {
+  const createMockDeps = () => ({
+    isRealTradingAllowed: () => true,
+    getGlobalSettings: () => ({
+      exchangeApiConfig: {
+        name: 'PrimaryAcc',
+        exchange: 'mockex',
+        apiKey: 'key123',
+        apiSecret: 'sec123',
+        isEnabled: true
+      }
+    }),
+    formatFuturesSymbol: (s: string) => s,
+    enrichExchangeError: (err: any) => err?.message || String(err)
+  });
+
+  const mockClientInstance: any = {
+    markets: {
+      'BTC/USDT': { contractSize: 1, limits: { amount: { min: 0.001 } } },
+      'BTC/USDT:USDT': { contractSize: 1, limits: { amount: { min: 0.001 } } }
+    },
+    market: vi.fn((s: string) => mockClientInstance.markets[s] || { contractSize: 1, limits: { amount: { min: 0.001 } } }),
+    has: { setMarginMode: false, setLeverage: false },
+    loadMarkets: vi.fn().mockResolvedValue({}),
+    setMarginMode: vi.fn().mockResolvedValue({}),
+    setLeverage: vi.fn().mockResolvedValue({}),
+    fetchTicker: vi.fn().mockResolvedValue({ last: 100 }),
+    amountToPrecision: vi.fn((_sym: string, amt: number) => String(amt)),
+    createOrder: vi.fn(),
+    fetchOrder: vi.fn(),
+    cancelOrder: vi.fn()
+  };
+
+  beforeEach(() => {
+    resetCcxtClientPool();
+    vi.clearAllMocks();
+    delete process.env.OFFLINE_MODE;
+    delete process.env.TEST_MODE;
+
+    (ccxt as any)['mockex'] = class {
+      constructor() {
+        return mockClientInstance;
+      }
+    };
+  });
+
+  const accountConfig = {
+    name: 'PrimaryAcc',
+    exchange: 'mockex',
+    apiKey: 'key123',
+    apiSecret: 'sec123',
+    isEnabled: true
+  };
+
+  it('executes limit order when oteOptions is provided and succeeds on fill', async () => {
+    mockClientInstance.createOrder.mockResolvedValue({
+      id: 'ord-ote-fill',
+      status: 'closed',
+      average: 98.2,
+      price: 98.2
+    });
+
+    const res = await executeSingleAccountOpen(
+      accountConfig,
+      'BTC/USDT',
+      'LONG',
+      100,
+      10,
+      undefined,
+      undefined,
+      createMockDeps(),
+      { targetPrice: 98.2, timeoutMs: 1000 }
+    );
+
+    expect(mockClientInstance.createOrder).toHaveBeenCalledWith(
+      'BTC/USDT',
+      'limit',
+      'buy',
+      expect.any(Number),
+      98.2,
+      expect.any(Object)
+    );
+    expect(res.success).toBe(true);
+    expect(res.entryPrice).toBe(98.2);
+    expect(res.data.id).toBe('ord-ote-fill');
+  });
+
+  it('returns OTE_TIMEOUT error when limit order times out', async () => {
+    mockClientInstance.createOrder.mockResolvedValue({
+      id: 'ord-ote-timeout',
+      status: 'open'
+    });
+    mockClientInstance.fetchOrder.mockResolvedValue({
+      id: 'ord-ote-timeout',
+      status: 'open'
+    });
+    mockClientInstance.cancelOrder.mockResolvedValue({});
+
+    const res = await executeSingleAccountOpen(
+      accountConfig,
+      'BTC/USDT',
+      'LONG',
+      100,
+      10,
+      undefined,
+      undefined,
+      createMockDeps(),
+      { targetPrice: 98.2, timeoutMs: 20, pollIntervalMs: 5 }
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error).toBe('OTE_TIMEOUT: price did not retrace into target zone within timeout window');
+  });
+
+  it('returns error when limit order creation fails', async () => {
+    mockClientInstance.createOrder.mockRejectedValue(new Error('Insufficient margin for order'));
+
+    const res = await executeSingleAccountOpen(
+      accountConfig,
+      'BTC/USDT',
+      'LONG',
+      100,
+      10,
+      undefined,
+      undefined,
+      createMockDeps(),
+      { targetPrice: 98.2 }
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Insufficient margin');
+  });
+
+  it('falls back to existing market order path when oteOptions is not provided', async () => {
+    mockClientInstance.createOrder.mockResolvedValue({
+      id: 'ord-market-normal',
+      status: 'closed',
+      average: 100,
+      price: 100
+    });
+
+    const res = await executeSingleAccountOpen(
+      accountConfig,
+      'BTC/USDT',
+      'LONG',
+      100,
+      10,
+      undefined,
+      undefined,
+      createMockDeps()
+    );
+
+    expect(mockClientInstance.createOrder).toHaveBeenCalledWith(
+      'BTC/USDT',
+      'market',
+      'buy',
+      expect.any(Number),
+      undefined,
+      expect.any(Object)
+    );
+    expect(res.success).toBe(true);
+    expect(res.entryPrice).toBe(100);
+  });
+
+  it('executeRealOpenOnExchange forwards oteOptions to executeSingleAccountOpen', async () => {
+    mockClientInstance.createOrder.mockResolvedValue({
+      id: 'ord-real-open-ote',
+      status: 'closed',
+      average: 99.0,
+      price: 99.0
+    });
+
+    const res = await executeRealOpenOnExchange(
+      'BTC/USDT',
+      'LONG',
+      100,
+      10,
+      undefined,
+      undefined,
+      createMockDeps(),
+      { targetPrice: 99.0, timeoutMs: 500 }
+    );
+
+    expect(mockClientInstance.createOrder).toHaveBeenCalledWith(
+      'BTC/USDT',
+      'limit',
+      'buy',
+      expect.any(Number),
+      99.0,
+      expect.any(Object)
+    );
+    expect(res.success).toBe(true);
+    expect(res.entryPrice).toBe(99.0);
+  });
+
+  it('executeRealOpenOnExchange accepts oteOptions as 5th argument when SL/TP omitted', async () => {
+    mockClientInstance.createOrder.mockResolvedValue({
+      id: 'ord-real-open-ote-5th',
+      status: 'closed',
+      average: 97.5,
+      price: 97.5
+    });
+
+    const res = await executeRealOpenOnExchange(
+      'BTC/USDT',
+      'LONG',
+      100,
+      10,
+      { targetPrice: 97.5, timeoutMs: 500 },
+      undefined,
+      createMockDeps()
+    );
+
+    expect(mockClientInstance.createOrder).toHaveBeenCalledWith(
+      'BTC/USDT',
+      'limit',
+      'buy',
+      expect.any(Number),
+      97.5,
+      expect.any(Object)
+    );
+    expect(res.success).toBe(true);
+    expect(res.entryPrice).toBe(97.5);
+  });
+});
+

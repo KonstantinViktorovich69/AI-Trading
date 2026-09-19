@@ -329,5 +329,161 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
       await runAutopilotAndVirtualTradeEntry(deps);
       expect(executeRealOpenOnExchange).not.toHaveBeenCalled();
     });
+
+    it('passes oteOptions when isOteEntryEnabled is true and OTE zone is valid', async () => {
+      const mockSignals = [
+        { rawSymbol: 'BTC/USDT', signal: 'LONG', aiScore: 98, price: 100, type: 'SAR', volumeSpike: 2.0, volume24h: 500000 }
+      ];
+
+      const executeRealOpenOnExchange = vi.fn().mockResolvedValue({ success: true, entryPrice: 97.02 });
+      const executeMainRealAutoEntry = vi.fn(async (params, options) => {
+        const side = params.tradeIntent?.side || (params.currentSig?.signal?.includes('SELL') ? 'SHORT' : 'LONG');
+        await options.executionPort.executeRealOpenOnExchange(params.symbol, side, params.calculatedAmount, params.leverage);
+        return { executed: true, status: 'OPEN', trade: { id: 'RT-1', symbol: params.symbol } };
+      });
+
+      const { deps } = createMockAutopilotDeps({
+        getGlobalSettings: () => ({
+          isAutopilotEnabled: true,
+          isOteEntryEnabled: true,
+          tradingMode: 'real',
+          tradingExecutionMode: 'auto',
+          autopilotAggressiveness: 'aggressive',
+          exchangeApiConfig: { isEnabled: true, apiKey: 'test_key', secret: 'test_sec', exchange: 'weex' },
+          allowedTradingDirections: 'BOTH',
+          maxActivePositionsReal: 6,
+          maxSameDirectionPositions: 3,
+          isCommitteeConsensusCheckEnabled: false
+        }),
+        getGlobalTrueOhlcv: () => ({
+          'BTCUSDT': { localLow5m: 90, localHigh5m: 100 },
+          'BTC/USDT': { localLow5m: 90, localHigh5m: 100 }
+        }),
+        executeRealOpenOnExchange,
+        executeMainRealAutoEntry,
+        fetchCachedRealBalance: vi.fn().mockResolvedValue({ USDT: { total: 500, free: 500 } }),
+        getCcxtClient: vi.fn().mockReturnValue({}),
+        isCircuitBreakerActive: () => false,
+        getCacheSignals: () => ({
+          data: mockSignals,
+          lastUpdated: Date.now(),
+          marketRegime: 'RANGING',
+          marketHealth: 80,
+          btcTrend24h: 0.5
+        })
+      });
+
+      await runAutopilotAndVirtualTradeEntry(deps);
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(executeRealOpenOnExchange).toHaveBeenCalledTimes(1);
+      const callArgs = executeRealOpenOnExchange.mock.calls[0];
+      expect(callArgs.length).toBe(5);
+      expect(callArgs[0]).toBe('BTC/USDT');
+      expect(callArgs[1]).toBe('LONG');
+      expect(callArgs[4]).toEqual({
+        targetPrice: 95.59,
+        timeoutMs: undefined
+      });
+    });
+
+    it('does NOT pass oteOptions when isOteEntryEnabled is false or unset', async () => {
+      const mockSignals = [
+        { rawSymbol: 'ETH/USDT', signal: 'LONG', aiScore: 98, price: 100, type: 'SAR', volumeSpike: 2.0, volume24h: 500000 }
+      ];
+
+      const executeRealOpenOnExchange = vi.fn().mockResolvedValue({ success: true, entryPrice: 100 });
+      const executeMainRealAutoEntry = vi.fn(async (params, options) => {
+        await options.executionPort.executeRealOpenOnExchange(params.symbol, params.side, params.calculatedAmount, params.leverage);
+        return { executed: true, status: 'OPEN', trade: { id: 'RT-2', symbol: params.symbol } };
+      });
+
+      const { deps } = createMockAutopilotDeps({
+        getGlobalSettings: () => ({
+          isAutopilotEnabled: true,
+          isOteEntryEnabled: false,
+          tradingMode: 'real',
+          tradingExecutionMode: 'auto',
+          autopilotAggressiveness: 'aggressive',
+          exchangeApiConfig: { isEnabled: true, apiKey: 'test_key', secret: 'test_sec', exchange: 'weex' },
+          allowedTradingDirections: 'BOTH',
+          maxActivePositionsReal: 6,
+          maxSameDirectionPositions: 3,
+          isCommitteeConsensusCheckEnabled: false
+        }),
+        getGlobalTrueOhlcv: () => ({
+          'ETH/USDT': { localLow5m: 90, localHigh5m: 100 }
+        }),
+        executeRealOpenOnExchange,
+        executeMainRealAutoEntry,
+        fetchCachedRealBalance: vi.fn().mockResolvedValue({ USDT: { total: 500, free: 500 } }),
+        getCcxtClient: vi.fn().mockReturnValue({}),
+        isCircuitBreakerActive: () => false,
+        getCacheSignals: () => ({
+          data: mockSignals,
+          lastUpdated: Date.now(),
+          marketRegime: 'RANGING',
+          marketHealth: 80,
+          btcTrend24h: 0.5
+        })
+      });
+
+      await runAutopilotAndVirtualTradeEntry(deps);
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(executeRealOpenOnExchange).toHaveBeenCalledTimes(1);
+      const callArgs = executeRealOpenOnExchange.mock.calls[0];
+      expect(callArgs.length).toBe(4);
+    });
+
+    it('does NOT pass oteOptions when OTE zone calculation is invalid even if isOteEntryEnabled is true', async () => {
+      const mockSignals = [
+        { rawSymbol: 'SOL/USDT', signal: 'LONG', aiScore: 98, price: 100, type: 'SAR', volumeSpike: 2.0, volume24h: 500000 }
+      ];
+
+      const executeRealOpenOnExchange = vi.fn().mockResolvedValue({ success: true, entryPrice: 100 });
+      const executeMainRealAutoEntry = vi.fn(async (params, options) => {
+        await options.executionPort.executeRealOpenOnExchange(params.symbol, params.side, params.calculatedAmount, params.leverage);
+        return { executed: true, status: 'OPEN', trade: { id: 'RT-3', symbol: params.symbol } };
+      });
+
+      const { deps } = createMockAutopilotDeps({
+        getGlobalSettings: () => ({
+          isAutopilotEnabled: true,
+          isOteEntryEnabled: true,
+          tradingMode: 'real',
+          tradingExecutionMode: 'auto',
+          autopilotAggressiveness: 'aggressive',
+          exchangeApiConfig: { isEnabled: true, apiKey: 'test_key', secret: 'test_sec', exchange: 'weex' },
+          allowedTradingDirections: 'BOTH',
+          maxActivePositionsReal: 6,
+          maxSameDirectionPositions: 3,
+          isCommitteeConsensusCheckEnabled: false
+        }),
+        getGlobalTrueOhlcv: () => ({
+          // Both high and low equal to price => range = 0 => isValid = false
+          'SOL/USDT': { localLow5m: 100, localHigh5m: 100 }
+        }),
+        executeRealOpenOnExchange,
+        executeMainRealAutoEntry,
+        fetchCachedRealBalance: vi.fn().mockResolvedValue({ USDT: { total: 500, free: 500 } }),
+        getCcxtClient: vi.fn().mockReturnValue({}),
+        isCircuitBreakerActive: () => false,
+        getCacheSignals: () => ({
+          data: mockSignals,
+          lastUpdated: Date.now(),
+          marketRegime: 'RANGING',
+          marketHealth: 80,
+          btcTrend24h: 0.5
+        })
+      });
+
+      await runAutopilotAndVirtualTradeEntry(deps);
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(executeRealOpenOnExchange).toHaveBeenCalledTimes(1);
+      const callArgs = executeRealOpenOnExchange.mock.calls[0];
+      expect(callArgs.length).toBe(4);
+    });
   });
 });
