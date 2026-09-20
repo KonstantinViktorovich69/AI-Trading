@@ -136,6 +136,7 @@ export default function App() {
   const [isLateShortFilterEnabled, setIsLateShortFilterEnabled] = useState<boolean>(true);
   const [isSymmetricConfidenceFilterEnabled, setIsSymmetricConfidenceFilterEnabled] = useState<boolean>(false);
   const [isCommitteeConsensusCheckEnabled, setIsCommitteeConsensusCheckEnabled] = useState<boolean>(false);
+  const [isOteEntryEnabled, setIsOteEntryEnabled] = useState<boolean>(false);
   const [liquiditySweepWickThreshold, setLiquiditySweepWickThreshold] = useState<number>(0.60);
   const [settingsSnapshot, setSettingsSnapshot] = useState<string | null>(null);
   const [modelWeights, setModelWeights] = useState<Record<string, number> | null>(null);
@@ -285,6 +286,9 @@ export default function App() {
             if (data.data.dcaMultiplierFactor !== undefined) {
                setDcaMultiplierFactor(data.data.dcaMultiplierFactor);
             }
+            if (data.data.isOteEntryEnabled !== undefined) {
+               setIsOteEntryEnabled(data.data.isOteEntryEnabled);
+            }
             if (data.data.tradingMode !== undefined) {
                setTradingMode(data.data.tradingMode);
             }
@@ -400,6 +404,7 @@ export default function App() {
       maxVolatilityLimit,
       fundingShieldLimit,
       dcaMultiplierFactor,
+      isOteEntryEnabled,
       allowedTradingDirections,
       isEma200FilterEnabled,
       isFvgAboveFilterEnabled,
@@ -441,6 +446,7 @@ export default function App() {
           maxVolatilityLimit,
           fundingShieldLimit,
           dcaMultiplierFactor,
+          isOteEntryEnabled,
           allowedTradingDirections,
           isEma200FilterEnabled,
           isFvgAboveFilterEnabled,
@@ -2178,6 +2184,38 @@ export default function App() {
               </div>
 
 
+
+              {/* Optimal Trade Entry (OTE) */}
+              <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-3">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-indigo-400" />
+                    Optimal Trade Entry (OTE)
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !isOteEntryEnabled;
+                      setIsOteEntryEnabled(next);
+                      setTimeout(() => {
+                        fetch('/api/settings', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ 
+                            isOteEntryEnabled: next
+                          })
+                        });
+                      }, 50);
+                    }}
+                    className={cn("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors cursor-pointer", isOteEntryEnabled ? "bg-indigo-500" : "bg-zinc-700")}
+                  >
+                    <span className={cn("inline-block h-3 w-3 transform rounded-full bg-white transition-transform", isOteEntryEnabled ? "translate-x-5" : "translate-x-1")} />
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+                  Вместо немедленного входа по рынку выставляет лимитную заявку глубже в зоне отката (50–61.8% от импульса после снятия ликвидности) и ждёт исполнения до 3 минут. Если цена не вернётся в зону — сделка пропускается. Работает и на реальных, и на виртуальных сделках.
+                </p>
+              </div>
 
               {/* ИИ-Ведущий Трейдер (AI Expert Co-Pilot) */}
               <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-4">

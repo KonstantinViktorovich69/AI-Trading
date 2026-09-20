@@ -102,6 +102,7 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     isAutopilotEnabled: false,
     isSymmetricConfidenceFilterEnabled: true,
     isCommitteeConsensusCheckEnabled: false,
+    isOteEntryEnabled: false,
     maxActivePositionsVirtual: 5,
     maxActivePositionsReal: 5,
     maxSameDirectionPositions: 3,

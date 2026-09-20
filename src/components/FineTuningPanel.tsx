@@ -536,14 +536,14 @@ export function FineTuningPanel({ tradingMode, setTradingMode, onAddToast, onRef
                   </div>
 
                   {/* OPTIMAL TRADE ENTRY (OTE) */}
-                  <div className="bg-[#111113] p-3 rounded-xl border border-white/[0.04]">
+                  <div className="bg-[#111113] p-3 rounded-xl border border-white/[0.04] md:col-span-2">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-bold text-zinc-200">OPTIMAL TRADE ENTRY (OTE)</span>
                       <input
                         type="checkbox"
                         checked={!!settings.isOteEntryEnabled}
                         onChange={e => setSettings({ ...settings, isOteEntryEnabled: e.target.checked })}
-                        className="rounded bg-zinc-800 border-zinc-700 text-indigo-500 focus:ring-indigo-500 h-3.5 w-3.5"
+                        className="rounded bg-zinc-800 border-zinc-700 text-indigo-500 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
                       />
                     </div>
                     <p className="text-[9px] text-zinc-500 leading-normal">Вместо немедленного входа по рынку выставляет лимитную заявку глубже в зоне отката (50–61.8% от импульса после снятия ликвидности) и ждёт исполнения до 3 минут. Если цена не вернётся в зону — сделка пропускается. Работает и на реальных, и на виртуальных сделках.</p>

@@ -44,6 +44,7 @@
   "isAutopilotEnabled": true,
   "isSymmetricConfidenceFilterEnabled": false,
   "isCommitteeConsensusCheckEnabled": false,
+  "isOteEntryEnabled": false,
   "maxActivePositionsVirtual": 6,
   "maxActivePositionsReal": 6,
   "maxSameDirectionPositions": 3,
@@ -55,7 +56,7 @@
     "totalLearnedTrades": 0,
     "lastRetrained": 0
   },
-  "stateRevision": 113,
-  "updatedAt": 1789889133908,
-  "virtualEquity": 138.11
+  "stateRevision": 116,
+  "updatedAt": 1789893780791,
+  "virtualEquity": 137.46
 }

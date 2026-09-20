@@ -107,7 +107,8 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       dcaMultiplierFactor, isEma200FilterEnabled, isFvgAboveFilterEnabled,
       isFvgSupportBelowFilterEnabled, isLiquiditySweepFilterEnabled,
       isLateShortFilterEnabled, allowedTradingDirections, isAutopilotEnabled,
-      isSymmetricConfidenceFilterEnabled, isCommitteeConsensusCheckEnabled
+      isSymmetricConfidenceFilterEnabled, isCommitteeConsensusCheckEnabled,
+      isOteEntryEnabled
     } = req.body;
 
     if (isAutopilotEnabled !== undefined) {
@@ -223,6 +224,9 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     }
     if (isCommitteeConsensusCheckEnabled !== undefined) {
       globalSettings.isCommitteeConsensusCheckEnabled = !!isCommitteeConsensusCheckEnabled;
+    }
+    if (isOteEntryEnabled !== undefined) {
+      globalSettings.isOteEntryEnabled = !!isOteEntryEnabled;
     }
     if (req.body.tradingExecutionMode !== undefined) {
       globalSettings.tradingExecutionMode = req.body.tradingExecutionMode;

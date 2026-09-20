@@ -170,6 +170,35 @@ describe('Settings Router Security Tests', () => {
     expect(realSettings.exchangeApiConfig.exchange).toBe('weex');
   });
 
+  it('POST /settings persists isOteEntryEnabled flag correctly', async () => {
+    const realSettings: any = {
+      isOteEntryEnabled: false
+    };
+
+    const mockCtx: Partial<SettingsRouterContext> = {
+      getGlobalSettings: vi.fn().mockReturnValue(realSettings),
+      getAutopilotFailedSymbols: vi.fn().mockReturnValue(new Set()),
+      getLastSanitizationStatus: vi.fn().mockReturnValue({ sanitized: false }),
+      saveSettings: vi.fn()
+    };
+
+    const router = createSettingsRouter(mockCtx as SettingsRouterContext);
+    const handler = getHandler(router, '/settings', 'post');
+    const res = createMockRes();
+
+    const req: any = {
+      body: {
+        isOteEntryEnabled: true
+      }
+    };
+
+    await handler(req, res);
+
+    expect(mockCtx.saveSettings).toHaveBeenCalled();
+    expect(realSettings.isOteEntryEnabled).toBe(true);
+    expect(res.jsonData.data.isOteEntryEnabled).toBe(true);
+  });
+
   it('GET /database/export masks settings in backup export', async () => {
     const cachedDB = {
       virtualTrades: [{ id: 'trade-1', symbol: 'BTCUSDT' }],
