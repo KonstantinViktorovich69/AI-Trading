@@ -34,6 +34,13 @@ export interface DecisionTraceBuildParams {
 }
 
 /**
+ * Множитель штрафа за явный голос против направления сделки (не HOLD).
+ * Явное несогласие агента должно ощутимо перевешивать простое отсутствие поддержки,
+ * а не просто занулять вклад при полном весе в знаменателе.
+ */
+export const DISSENT_PENALTY_MULTIPLIER = 1.5;
+
+/**
  * Сервис генерации и аудита трейсов решений (Decision Tracing Engine)
  * Формирует подробный журнал всех факторов, голосов агентов и весов перед входом в сделку.
  */
@@ -244,6 +251,7 @@ export class DecisionTraceService {
     // Расчет итогового консенсус-скора
     let totalWeight = 0;
     let weightedSum = 0;
+    let dissentPenalty = 0;
     for (const v of agentVotes) {
       if (v.vote === (params.side === 'SHORT' ? 'APPROVE_SHORT' : 'APPROVE_LONG')) {
         weightedSum += v.confidence * v.assignedWeight;
@@ -251,11 +259,13 @@ export class DecisionTraceService {
         weightedSum += (v.confidence * 0.5) * v.assignedWeight;
       } else {
         weightedSum += 0;
+        dissentPenalty += v.confidence * v.assignedWeight * DISSENT_PENALTY_MULTIPLIER;
       }
       totalWeight += v.assignedWeight;
     }
 
-    const consensusScore = totalWeight > 0 ? Math.round(weightedSum / totalWeight) : 50;
+    const rawScore = totalWeight > 0 ? (weightedSum - dissentPenalty) / totalWeight : 50;
+    const consensusScore = Math.max(0, Math.round(rawScore));
     const requiredScore = params.requiredScore || 75;
     const hasRejections = (params.blockLocks && params.blockLocks.length > 0);
     const passedConsensus = !hasRejections && (consensusScore >= requiredScore);

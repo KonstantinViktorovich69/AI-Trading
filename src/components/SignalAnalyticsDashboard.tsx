@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -47,18 +47,45 @@ export function SignalAnalyticsDashboard({ onRefresh, trades }: SignalAnalyticsD
   const [selectedTraceTrade, setSelectedTraceTrade] = useState<any | null>(null);
   const [searchAuditTerm, setSearchAuditTerm] = useState('');
 
-  const fetchReport = async (originInput?: any, retryCount = 0) => {
+  const searchAuditTermRef = useRef('');
+  searchAuditTermRef.current = searchAuditTerm;
+
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort('unmounted');
+      }
+    };
+  }, []);
+
+  const fetchReport = useCallback(async (originInput?: any, retryCount = 0) => {
     const validOrigins = ['OUT_OF_SAMPLE', 'ALL', 'LIVE_WEEX', 'PAPER_SIM', 'HISTORICAL_SEED'];
     const origin = (typeof originInput === 'string' && validOrigins.includes(originInput))
       ? originInput
       : activeOriginFilter;
 
-    setLoading(true);
-    setError(null);
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+    // Abort previous in-flight request if any to avoid racing requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort('superseded');
+    }
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const timeoutId = setTimeout(() => {
+      controller.abort('timeout');
+    }, 30000);
+
+    if (isMountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
       const res = await fetch(`/api/analytics/signal-performance?origin=${encodeURIComponent(origin)}`, {
         headers: {
           'Accept': 'application/json'
@@ -70,6 +97,8 @@ export function SignalAnalyticsDashboard({ onRefresh, trades }: SignalAnalyticsD
       });
       clearTimeout(timeoutId);
 
+      if (!isMountedRef.current || controller.signal.aborted) return;
+
       const contentType = res.headers.get('content-type') || '';
 
       if (!res.ok) {
@@ -77,8 +106,9 @@ export function SignalAnalyticsDashboard({ onRefresh, trades }: SignalAnalyticsD
           const errData = await res.json().catch(() => null);
           throw new Error(errData?.error || `Сервер вернул статус HTTP ${res.status}`);
         }
-        if (retryCount < 4) {
+        if (isMountedRef.current && retryCount < 3) {
           await new Promise(r => setTimeout(r, 1500 * (retryCount + 1)));
+          if (!isMountedRef.current || controller.signal.aborted) return;
           return fetchReport(origin, retryCount + 1);
         }
         throw new Error(`Сервер вернул статус HTTP ${res.status}`);
@@ -86,24 +116,30 @@ export function SignalAnalyticsDashboard({ onRefresh, trades }: SignalAnalyticsD
 
       if (!contentType.includes('application/json')) {
         // Non-JSON response (e.g. gateway reload, index.html fallback, or 502/504)
-        if (retryCount < 4) {
+        if (isMountedRef.current && retryCount < 3) {
           await new Promise(r => setTimeout(r, 1500 * (retryCount + 1)));
+          if (!isMountedRef.current || controller.signal.aborted) return;
           return fetchReport(origin, retryCount + 1);
         }
         throw new Error('Сервер временно недоступен или обновляется. Повторите запрос через несколько секунд.');
       }
 
       const text = await res.text();
+      if (!isMountedRef.current || controller.signal.aborted) return;
+
       let data: any;
       try {
         data = JSON.parse(text);
       } catch (parseErr) {
-        if (retryCount < 4) {
+        if (isMountedRef.current && retryCount < 3) {
           await new Promise(r => setTimeout(r, 1500 * (retryCount + 1)));
+          if (!isMountedRef.current || controller.signal.aborted) return;
           return fetchReport(origin, retryCount + 1);
         }
         throw new Error('Ошибка формата данных от сервера при получении аналитики.');
       }
+
+      if (!isMountedRef.current || controller.signal.aborted) return;
 
       if (data && data.success && data.report) {
         setReport(data.report);
@@ -111,16 +147,33 @@ export function SignalAnalyticsDashboard({ onRefresh, trades }: SignalAnalyticsD
         throw new Error(data?.error || 'Не удалось загрузить отчёт');
       }
     } catch (e: any) {
-      if (retryCount < 4 && (e.name === 'AbortError' || e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError'))) {
+      const isAborted = e?.name === 'AbortError' || 
+        controller.signal.aborted || 
+        e?.message?.toLowerCase().includes('aborted') || 
+        e?.message?.toLowerCase().includes('abort') ||
+        !isMountedRef.current;
+
+      if (isAborted) {
+        // Request was intentionally cancelled or component unmounted; cleanly exit
+        return;
+      }
+
+      if (isMountedRef.current && retryCount < 3 && (e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError'))) {
         await new Promise(r => setTimeout(r, 1500 * (retryCount + 1)));
+        if (!isMountedRef.current || controller.signal.aborted) return;
         return fetchReport(origin, retryCount + 1);
       }
-      console.error('Failed to fetch signal performance analytics:', e);
-      setError(e.message || 'Ошибка загрузки данных');
+
+      if (isMountedRef.current) {
+        console.error('Failed to fetch signal performance analytics:', e);
+        setError(e.message || 'Ошибка загрузки данных');
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && abortControllerRef.current === controller) {
+        setLoading(false);
+      }
     }
-  };
+  }, [activeOriginFilter]);
 
   // Avoid spamming requests on rapid sub-second intra-trade price ticks
   const tradesSignature = useMemo(() => {
@@ -131,7 +184,7 @@ export function SignalAnalyticsDashboard({ onRefresh, trades }: SignalAnalyticsD
 
   useEffect(() => {
     fetchReport(activeOriginFilter);
-  }, [tradesSignature, activeOriginFilter]);
+  }, [tradesSignature, activeOriginFilter, fetchReport]);
 
   const currentDirectionStats: DirectionalGranularStats | undefined = useMemo(() => {
     if (!report) return undefined;
