@@ -73,6 +73,10 @@ export class AiGatewayService {
     this.globalRefGenAi = null;
   }
 
+  public setInternalServerGeminiClient(client: GoogleGenAI | null): void {
+    this.globalRefGenAi = client;
+  }
+
   public addAndQueueFrontendTask(params: any, modeReason: string): Promise<any> {
     console.log(`[AI Router] Routing AI request via Frontend Client. (Reason: ${modeReason})`);
     return new Promise((resolve, reject) => {
@@ -308,12 +312,31 @@ export class AiGatewayService {
           const model = (params.model && !params.model.includes('gemini-3.7') && !params.model.includes('gemini-1.5') && !params.model.includes('gemini-2.0'))
             ? params.model
             : "gemini-3.8-flash";
-          const response = await ai.models.generateContent({
-            model,
-            contents: params.contents,
-            config: params.config
-          });
-          return { text: response.text || "" };
+          let response: any;
+          try {
+            response = await ai.models.generateContent({
+              model,
+              contents: params.contents,
+              config: params.config
+            });
+          } catch (primaryErr: any) {
+            const primaryMsg = primaryErr?.message || String(primaryErr);
+            const is503OrOverloaded = primaryMsg.includes('503') || primaryMsg.includes('overloaded') || primaryMsg.includes('UNAVAILABLE');
+            if (is503OrOverloaded && model !== 'gemini-flash-latest') {
+              try {
+                response = await ai.models.generateContent({
+                  model: 'gemini-flash-latest',
+                  contents: params.contents,
+                  config: params.config
+                });
+              } catch {
+                throw primaryErr;
+              }
+            } else {
+              throw primaryErr;
+            }
+          }
+          return { text: response?.text || "" };
         } catch (geminiErr: any) {
           const errMsg = geminiErr?.message || String(geminiErr);
           const isTransportOrNetwork = errMsg.includes('fetch failed') ||
@@ -323,11 +346,18 @@ export class AiGatewayService {
             errMsg.includes('ECONNRESET') ||
             errMsg.includes('timeout');
 
+          const isOverloadedOrUnavailable = errMsg.includes('503') ||
+            errMsg.includes('UNAVAILABLE') ||
+            errMsg.includes('overloaded') ||
+            errMsg.includes('temporarily unavailable');
+
           let statusSummary = "unavailable";
           if (errMsg.includes('403') || errMsg.includes('PERMISSION_DENIED') || errMsg.includes('denied access')) {
             statusSummary = "cloud project access restricted (403)";
           } else if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
             statusSummary = "rate limit cooldown (429)";
+          } else if (isOverloadedOrUnavailable) {
+            statusSummary = "model temporarily overloaded (503)";
           } else if (errMsg.includes('404')) {
             statusSummary = "model deprecated / not found (404)";
           } else if (isTransportOrNetwork) {
@@ -341,14 +371,15 @@ export class AiGatewayService {
             errMsg.includes('denied access') ||
             errMsg.includes('429') ||
             errMsg.includes('RESOURCE_EXHAUSTED') ||
+            isOverloadedOrUnavailable ||
             isTransportOrNetwork;
 
           if (shouldCooldown) {
-            const cooldownDurationMs = isTransportOrNetwork ? 2 * 60 * 1000 : 10 * 60 * 1000;
+            const cooldownDurationMs = (isTransportOrNetwork || isOverloadedOrUnavailable) ? 2 * 60 * 1000 : 10 * 60 * 1000;
             this.serverGeminiCooldownUntil = Date.now() + cooldownDurationMs;
             console.log(`[AI ENGINE] Switched to local quantum engine (cloud AI status: ${statusSummary}). Normal operation continues.`);
           } else {
-            console.warn("[GEMINI] Generation notice: " + statusSummary + ". Using local fallback.");
+            console.log("[AI ENGINE] Notice: " + statusSummary + ". Using local fallback.");
           }
           return this.getStaticServerSideAiFallback(params, statusSummary);
         }

@@ -81,4 +81,58 @@ describe('AiGatewayService', () => {
     expect(gateway.getCachedMarketNews()?.text).toBe('Breaking News');
     expect(gateway.getCachedMarketNews()?.timestamp).toBe(12345);
   });
+
+  it('attempts fallback model when primary model is overloaded with 503', async () => {
+    const generateContentMock = vi.fn()
+      .mockRejectedValueOnce(new Error('{"error":{"code":503,"message":"This model is currently overloaded. Please try again later."}}'))
+      .mockResolvedValueOnce({ text: '{"analysis":"fallback success"}' });
+
+    const mockAiClient = {
+      models: {
+        generateContent: generateContentMock
+      }
+    } as any;
+
+    gateway.setInternalServerGeminiClient(mockAiClient);
+
+    const result = await gateway.runAiGeneration({
+      contents: [{ parts: [{ text: 'analyze market' }] }]
+    });
+
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+    expect(generateContentMock.mock.calls[0][0].model).toBe('gemini-3.8-flash');
+    expect(generateContentMock.mock.calls[1][0].model).toBe('gemini-flash-latest');
+    expect(result.text).toBe('{"analysis":"fallback success"}');
+  });
+
+  it('enters cooldown and provides local static fallback when all models fail with 503', async () => {
+    const generateContentMock = vi.fn()
+      .mockRejectedValue(new Error('{"error":{"code":503,"message":"This model is currently overloaded. Please try again later."}}'));
+
+    const mockAiClient = {
+      models: {
+        generateContent: generateContentMock
+      }
+    } as any;
+
+    gateway.setInternalServerGeminiClient(mockAiClient);
+
+    const result = await gateway.runAiGeneration({
+      contents: [{ parts: [{ text: 'getTradeEvaluationPrompt evaluate-closed-trade' }] }]
+    });
+
+    // Should return fallback JSON
+    const parsed = JSON.parse(result.text);
+    expect(parsed.evaluation).toBeDefined();
+
+    // Second call should immediately use cooldown fallback without hitting Gemini API again
+    generateContentMock.mockClear();
+    const result2 = await gateway.runAiGeneration({
+      contents: [{ parts: [{ text: 'getTradeEvaluationPrompt evaluate-closed-trade' }] }]
+    });
+
+    expect(generateContentMock).not.toHaveBeenCalled();
+    const parsed2 = JSON.parse(result2.text);
+    expect(parsed2.evaluation).toBeDefined();
+  });
 });

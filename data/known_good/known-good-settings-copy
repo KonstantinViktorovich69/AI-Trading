@@ -1,6 +1,6 @@
 {
   "virtualBalance": 2500,
-  "startOfDayBalance": 140.58,
+  "startOfDayBalance": 139.01,
   "telegramBots": [
     {
       "muteWatchdog": true,
@@ -55,7 +55,7 @@
     "totalLearnedTrades": 0,
     "lastRetrained": 0
   },
-  "stateRevision": 112,
-  "updatedAt": 1789853023346,
-  "virtualEquity": 139.01
+  "stateRevision": 113,
+  "updatedAt": 1789889133908,
+  "virtualEquity": 138.11
 }
