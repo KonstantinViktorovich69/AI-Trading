@@ -514,15 +514,6 @@ export class SignalPerformanceAnalyticsService {
             if (isApproved) {
               pnlContribution += t.pnl;
             }
-          } else {
-            // Default vote attribution if no trace attached
-            votesCount++;
-            confSum += 85;
-            weightSum += agent.baseWeight;
-            if (isWin) {
-              correctCount++;
-              pnlContribution += t.pnl;
-            }
           }
         }
 

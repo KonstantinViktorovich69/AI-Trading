@@ -84,4 +84,75 @@ describe('SignalPerformanceAnalyticsService', () => {
     expect(report.analyticalReport.question6_agentContribution.length).toBeGreaterThan(0);
     expect(report.analyticalReport.question10_lossPrecursors.length).toBe(3);
   });
+
+  it('only builds agent contribution stats from actual recorded votes without simulation fallback', () => {
+    const mockTrades = [
+      {
+        id: 't-with-partial-votes',
+        symbol: 'SOL/USDT',
+        side: 'LONG',
+        status: 'CLOSED',
+        entryPrice: 150,
+        closePrice: 165,
+        stopLoss: 145,
+        amount: 100,
+        leverage: 5,
+        pnl: 50,
+        pnlPercent: 10,
+        marketRegime: 'TREND_UP',
+        pattern: 'Слив / Отскок (SAR Peak/Bottom Reversal)',
+        openTime: Date.now() - 3600000,
+        closeTime: Date.now(),
+        decisionTrace: {
+          consensusScore: 90,
+          agentVotes: [
+            { agentId: 'bull_analyst', vote: 'APPROVE_LONG', confidence: 95, assignedWeight: 1.0 }
+          ]
+        }
+      },
+      {
+        id: 't-without-trace',
+        symbol: 'ADA/USDT',
+        side: 'LONG',
+        status: 'CLOSED',
+        entryPrice: 0.5,
+        closePrice: 0.55,
+        stopLoss: 0.48,
+        amount: 100,
+        leverage: 5,
+        pnl: 25,
+        pnlPercent: 10,
+        marketRegime: 'TREND_UP',
+        pattern: 'Слив / Отскок (SAR Peak/Bottom Reversal)',
+        openTime: Date.now() - 1800000,
+        closeTime: Date.now()
+        // No decisionTrace at all
+      }
+    ];
+
+    const report = SignalPerformanceAnalyticsService.generatePerformanceReport(mockTrades);
+    const byAgent = report.combined.byAgent;
+
+    // bull_analyst had a vote in t-with-partial-votes only
+    expect(byAgent.bull_analyst.totalVotes).toBe(1);
+    expect(byAgent.bull_analyst.correctVotes).toBe(1);
+    expect(byAgent.bull_analyst.profitContributionUsd).toBe(50);
+    expect(byAgent.bull_analyst.status).toBe('INSUFFICIENT_DATA (N < 30)');
+
+    // scout_agent, bear_analyst, liquidity_hunter, risk_sentinel had NO votes in either trade
+    // Under old behavior, they would have been simulated for both trades (totalVotes = 2, profitContributionUsd = 75)
+    // Under new behavior, totalVotes must be 0 and profitContributionUsd must be 0
+    expect(byAgent.scout_agent.totalVotes).toBe(0);
+    expect(byAgent.scout_agent.profitContributionUsd).toBe(0);
+    expect(byAgent.scout_agent.status).toBe('INSUFFICIENT_DATA (N < 30)');
+
+    expect(byAgent.bear_analyst.totalVotes).toBe(0);
+    expect(byAgent.bear_analyst.profitContributionUsd).toBe(0);
+
+    expect(byAgent.liquidity_hunter.totalVotes).toBe(0);
+    expect(byAgent.liquidity_hunter.profitContributionUsd).toBe(0);
+
+    expect(byAgent.risk_sentinel.totalVotes).toBe(0);
+    expect(byAgent.risk_sentinel.profitContributionUsd).toBe(0);
+  });
 });
