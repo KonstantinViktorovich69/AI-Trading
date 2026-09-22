@@ -7049,24 +7049,6 @@ export function TradingTerminal({
 
                     <div className="h-5 w-px bg-white/[0.05]"></div>
 
-                    <Tooltip text={`Сентимент ИИ-советника: ${marketPulse.recommendation}`}>
-                      <div className="flex flex-col items-center">
-                        <span className="text-[7.5px] text-zinc-500 font-bold uppercase tracking-[0.2em] mb-1.5 leading-none">AI SENTIMENT</span>
-                        <div className="flex items-center gap-2 font-mono">
-                          <span className={cn(
-                            "text-[8.5px] font-extrabold uppercase px-2 py-0.5 rounded border tracking-wider",
-                            marketPulse.sentiment === 'BULLISH' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/10 shadow-glow-emerald" : 
-                            marketPulse.sentiment === 'BEARISH' ? "bg-rose-500/10 text-rose-400 border-rose-500/10 shadow-glow-rose" : 
-                            "bg-zinc-900 text-zinc-400 border-white/[0.04]"
-                          )}>
-                            {marketPulse.sentiment === 'BULLISH' ? 'ПАМП' : marketPulse.sentiment === 'BEARISH' ? 'ДАМП' : 'ФЛЭТ'}
-                          </span>
-                        </div>
-                      </div>
-                    </Tooltip>
-
-                    <div className="h-5 w-px bg-white/[0.05]"></div>
-
                     <Tooltip text="Режим маркет-мейкера на основе волатильности">
                       <div className="flex flex-col items-center">
                         <span className="text-[7.5px] text-zinc-500 font-bold uppercase tracking-[0.2em] mb-1.5 leading-none">РЕЖИМ MM</span>
