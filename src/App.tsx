@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TradingTerminal } from './components/TradingTerminal';
+import { FineTuningPanel } from './components/FineTuningPanel';
 import { Settings, X, Send, BookOpen, GraduationCap, AlertTriangle, Activity, Bell, BellOff, Plus, Trash2, Key, Eye, EyeOff, ShieldAlert, Flame, Brain, Bot, BrainCircuit, TrendingDown, TrendingUp, Zap, Maximize2, Minimize2, ExternalLink, Sparkles, Sliders, Layers, Copy, Check, RotateCcw } from 'lucide-react';
 import { cn } from './lib/utils';
 
@@ -140,7 +141,7 @@ export default function App() {
   const [liquiditySweepWickThreshold, setLiquiditySweepWickThreshold] = useState<number>(0.60);
   const [settingsSnapshot, setSettingsSnapshot] = useState<string | null>(null);
   const [modelWeights, setModelWeights] = useState<Record<string, number> | null>(null);
-  const [settingsTab, setSettingsTab] = useState<'system' | 'integrations'>('system');
+  const [settingsTab, setSettingsTab] = useState<'system' | 'ai_settings' | 'integrations'>('system');
   
   const [excludeBinanceCrossListed, setExcludeBinanceCrossListed] = useState<boolean>(true);
   const [maxSpotAllocationPct, setMaxSpotAllocationPct] = useState<number>(10);
@@ -620,6 +621,10 @@ export default function App() {
           isStandaloneTerminal={isStandaloneTerminal}
           isAppFullscreen={isFullscreen}
           onToggleAppFullscreen={toggleFullscreen}
+          onOpenSettings={(tab: 'system' | 'ai_settings' | 'integrations' = 'system') => {
+            setSettingsTab(tab);
+            setIsSettingsOpen(true);
+          }}
         />
         
         {/* Global Toasts */}
@@ -857,12 +862,23 @@ export default function App() {
 
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className={cn(
+            "bg-zinc-900 border border-zinc-800 rounded-xl w-full max-h-[92vh] overflow-hidden flex flex-col transition-all duration-300",
+            settingsTab === 'ai_settings' ? "max-w-6xl" : "max-w-2xl"
+          )}>
             <div className="flex justify-between items-center p-4 border-b border-zinc-800">
               <h2 className="text-lg font-bold text-zinc-100 flex items-center gap-2">
                 <Settings className="w-5 h-5 text-zinc-400" />
-                Настройки Системы
+                {settingsTab === 'system' ? 'Настройки Системы' : settingsTab === 'ai_settings' ? 'ИИ Настройки & Ревизор' : 'Интеграции'}
               </h2>
+              <button 
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="text-zinc-500 hover:text-zinc-300 p-1 rounded-lg hover:bg-zinc-800 transition-colors"
+                title="Закрыть"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Tab Selector Header */}
@@ -882,6 +898,19 @@ export default function App() {
               </button>
               <button
                 type="button"
+                onClick={() => setSettingsTab('ai_settings')}
+                className={cn(
+                  "px-4 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2",
+                  settingsTab === 'ai_settings'
+                    ? "border-indigo-500 text-indigo-400"
+                    : "border-transparent text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                ИИ Настройки
+              </button>
+              <button
+                type="button"
                 onClick={() => setSettingsTab('integrations')}
                 className={cn(
                   "px-4 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2",
@@ -896,6 +925,20 @@ export default function App() {
             </div>
             
             <div className="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-6">
+              
+              {/* AI Fine-Tuning Settings */}
+              {settingsTab === 'ai_settings' && (
+                <div className="w-full">
+                  <FineTuningPanel 
+                    tradingMode={tradingMode}
+                    setTradingMode={setTradingMode}
+                    onAddToast={(msg, type) => {
+                      addToast(msg, type);
+                    }}
+                    onRefreshBalance={fetchRealBalance}
+                  />
+                </div>
+              )}
               
               {/* Exchange API integration */}
               {settingsTab === 'integrations' && (

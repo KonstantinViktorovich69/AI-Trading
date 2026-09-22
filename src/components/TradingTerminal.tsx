@@ -8,7 +8,6 @@ import { cn } from '../lib/utils';
 const TradingChart = lazy(() => import('./TradingChart').then(m => ({ default: m.TradingChart })));
 const AnalyticsTab = lazy(() => import('./AnalyticsTab').then(m => ({ default: m.AnalyticsTab })));
 const SignalAnalyticsDashboard = lazy(() => import('./SignalAnalyticsDashboard').then(m => ({ default: m.SignalAnalyticsDashboard })));
-const FineTuningPanel = lazy(() => import('./FineTuningPanel').then(m => ({ default: m.FineTuningPanel })));
 const FundingArbitragePanel = lazy(() => import('./FundingArbitragePanel').then(m => ({ default: m.FundingArbitragePanel })));
 
 function Tooltip({ text, children, className }: { text: string, children: React.ReactNode, position?: 'top' | 'right' | 'bottom', className?: string, key?: string | number }) {
@@ -1032,7 +1031,8 @@ export function TradingTerminal({
   isStandaloneTrade = false,
   isStandaloneTerminal = false,
   isAppFullscreen = false,
-  onToggleAppFullscreen
+  onToggleAppFullscreen,
+  onOpenSettings
 }: { 
   telegramBots?: any[], 
   addToast?: (msg: string, type?: 'success' | 'error' | 'info') => void, 
@@ -1048,7 +1048,8 @@ export function TradingTerminal({
   isStandaloneTrade?: boolean,
   isStandaloneTerminal?: boolean,
   isAppFullscreen?: boolean,
-  onToggleAppFullscreen?: () => void
+  onToggleAppFullscreen?: () => void,
+  onOpenSettings?: (tab?: 'system' | 'ai_settings' | 'integrations') => void
 }) {
   const [standaloneParams, setStandaloneParams] = useState<{ tradeId: string | null; symbol: string | null }>({ tradeId: null, symbol: null });
 
@@ -1846,7 +1847,7 @@ export function TradingTerminal({
     };
   }, [reconnectTrigger]);
 
-  const [mainTab, setMainTab] = useState<'scanner' | 'funding' | 'knowledge' | 'history' | 'peaks' | 'telemetry' | 'fine_tuning' | 'signal_analytics'>('scanner');
+  const [mainTab, setMainTab] = useState<'scanner' | 'funding' | 'knowledge' | 'history' | 'peaks' | 'telemetry' | 'signal_analytics'>('scanner');
   
   useEffect(() => {
     if (isStandaloneTerminal || isStandaloneTrade) {
@@ -4372,18 +4373,6 @@ export function TradingTerminal({
             </button>
 
             <button 
-              onClick={() => setMainTab('fine_tuning')} 
-              className={cn(
-                "px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all duration-300 whitespace-nowrap flex items-center gap-1.5", 
-                mainTab === 'fine_tuning' 
-                  ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-glow-indigo" 
-                  : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.02]"
-              )}
-            >
-              <Sliders className="w-3.5 h-3.5 text-indigo-400 animate-pulse shrink-0" /> ИИ НАСТРОЙКИ
-            </button>
-
-            <button 
               onClick={() => setMainTab('funding')} 
               className={cn(
                 "px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all duration-300 whitespace-nowrap flex items-center gap-1.5", 
@@ -6825,24 +6814,6 @@ export function TradingTerminal({
           </div>
         );
       })()}
-
-      {mainTab === 'fine_tuning' && (
-        <Suspense fallback={
-          <div className="flex flex-col items-center justify-center py-20 bg-zinc-900/50 border border-zinc-800/50 rounded-xl text-zinc-500">
-            <Loader2 className="w-6 h-6 text-indigo-500 animate-spin mb-2" />
-            <span className="text-xs text-zinc-400 font-mono">Загрузка тонкой настройки...</span>
-          </div>
-        }>
-          <FineTuningPanel 
-            tradingMode={tradingMode}
-            setTradingMode={setTradingMode}
-            onAddToast={(msg, type) => {
-              if (addToast) addToast(msg, type);
-            }}
-            onRefreshBalance={onRefreshRealBalance}
-          />
-        </Suspense>
-      )}
 
       {mainTab === 'scanner' && (() => {
         // Compute beautiful on-the-fly statistics for our live analytics dashboard
