@@ -104,7 +104,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       autopilotAggressiveness, isAiExpertTraderEnabled, aiExpertTraderInterval,
       aiExpertTraderInstructions, tradingMode, aiMinConfidenceThreshold,
       isVolatilityBrakeEnabled, maxVolatilityLimit, fundingShieldLimit,
-      dcaMultiplierFactor, isEma200FilterEnabled, isFvgAboveFilterEnabled,
+      dcaMultiplierFactor, isDcaEnabled, timeoutStagnationHours, isEma200FilterEnabled, isFvgAboveFilterEnabled,
       isFvgSupportBelowFilterEnabled, isLiquiditySweepFilterEnabled,
       isLateShortFilterEnabled, allowedTradingDirections, isAutopilotEnabled,
       isSymmetricConfidenceFilterEnabled, isCommitteeConsensusCheckEnabled,
@@ -173,6 +173,12 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     }
     if (dcaMultiplierFactor !== undefined) {
       globalSettings.dcaMultiplierFactor = Number(dcaMultiplierFactor);
+    }
+    if (isDcaEnabled !== undefined) {
+      globalSettings.isDcaEnabled = !!isDcaEnabled;
+    }
+    if (timeoutStagnationHours !== undefined) {
+      globalSettings.timeoutStagnationHours = Math.max(1.0, Math.min(24.0, Number(timeoutStagnationHours)));
     }
     if (req.body.maxSpotAllocationPct !== undefined) {
       globalSettings.maxSpotAllocationPct = Number(req.body.maxSpotAllocationPct);

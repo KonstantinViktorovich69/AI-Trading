@@ -47,7 +47,9 @@ export interface GlobalSettings {
   isVolatilityBrakeEnabled: boolean;
   maxVolatilityLimit: number;
   fundingShieldLimit: number;
+  isDcaEnabled: boolean;
   dcaMultiplierFactor: number;
+  timeoutStagnationHours: number;
   isAiPartialCloseRealEnabled: boolean;
   isEma200FilterEnabled: boolean;
   isFvgAboveFilterEnabled: boolean;
@@ -89,7 +91,9 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     isVolatilityBrakeEnabled: false,
     maxVolatilityLimit: 12.0,
     fundingShieldLimit: -0.15,
+    isDcaEnabled: false,
     dcaMultiplierFactor: 1.0,
+    timeoutStagnationHours: 3.0,
     isAiPartialCloseRealEnabled: true,
     isEma200FilterEnabled: true,
     isFvgAboveFilterEnabled: true,

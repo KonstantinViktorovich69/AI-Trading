@@ -2687,14 +2687,8 @@ export function TradingTerminal({
         setSelectedSignal(prev => (prev?.symbol === trade.symbol ? null : prev));
         if (addToast) addToast(`Сделка ${trade.symbol} закрыта успешно!`, 'success');
 
-        // Immediately trigger Auto-Pilot after manual close to search and open candidates for newly freed slot
-        if (isAutoPilotEnabled) {
-          setTimeout(() => {
-            if (triggerAutoTradeRef.current && !isAutoProcessingRef.current) {
-              triggerAutoTradeRef.current();
-            }
-          }, 800);
-        }
+        // Symbol cooldown tracked for local reference
+        // Slot is freed for server-side autopilot to allocate on next scan cycle
       }
 
       // 2. Run AI Evaluation in background
@@ -3004,13 +2998,8 @@ export function TradingTerminal({
   const signalsRefInternal = useRef(signals);
   const closingTradesRef = useRef<Set<string>>(new Set());
   const autoPilotCooldownsRef = useRef<Record<string, number>>({});
-  const triggerAutoTradeRef = useRef<(() => void) | null>(null);
-
   useEffect(() => { paperTradesRef.current = paperTrades; }, [paperTrades]);
   useEffect(() => { signalsRefInternal.current = signals; }, [signals]);
-
-  const isAutoProcessingRef = useRef(false);
-  const pendingAutoSymbolsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (tradingMode === 'real' && isAutoPilotEnabled && !exchangeConfigEnabled) {
@@ -3019,306 +3008,9 @@ export function TradingTerminal({
     }
   }, [tradingMode, isAutoPilotEnabled, exchangeConfigEnabled, setIsAutoPilotEnabled, addToast]);
 
-  useEffect(() => {
-    if (!isAutoPilotEnabled || (tradingMode === 'real' && !exchangeConfigEnabled) || signals.length === 0 || isAutoProcessingRef.current) return;
-    
-    const autoTrade = async () => {
-      isAutoProcessingRef.current = true;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
-      try {
-        const allOpenTrades = paperTradesRef.current.filter(t => t.status === 'OPEN');
-        // Жесткое ограничение системы: не более 6 одновременно открытых сделок
-        const maxAutoTrades = 6;
-        const availableSlots = maxAutoTrades - allOpenTrades.length;
-        if (availableSlots <= 0) return;
-
-        // Баланс направлений: максимум 3 сделки в одну сторону (3 LONG + 3 SHORT)
-        const openLongsCount = allOpenTrades.filter(t => t.side === 'LONG').length;
-        const openShortsCount = allOpenTrades.filter(t => t.side === 'SHORT').length;
-        const maxPerDirection = 3;
-        const availableLongSlots = Math.max(0, maxPerDirection - openLongsCount);
-        const availableShortSlots = Math.max(0, maxPerDirection - openShortsCount);
-        if (availableLongSlots <= 0 && availableShortSlots <= 0) return;
-
-        const openSymbols = new Set(
-          allOpenTrades.map(t => t.symbol.replace('/', '').replace(':', '').toUpperCase())
-        );
-
-        const now = Date.now();
-        const isShortSig = (s: any) => (s.signal || '').includes('SELL') || (s.signal || '').includes('SHORT') || s.side === 'SHORT' || s.isSellSignal === true;
-
-        const eligibleSignals = signals.filter(s => {
-          const isHighConf = (s.aiScore || 0) >= 80;
-          const isValidSignal = (s.signal === 'STRONG_SELL' || s.signal === 'CRITICAL_SELL' || s.signal === 'BUY' || s.signal === 'STRONG_BUY' || s.signal === 'CRITICAL_BUY' || s.signal === 'SHORT' || s.signal === 'LONG' || s.side === 'SHORT' || s.side === 'LONG');
-          if (!isHighConf || !isValidSignal) return false;
-
-          const normalizedSignalSym = s.symbol.replace('/', '').replace(':', '').toUpperCase();
-          if (openSymbols.has(normalizedSignalSym)) return false;
-          if (pendingAutoSymbolsRef.current.has(normalizedSignalSym)) return false;
-          // Short 15s cooldown after manual close
-          if (autoPilotCooldownsRef.current[normalizedSignalSym] && now - autoPilotCooldownsRef.current[normalizedSignalSym] < 15000) {
-            return false;
-          }
-          return true;
-        });
-
-        const shortPool = eligibleSignals.filter(s => isShortSig(s)).sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
-        const longPool = eligibleSignals.filter(s => !isShortSig(s)).sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0));
-
-        // Двунаправленная сбалансированная очередь: чередование SHORT и LONG с соблюдением квот
-        const candidateSignals: typeof signals = [];
-        let pickedLongs = 0;
-        let pickedShorts = 0;
-        let sIdx = 0;
-        let lIdx = 0;
-
-        while (candidateSignals.length < availableSlots && (sIdx < shortPool.length || lIdx < longPool.length)) {
-          if (openShortsCount + pickedShorts <= openLongsCount + pickedLongs) {
-            if (sIdx < shortPool.length && pickedShorts < availableShortSlots) {
-              candidateSignals.push(shortPool[sIdx++]);
-              pickedShorts++;
-            } else if (lIdx < longPool.length && pickedLongs < availableLongSlots) {
-              candidateSignals.push(longPool[lIdx++]);
-              pickedLongs++;
-            } else {
-              break;
-            }
-          } else {
-            if (lIdx < longPool.length && pickedLongs < availableLongSlots) {
-              candidateSignals.push(longPool[lIdx++]);
-              pickedLongs++;
-            } else if (sIdx < shortPool.length && pickedShorts < availableShortSlots) {
-              candidateSignals.push(shortPool[sIdx++]);
-              pickedShorts++;
-            } else {
-              break;
-            }
-          }
-        }
-
-        if (candidateSignals.length === 0) return;
-
-        let openedCount = 0;
-        for (const signal of candidateSignals) {
-          if (controller.signal.aborted) break;
-          if (allOpenTrades.length + openedCount >= maxAutoTrades) break;
-          
-          const normalizedSignalSym = signal.symbol.replace('/', '').replace(':', '').toUpperCase();
-
-          // 1. Самостоятельно и надежно определяем актуальный баланс
-          let activeBal = virtualBalanceRef.current;
-          if (tradingMode === 'real') {
-            try {
-              const resBal = await fetch('/api/exchange/balance');
-              if (resBal.ok && resBal.headers.get('content-type')?.includes('application/json')) {
-                const balData = await resBal.json();
-                if (balData && balData.success && typeof balData.balance === 'number') {
-                  activeBal = balData.balance;
-                  if (onRefreshRealBalance) {
-                    onRefreshRealBalance();
-                  }
-                } else if (realBalance !== null && realBalance !== undefined) {
-                  activeBal = realBalance;
-                }
-              } else if (realBalance !== null && realBalance !== undefined) {
-                activeBal = realBalance;
-              }
-            } catch (err) {
-              if (realBalance !== null && realBalance !== undefined) {
-                activeBal = realBalance;
-              }
-            }
-          }
-
-          const defaultLeverage = 5;
-          // Минимальная стоимость входа в сделку (устанавливаем лимит маржи в 10 USDT, так как биржи поддерживают дробные контракты)
-          const minEntryValue = 10;
-          // Входим минимум в 2% от депозита или от реальной минимальной цены входа в сделку
-          let entryMargin = Math.max(activeBal * 0.02, minEntryValue);
-          entryMargin = Number(entryMargin.toFixed(1));
-
-          if (activeBal < minEntryValue) {
-             if (addToast) addToast(`[Auto-Pilot] Недостаточно баланса для ${signal.symbol}. Баланс: ${activeBal.toFixed(1)}$, требуется минимум: ${minEntryValue.toFixed(1)}$`, 'error');
-             continue; // Пропускаем сигнал для этой монеты
-          }
-
-          if (activeBal < entryMargin) {
-             entryMargin = Number(activeBal.toFixed(1));
-          }
-          
-          const existingTrade = paperTradesRef.current.find(t => {
-            const tNorm = t.symbol.replace('/', '').replace(':', '').toUpperCase();
-            return tNorm === normalizedSignalSym && t.status === 'OPEN';
-          });
-          
-          if (!existingTrade && !pendingAutoSymbolsRef.current.has(normalizedSignalSym)) {
-            pendingAutoSymbolsRef.current.add(normalizedSignalSym);
-            
-            try {
-              const defaultStepsCount = 3;
-              
-        let stepPct = 3;
-        if (signal.volatility) {
-           stepPct = Math.max(2, Math.min(10, Number(signal.volatility) / 2));
-        }
-        const defaultStepPercent = stepPct;
-
-              const isShort = signal.signal.includes('SELL') || signal.signal.includes('SHORT');
-              const side = isShort ? 'SHORT' : 'LONG';
-
-              let currentPrice = signal.price;
-              let currentMargin = entryMargin;
-              const localLadder = [];
-              for (let i = 0; i < defaultStepsCount; i++) {
-                localLadder.push({ price: currentPrice, size: currentMargin });
-                currentPrice = isShort
-                  ? currentPrice * (1 + defaultStepPercent / 100)
-                  : currentPrice * (1 - defaultStepPercent / 100);
-                currentMargin = currentMargin * 2;
-              }
-              let tp, sl;
-              const safeSignalPrice = signal.price || 0;
-              if (signal.atr && Number(signal.atr) > 0) {
-                 const atrNum = Number(signal.atr);
-                 tp = isShort
-                    ? Number((safeSignalPrice - (atrNum * 2)).toFixed(5))
-                    : Number((safeSignalPrice + (atrNum * 2)).toFixed(5));
-                 sl = isShort
-                    ? Number((safeSignalPrice + (atrNum * 2.5)).toFixed(5))
-                    : Number((safeSignalPrice - (atrNum * 2.5)).toFixed(5));
-              } else {
-                 tp = isShort
-                    ? Number((safeSignalPrice * 0.85).toFixed(5))
-                    : Number((safeSignalPrice * 1.15).toFixed(5));
-                 let lastPrice = safeSignalPrice;
-                 for (let i = 0; i < defaultStepsCount; i++) {
-                    lastPrice = isShort
-                        ? lastPrice * (1 + defaultStepPercent / 100)
-                        : lastPrice * (1 - defaultStepPercent / 100);
-                 }
-                 sl = isShort
-                    ? Number((lastPrice * 1.015).toFixed(5))
-                    : Number((lastPrice * 0.985).toFixed(5));
-              }
-              const gridOrders = localLadder.slice(1).map(step => ({ price: step.price, amount: step.size, executed: false }));
-              
-              const reqBody = {
-                symbol: signal.symbol, exchange: signal.exchange, entryPrice: signal.price,
-                amount: localLadder[0].size, leverage: defaultLeverage, side,
-                signalAiScore: signal.aiScore || 0, mode: 'AUTO', gridOrders, takeProfit: tp, stopLoss: sl,
-                isReal: tradingMode === 'real'
-              };
-
-              if (tradingMode === 'real') {
-                const realRes = await fetch('/api/real-trade/open', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(reqBody)
-                });
-                if (!realRes.ok) {
-                  let errText = '';
-                  try { errText = await realRes.text(); } catch (e) {}
-                  throw new Error(`Ошибка биржи (HTTP ${realRes.status}): ${errText || 'Невозможно открыть автопилот-позицию'}`);
-                }
-                const contentType = realRes.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                  throw new Error('Ошибка биржи: получен некорректный формат ответа');
-                }
-                const realData = await realRes.json();
-                if (!realData || !realData.success) {
-                  throw new Error(`Ошибка биржи: ${realData?.error || 'Невозможно открыть автопилот-позицию'}`);
-                }
-                if (addToast) addToast(`[Автопилот] Реальная позиция ${signal.symbol} успешно открыта!`, 'success');
-                
-                // Четко обновляем цену входа и другие параметры из выполненного ордера на бирже!
-                if (realData.entryPrice) {
-                  reqBody.entryPrice = realData.entryPrice;
-                }
-                
-                // Сразу же принудительно обновляем реальный баланс в React
-                if (onRefreshRealBalance) {
-                  onRefreshRealBalance();
-                }
-              }
-
-              const res = await fetch('/api/paper-trade/open', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                signal: controller.signal,
-                body: JSON.stringify(reqBody)
-              });
-              
-              if (!res.ok) {
-                let errorBody = "";
-                try { errorBody = await res.text(); } catch(f){}
-                throw new Error(`HTTP ${res.status}: ${errorBody.slice(0, 100)}`);
-              }
-              
-              let data;
-              try {
-                const text = await res.text();
-                if (!text || text.trim().startsWith('<') || text.includes('Starting Server') || text.includes('<!doctype html>')) {
-                  // Server is booting or restarting, skip safely without breaking loop
-                  continue;
-                }
-                try {
-                  data = JSON.parse(text);
-                } catch (e: any) {
-                  if (text.trim().startsWith('<')) continue;
-                  throw new Error(`Failed to parse JSON response: ${e.message}`);
-                }
-              } catch (e: any) {
-                throw e;
-              }
-
-              if (data && data.success) {
-                setPaperTrades(prev => [...prev, data.data]);
-                paperTradesRef.current = [...paperTradesRef.current, data.data];
-                if (data.balance !== undefined) {
-                  updateSafeVirtualBalance(data.balance, true);
-                }
-                openedCount++;
-              }
-            } catch (e: any) { 
-              if (e.name === 'AbortError') throw e;
-              const isQuota = e?.message?.includes("429") || e?.message?.includes("quota") || e?.message?.includes("Failed to call");
-              if (!isQuota) {
-                 console.warn('[Auto-Pilot] Error opening trade:', e.message || e); 
-              }
-            } finally {
-              pendingAutoSymbolsRef.current.delete(normalizedSignalSym);
-            }
-            // Delay between openings if multiple signals
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-      } catch (err: any) {
-        if (err.name === 'AbortError') return; // Silent return for autoTrade timeout
-        const isQuota = err?.message?.includes("429") || err?.message?.includes("quota") || err?.message?.includes("Failed to call");
-        if (!isQuota) {
-           console.warn('[Auto-Pilot] Main loop error:', err?.message || err);
-        }
-      } finally {
-        clearTimeout(timeoutId);
-        isAutoProcessingRef.current = false;
-      }
-    };
-    triggerAutoTradeRef.current = autoTrade;
-    autoTrade();
-  }, [signals, isAutoPilotEnabled, tradingMode]);
-
-  // Heartbeat to automatically replenish open trade slots when positions close
-  useEffect(() => {
-    if (!isAutoPilotEnabled) return;
-    const interval = setInterval(() => {
-      if (isAutoPilotEnabled && triggerAutoTradeRef.current && !isAutoProcessingRef.current) {
-        const activeAutoTrades = paperTradesRef.current.filter(t => t.status === 'OPEN' && t.mode === 'AUTO' && !t.isAutoLearning);
-        if (activeAutoTrades.length < 5) {
-          triggerAutoTradeRef.current();
-        }
-      }
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [isAutoPilotEnabled]);
+  // NOTE: Автопилот (Auto-Pilot) выполняется ИСКЛЮЧИТЕЛЬНО на сервере (server/services/autoPilotEngine.ts)
+  // через фоновый шедулер. Это исключает дублирование ордеров, клиентские сетевые задержки
+  // и гарантирует применение всех фильтров стратегии (BOS/ChoCh, Liquidity Sweep, Orderbook Shield, EMA200/FVG, 3-уровневый Staged TP).
 
   useEffect(() => {
       const manageTrades = async () => {
@@ -4014,11 +3706,25 @@ export function TradingTerminal({
       const finalAmount = tradingMode === 'real' ? Math.max(20, margin) : margin;
       const finalLeverage = tradingMode === 'real' ? Math.max(5, leverage) : leverage;
 
+      let manualTpStages: any[] | undefined = undefined;
+      const posSide = positionType.toUpperCase();
+      const dir = posSide === 'SHORT' ? -1 : 1;
+      if (entryPrice && entryPrice > 0) {
+        const tp1Price = Number((entryPrice * (1 + dir * 0.012)).toFixed(5));
+        const tp2Price = Number((entryPrice * (1 + dir * 0.025)).toFixed(5));
+        const tp3Price = tpValToSend || Number((entryPrice * (1 + dir * 0.045)).toFixed(5));
+        manualTpStages = [
+          { targetPrice: tp1Price, targetPercent: 1.2, closeRatio: 0.35, executed: false },
+          { targetPrice: tp2Price, targetPercent: 2.5, closeRatio: 0.35, executed: false },
+          { targetPrice: tp3Price, targetPercent: 4.5, closeRatio: 0.30, executed: false }
+        ];
+      }
+
       const reqBody = {
         symbol: selectedSignal.symbol, exchange: selectedSignal.exchange, entryPrice: entryPrice,
         amount: finalAmount, leverage: finalLeverage, side: positionType.toUpperCase(),
         signalAiScore: selectedSignal.aiScore || 0, mode: tradeMode, takeProfit: tpValToSend,
-        stopLoss: slValToSend, gridOrders,
+        stopLoss: slValToSend, tpStages: manualTpStages, gridOrders,
         isReal: tradingMode === 'real'
       };
 

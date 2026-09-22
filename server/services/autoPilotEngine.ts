@@ -409,8 +409,8 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                 console.log(`[ORDERBOOK SHIELD] Skipping auto SHORT for ${symbol}: Bid density (${bidVol.toFixed(0)}) dominates Ask (${askVol.toFixed(0)}), ratio ${(askVol/bidVol).toFixed(2)} < 0.6`);
                 continue;
             }
-            if (isBuySignal && (bidVol / askVol) < 0.6) {
-                console.log(`[ORDERBOOK SHIELD] Skipping auto LONG for ${symbol}: Ask density (${askVol.toFixed(0)}) dominates Bid (${bidVol.toFixed(0)}), ratio ${(bidVol/askVol).toFixed(2)} < 0.6`);
+            if (isBuySignal && (bidVol / askVol) < 0.85) {
+                console.log(`[ORDERBOOK SHIELD] Skipping auto LONG for ${symbol}: Ask density (${askVol.toFixed(0)}) dominates Bid (${bidVol.toFixed(0)}), ratio ${(bidVol/askVol).toFixed(2)} < 0.85 (strict buyer support required)`);
                 continue;
             }
         }
@@ -743,6 +743,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                 { targetPrice: stage4Target, targetPercent: Number(tpLadderVirtual.tp4DistancePct.toFixed(2)), closeRatio: autoRatios[3], executed: false }
                             ],
                             gridOrders: (() => {
+                                if ((globalSettings as any).isDcaEnabled !== true || (globalSettings.dcaMultiplierFactor ?? 1.0) <= 0) {
+                                    return [];
+                                }
                                 const cleanSym = (symbol || '').replace(/[\/:]/g, '');
                                 const assetAtr = currentSig?.atr ? Number(currentSig.atr) : (GLOBAL_ATR[cleanSym] || (optimizedEntryPrice * 0.015));
                                 const dcaStepPct = Math.max(0.012, (assetAtr / optimizedEntryPrice) * 0.8);
@@ -1239,6 +1242,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                             { targetPrice: stage4Target, targetPercent: Number(tpLadderReal.tp4DistancePct.toFixed(2)), closeRatio: realRatios[3], executed: false }
                                         ],
                                         gridOrders: (() => {
+                                            if ((globalSettings as any).isDcaEnabled !== true || (globalSettings.dcaMultiplierFactor ?? 1.0) <= 0) {
+                                                return [];
+                                            }
                                             const dcaMultFactor = Math.min(1.0, globalSettings.dcaMultiplierFactor || 1.0);
                                             return [
                                                 { price: formatNumericPrice(price + (validatedRealIntent.side === 'SHORT' ? 1 : -1) * (slDistVal * 0.5)), amount: Number((step1Amount * 0.20 * dcaMultFactor).toFixed(1)), executed: false },

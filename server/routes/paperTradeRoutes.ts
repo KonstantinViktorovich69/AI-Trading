@@ -245,7 +245,7 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
 
   // POST /api/paper-trade/open
   router.post('/paper-trade/open', async (req: Request, res: Response) => {
-    let { symbol, exchange, entryPrice, amount, leverage, side, signalAiScore, mode, takeProfit, stopLoss, gridOrders, isAutoLearning, isReal } = req.body;
+    let { symbol, exchange, entryPrice, amount, leverage, side, signalAiScore, mode, takeProfit, stopLoss, tpStages, gridOrders, isAutoLearning, isReal } = req.body;
     if (isReal) {
       isAutoLearning = false;
     }
@@ -420,6 +420,50 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
         ctx.saveBalanceDB();
       }
 
+      const effectiveSide = (side || 'SHORT').toUpperCase();
+      let finalStopLoss = stopLoss;
+      const slDistPct = finalEntryPrice > 0 && finalStopLoss > 0
+        ? Math.abs(finalStopLoss - finalEntryPrice) / finalEntryPrice
+        : 0;
+      const isSlWrongSide = (effectiveSide === 'SHORT' && finalStopLoss <= finalEntryPrice) ||
+                            (effectiveSide === 'LONG' && finalStopLoss >= finalEntryPrice);
+      
+      // Structural Stop-Loss Guard:
+      // Limits stopLoss to a maximum of 2.2% from entry (matching structuralExitLevels MAX_SL_PCT = 0.022)
+      // to guarantee that on 5x-10x leverage the position hits SL instead of the -18% emergency liquidation guard.
+      const maxAllowedSlPct = 0.022; // 2.2% max price distance
+      const defaultSlPct = 0.015;    // 1.5% fallback
+      if (!finalStopLoss || finalStopLoss <= 0 || isSlWrongSide || slDistPct > maxAllowedSlPct) {
+        const clampedPct = (slDistPct > maxAllowedSlPct) ? maxAllowedSlPct : defaultSlPct;
+        finalStopLoss = effectiveSide === 'SHORT'
+          ? Number((finalEntryPrice * (1 + clampedPct)).toFixed(5))
+          : Number((finalEntryPrice * (1 - clampedPct)).toFixed(5));
+        console.log(`[SL STRUCTURAL CLAMP] Corrected stopLoss for ${symbol} (${effectiveSide}) from ${stopLoss} to $${finalStopLoss} (${(clampedPct * 100).toFixed(1)}%)`);
+      }
+
+      // 3-Level Staged Take-Profit Ladder (TP1: 1.2% / ratio 0.35, TP2: 2.5% / ratio 0.35, TP3: 4.5% / ratio 0.30)
+      let finalTpStages = tpStages;
+      if (!finalTpStages || !Array.isArray(finalTpStages) || finalTpStages.length === 0) {
+        const dir = effectiveSide === 'SHORT' ? -1 : 1;
+        const tp1Price = Number((finalEntryPrice * (1 + dir * 0.012)).toFixed(5));
+        const tp2Price = Number((finalEntryPrice * (1 + dir * 0.025)).toFixed(5));
+        const tp3Price = Number((finalEntryPrice * (1 + dir * 0.045)).toFixed(5));
+        finalTpStages = [
+          { targetPrice: tp1Price, targetPercent: 1.2, closeRatio: 0.35, executed: false },
+          { targetPrice: tp2Price, targetPercent: 2.5, closeRatio: 0.35, executed: false },
+          { targetPrice: tp3Price, targetPercent: 4.5, closeRatio: 0.30, executed: false }
+        ];
+      }
+
+      let finalTakeProfit = takeProfit;
+      if (!finalTakeProfit || finalTakeProfit <= 0) {
+        finalTakeProfit = finalTpStages[finalTpStages.length - 1].targetPrice;
+      }
+
+      // Safe DCA: If DCA is disabled in settings, clear automatic grid orders
+      const isDcaGloballyEnabled = (globalSettings as any)?.isDcaEnabled === true;
+      const effectiveGridOrders = isDcaGloballyEnabled ? finalGridOrders : [];
+
       const newTrade: any = {
         id: tradeId,
         symbol,
@@ -430,15 +474,16 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
         margin: requiredMargin,
         initialMargin: requiredMargin,
         leverage: finalLeverage,
-        side: side || 'SHORT',
+        side: effectiveSide,
         status: 'OPEN',
         openTime: Date.now(),
         signalAiScore: signalAiScore || 0,
         history: [{ time: Date.now(), type: 'OPEN', price: finalEntryPrice, amount: finalAmount, margin: requiredMargin }],
         mode: mode || 'MANUAL',
-        takeProfit,
-        stopLoss,
-        gridOrders: finalGridOrders,
+        takeProfit: finalTakeProfit,
+        stopLoss: finalStopLoss,
+        tpStages: finalTpStages,
+        gridOrders: effectiveGridOrders,
         isReal: isReal || false
       };
       newTrade.correlationId = tradeId;

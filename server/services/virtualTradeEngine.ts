@@ -492,10 +492,10 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
     }
 
-    // Scalping Time-Stop Safeguard: Auto-close positions stagnant in flat/loss > 3.5h
+    // Scalping Time-Stop Safeguard: Auto-close positions stagnant in flat/loss > 3.0h
     const tradeCreatedTime = trade.openTime || (trade as any).createdAt || Date.now();
     const tradeAgeHours = (Date.now() - tradeCreatedTime) / (3600 * 1000);
-    const configuredStagnationHours = (globalSettings as any).timeoutStagnationHours ?? 3.5;
+    const configuredStagnationHours = (globalSettings as any).timeoutStagnationHours ?? 3.0;
     // ЛЕГАСИ-ЛОГИКА: ранее условие (maxUnleveragedReached < 1.0) блокировало закрытие сделок, которые имели импульс в первый час, но затем часами зависли в боковике около нуля.
     // Если позиция стагнирует дольше тайм-аута и находится около нуля/в убытке (pnlNow <= 1.0), закрываем для высвобождения торгового слота:
     if (tradeAgeHours >= configuredStagnationHours && pnlNow <= 1.0 && !shouldClose) {
@@ -504,7 +504,8 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       (trade as any).closeReasonCode = 'TIMEOUT_SAFETY';
     }
 
-    // Auto-Average logic (Grid DCA) with Strict Stop-Loss, Cooldown, and Margin Cap Guards
+    // Auto-Average logic (Grid DCA) with Strict Stop-Loss, Cooldown, Margin Cap, and Settings Guards
+    const isDcaAllowed = (globalSettings as any)?.isDcaEnabled !== false && ((globalSettings as any)?.dcaMultiplierFactor ?? 1.0) > 0;
     let isPriceInSlZone = false;
     if (trade.stopLoss && trade.stopLoss > 0) {
       if (trade.side === 'SHORT' && currentPrice >= trade.stopLoss * 0.995) {
@@ -514,7 +515,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
     }
 
-    if (!shouldClose && !isPriceInSlZone && trade.gridOrders && trade.gridOrders.length > 0) {
+    if (!shouldClose && isDcaAllowed && !isPriceInSlZone && trade.gridOrders && trade.gridOrders.length > 0) {
       const lastActionTime = (trade as any).lastGridTime || 0;
       const cooldownElapsed = lastActionTime === 0 ? true : (Date.now() - lastActionTime) >= 120000;
 
