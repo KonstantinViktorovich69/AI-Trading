@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import { classifyMarketRegime } from './marketRegimeService.ts';
 import { DecisionTraceService } from './decisionTraceService.ts';
+import { isPatternBlacklisted } from './signalEngine.ts';
 import type { MarketRegime } from '../types/trading.ts';
 
 export interface MarketSignalScannerContext {
@@ -27,6 +28,23 @@ export interface MarketSignalScannerContext {
   emitSignalsUpdated: () => void;
   runAutopilotAndVirtualTradeEntry?: () => Promise<void>;
   isMainThread: boolean;
+}
+
+/**
+ * Традиционные фондовые токены/акции США, которые не должны сканироваться крипто-скальпером
+ */
+export const TRADITIONAL_EQUITY_SYMBOLS = new Set([
+  'DELL', 'AAL', 'PYPL', 'CRM', 'ALAB', 'MUU', 'POET', 'QNTX', 'RGTI', 'IONQ',
+  'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'GOOGL', 'META', 'AMD', 'INTC', 'COIN',
+  'MSTR', 'PLTR', 'BABA', 'UVXY', 'SPY', 'QQQ', 'SOXL', 'MSTU', 'NVDL',
+  'DKNG', 'HPE', 'BIIB', 'HOOD', 'UBER', 'DIS', 'NFLX', 'BA', 'NKE', 'MARA',
+  'RIOT', 'CLSK', 'LCID', 'RIVN', 'SOFI', 'SMCI', 'ARM', 'PANW', 'CRWD', 'MRVL', 'SNOW', 'SQ', 'ROKU'
+]);
+
+export function isTraditionalEquitySymbol(symbol: string): boolean {
+  if (!symbol) return false;
+  const base = symbol.split(':')[0].replace('/USDT', '').replace('USDT', '').replace(/[\/:]/g, '').toUpperCase();
+  return TRADITIONAL_EQUITY_SYMBOLS.has(base);
 }
 
 /**
@@ -124,14 +142,20 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
     const GLOBAL_CCXT_TICKERS = ctx.getGlobalCcxtTickers();
     const globalSettings = ctx.getGlobalSettings();
     const symbolsSet = new Set<string>();
-    for (const k of Object.keys(GLOBAL_TRUE_OHLCV)) symbolsSet.add(k);
+    for (const k of Object.keys(GLOBAL_TRUE_OHLCV)) {
+      if (!isTraditionalEquitySymbol(k)) {
+        symbolsSet.add(k);
+      }
+    }
 
-    // Работаем исключительно с тикерами биржи WEEX
+    // Работаем исключительно с крипто-тикерами биржи WEEX (исключая акции)
     const weexTickers = GLOBAL_CCXT_TICKERS['weex'];
     if (weexTickers) {
       for (const sym of Object.keys(weexTickers)) {
         const clean = sym.split(':')[0].replace(/[\/:]/g, '').toUpperCase();
-        if (clean && clean.endsWith('USDT')) symbolsSet.add(clean);
+        if (clean && clean.endsWith('USDT') && !isTraditionalEquitySymbol(clean)) {
+          symbolsSet.add(clean);
+        }
       }
     }
 
@@ -167,6 +191,7 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
     }
 
     for (const cleanSymbol of Array.from(symbolsSet)) {
+      if (isTraditionalEquitySymbol(cleanSymbol)) continue;
       const tickerInfo = cleanToTickerMap.get(cleanSymbol);
       const ticker = tickerInfo?.ticker;
       const symbolWithSlash = tickerInfo?.sym || `${cleanSymbol}/USDT:USDT`;
@@ -218,6 +243,7 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
       const isShortTermBearish = psarStatus1m === 'BEARISH' || dropFromRecentHigh >= 0.8;
       const isQuickLocalSpike = (change >= 3.0 || riseFromLow >= 3.0) && dropFromRecentHigh <= 4.0;
       const isQuickLocalDrop = (change <= -3.0 || dropFromRecentHigh >= 3.0) && riseFromLow <= 4.0;
+      const hasRealOhlcv = !!(rawIndicators && (rawIndicators.sar || rawIndicators.rsi1h || rawIndicators.psarStatus1m));
 
       let matchedPattern = 'None';
       let signalSide: 'SHORT' | 'LONG' | 'NEUTRAL' = 'NEUTRAL';
@@ -228,7 +254,8 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
 
       if (volume > 200) {
         // --- SHORT PATTERNS ---
-        if ((change >= 6.5 || riseFromLow >= 8.0 || isQuickLocalSpike) && (isSarBearishFlipped1m || dropFromRecentHigh >= 0.5)) {
+        // Слив монеты: требует реальных OHLCV, подтвержденного падения SAR, импульса >= 7% и фитиля отбоя
+        if (hasRealOhlcv && (change >= 7.0 || riseFromLow >= 8.0) && isSarBearishFlipped1m && volumeSpike >= 1.5 && (wicks.topPct >= 0.25 || dropFromRecentHigh >= 0.8)) {
           matchedPattern = '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)';
           signalSide = 'SHORT';
           scoreBonus = 16;
@@ -262,7 +289,8 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
           scoreBonus = 16;
         }
         // --- LONG PATTERNS ---
-        else if ((change <= -6.5 || dropFromRecentHigh >= 8.0 || isQuickLocalDrop) && (isSarBullishFlipped1m || riseFromLow >= 0.5)) {
+        // Пролив монеты: требует реальных OHLCV, подтвержденного бычьего SAR, просадки <= -7% и фитиля откупа
+        else if (hasRealOhlcv && (change <= -7.0 || dropFromRecentHigh >= 8.0) && isSarBullishFlipped1m && volumeSpike >= 1.5 && (wicks.bottomPct >= 0.25 || riseFromLow >= 0.8)) {
           matchedPattern = '💥 ПРОЛИВ (SAR Bottom Reversal)';
           signalSide = 'LONG';
           scoreBonus = 16;
@@ -300,25 +328,30 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
       const blockLocks: string[] = [];
       const blockDetails: string[] = [];
 
-      const isVerifiedReversal = matchedPattern.includes('SAR') || 
-                                 matchedPattern.includes('Spire') || 
-                                 matchedPattern.includes('False Breakout') || 
-                                 matchedPattern.includes('Retest') || 
-                                 matchedPattern.includes('ИДЕАЛЬНЫЙ') || 
-                                 matchedPattern.includes('EXTREME') || 
-                                 matchedPattern.includes('Exhaustion') || 
-                                 matchedPattern.includes('СЛИВ') || 
-                                 matchedPattern.includes('ПРОЛИВ');
+      // 0. Проверка блэклиста паттернов
+      if (matchedPattern && matchedPattern !== 'None') {
+        const blCheck = isPatternBlacklisted(matchedPattern);
+        if (blCheck.blacklisted) {
+          blockLocks.push("Blacklist");
+          blockDetails.push(`Паттерн "${matchedPattern}" в черном списке: ${blCheck.reason}`);
+        }
+      }
 
       // 1. Фильтр 1h EMA-200 (симметричный для SHORT и LONG)
       const ema200_1hVal = cachedIndicators.ema200_1h;
       if (globalSettings.isEma200FilterEnabled !== false && ema200_1hVal) {
-        if (signalSide === 'SHORT' && tickerPrice > ema200_1hVal * 1.05 && !isVerifiedReversal) {
-          blockLocks.push("EMA200");
-          blockDetails.push(`Цена выше 1h EMA-200 (${ema200_1hVal.toFixed(4)}) без подтвержденного разворота`);
-        } else if (signalSide === 'LONG' && tickerPrice < ema200_1hVal * 0.95 && !isVerifiedReversal) {
-          blockLocks.push("EMA200");
-          blockDetails.push(`Цена ниже 1h EMA-200 (${ema200_1hVal.toFixed(4)}) без подтвержденного разворота`);
+        if (signalSide === 'SHORT' && tickerPrice > ema200_1hVal * 1.05) {
+          const isConfirmedStructuralShort = wicks.topPct >= 0.40 && volumeSpike >= 2.0;
+          if (!isConfirmedStructuralShort) {
+            blockLocks.push("EMA200");
+            blockDetails.push(`Цена выше 1h EMA-200 (${ema200_1hVal.toFixed(4)}) без подтвержденного структурного фитиля`);
+          }
+        } else if (signalSide === 'LONG' && tickerPrice < ema200_1hVal * 0.95) {
+          const isConfirmedStructuralLong = wicks.bottomPct >= 0.40 && volumeSpike >= 2.0;
+          if (!isConfirmedStructuralLong) {
+            blockLocks.push("EMA200");
+            blockDetails.push(`Цена ниже 1h EMA-200 (${ema200_1hVal.toFixed(4)}) без подтвержденного структурного дна`);
+          }
         }
       }
 
@@ -336,17 +369,17 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
         blockDetails.push("Снизу находится зона медвежьего FVG давления");
       }
 
-      // 3. Фильтр Снятия Ликвидности (симметричный для SHORT и LONG)
+      // 3. Фильтр Снятия Ликвидности (симметричный для SHORT и LONG без фиктивных обходов)
       const sweepWickThreshold = globalSettings.liquiditySweepWickThreshold ?? 0.25;
-      const isLiquiditySweepConfirmed = globalSettings.isLiquiditySweepFilterEnabled === false || (
-        signalSide === 'SHORT'
-          ? !!(cachedIndicators.isLiquiditySweep || cachedIndicators.isLiquiditySweep1h || cachedIndicators.isLiquiditySweep5m || wicks.topPct >= sweepWickThreshold || isVerifiedReversal)
-          : signalSide === 'LONG'
-          ? !!(cachedIndicators.isLiquiditySweepLow || cachedIndicators.isLiquiditySweepLow1h || cachedIndicators.isLiquiditySweepLow5m || wicks.bottomPct >= sweepWickThreshold || isVerifiedReversal)
-          : !!(cachedIndicators.isLiquiditySweep || cachedIndicators.isLiquiditySweepLow || cachedIndicators.isLiquiditySweep1h || cachedIndicators.isLiquiditySweepLow1h || cachedIndicators.isLiquiditySweep5m || cachedIndicators.isLiquiditySweepLow5m || isVerifiedReversal)
-      );
+      const isActualSweepConfirmed = signalSide === 'SHORT'
+        ? !!(cachedIndicators.isLiquiditySweep || cachedIndicators.isLiquiditySweep1h || cachedIndicators.isLiquiditySweep5m || wicks.topPct >= sweepWickThreshold)
+        : signalSide === 'LONG'
+        ? !!(cachedIndicators.isLiquiditySweepLow || cachedIndicators.isLiquiditySweepLow1h || cachedIndicators.isLiquiditySweepLow5m || wicks.bottomPct >= sweepWickThreshold)
+        : false;
 
-      if (globalSettings.isLiquiditySweepFilterEnabled !== false && !isLiquiditySweepConfirmed) {
+      const isLiquiditySweepConfirmed = globalSettings.isLiquiditySweepFilterEnabled === false || isActualSweepConfirmed;
+
+      if (globalSettings.isLiquiditySweepFilterEnabled !== false && !isActualSweepConfirmed) {
         if (signalSide === 'SHORT') {
           blockLocks.push("Sweep/Wick");
           blockDetails.push(`Нет подтвержденного Свипа ликвидности сверху (фитиль ${(wicks.topPct * 100).toFixed(0)}% < ${(sweepWickThreshold * 100).toFixed(0)}%)`);
@@ -389,9 +422,9 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
           topWickPct: wicks.topPct,
           bottomWickPct: wicks.bottomPct,
           vwapDistancePct: vwapInfo?.distancePct,
-          sarReversal: true,
-          bosChoch: isLiquiditySweepConfirmed,
-          liquiditySweep: isLiquiditySweepConfirmed
+          sarReversal: !!(isSarBearishFlipped1m || isSarBullishFlipped1m),
+          bosChoch: isActualSweepConfirmed && (wicks.topPct >= 0.35 || wicks.bottomPct >= 0.35),
+          liquiditySweep: isActualSweepConfirmed
         },
         rawAgentScores: {
           scout: {
@@ -400,18 +433,30 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
             vote: signalSide === 'SHORT' ? 'APPROVE_SHORT' : (signalSide === 'LONG' ? 'APPROVE_LONG' : 'HOLD')
           },
           bull: {
-            score: signalSide === 'LONG' ? baseScore : Math.max(20, 100 - baseScore),
-            reason: signalSide === 'LONG' ? `Бычий импульс с RSI ${trueRsi.toFixed(1)}` : 'Покупательских импульсов не замечено',
-            vote: signalSide === 'LONG' ? 'APPROVE_LONG' : 'REJECT'
+            score: signalSide === 'LONG'
+              ? baseScore
+              : (marketRegime === 'TREND_UP' && trueRsi < 65 && !isActualSweepConfirmed ? 75 : Math.max(50, 100 - baseScore)),
+            reason: signalSide === 'LONG'
+              ? `Бычий импульс с RSI ${trueRsi.toFixed(1)}`
+              : (marketRegime === 'TREND_UP' && trueRsi < 65 && !isActualSweepConfirmed ? 'Сильное восходящее давление покупателей' : 'Покупательские импульсы иссякли (сопротивление покупателей отсутствует)'),
+            vote: signalSide === 'LONG'
+              ? 'APPROVE_LONG'
+              : (marketRegime === 'TREND_UP' && trueRsi < 65 && !isActualSweepConfirmed ? 'REJECT' : 'HOLD')
           },
           bear: {
-            score: signalSide === 'SHORT' ? baseScore : Math.max(20, 100 - baseScore),
-            reason: signalSide === 'SHORT' ? `Медвежий сетап: фитиль ${(wicks.topPct * 100).toFixed(1)}%` : 'Продажи иссякли',
-            vote: signalSide === 'SHORT' ? 'APPROVE_SHORT' : 'REJECT'
+            score: signalSide === 'SHORT'
+              ? baseScore
+              : (marketRegime === 'TREND_DOWN' && trueRsi > 35 && !isActualSweepConfirmed ? 75 : Math.max(50, 100 - baseScore)),
+            reason: signalSide === 'SHORT'
+              ? `Медвежий сетап: фитиль ${(wicks.topPct * 100).toFixed(1)}%`
+              : (marketRegime === 'TREND_DOWN' && trueRsi > 35 && !isActualSweepConfirmed ? 'Активное давление продавцов без признаков разворота' : 'Продажи иссякли (давление продавцов отсутствует)'),
+            vote: signalSide === 'SHORT'
+              ? 'APPROVE_SHORT'
+              : (marketRegime === 'TREND_DOWN' && trueRsi > 35 && !isActualSweepConfirmed ? 'REJECT' : 'HOLD')
           },
           liquidity: {
-            score: isLiquiditySweepConfirmed ? 90 : 65,
-            reason: isLiquiditySweepConfirmed ? 'Снятие ликвидности подтверждено' : 'Умеренный профиль ликвидности',
+            score: isActualSweepConfirmed ? 90 : 65,
+            reason: isActualSweepConfirmed ? 'Снятие ликвидности подтверждено' : 'Умеренный профиль ликвидности',
             vote: signalSide === 'SHORT' ? 'APPROVE_SHORT' : (signalSide === 'LONG' ? 'APPROVE_LONG' : 'HOLD')
           },
           risk: {
@@ -426,7 +471,7 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
           // Dynamic adaptive required score based on market regime and trend alignment:
           const isTrendAligned = (signalSide === 'LONG' && marketRegime === 'TREND_UP') ||
                                  (signalSide === 'SHORT' && marketRegime === 'TREND_DOWN') ||
-                                 (isLiquiditySweepConfirmed && isVerifiedReversal);
+                                 isActualSweepConfirmed;
           if (isTrendAligned) {
             return 68; // Calibrated for high-conviction trend-aligned setups
           }

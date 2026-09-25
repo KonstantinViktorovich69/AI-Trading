@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue, useCallback, lazy, Suspense } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Info, Bell, Calculator, TrendingDown, TrendingUp, AlertCircle, AlertTriangle, Rocket, HelpCircle, Play, Bot, Send, RefreshCw, Brain, ShieldAlert, CheckCircle2, Smartphone, Activity, ExternalLink, Filter, Search, ChevronDown, Check, Plus, Settings, X, History, Volume2, VolumeX, Star, Zap, Lightbulb, BookOpen, Loader2, Clock, ArrowRight, Eye, EyeOff, Archive, FolderDown, FolderUp, Sparkles, Sliders, Maximize2, Minimize2, BarChart3, Edit, Wifi, WifiOff } from 'lucide-react';
+import { Info, Bell, Calculator, TrendingDown, TrendingUp, AlertCircle, AlertTriangle, Rocket, HelpCircle, Play, Bot, Send, RefreshCw, Brain, ShieldAlert, CheckCircle2, Smartphone, Activity, ExternalLink, Filter, Search, ChevronDown, Check, Plus, Settings, X, History, Volume2, VolumeX, Star, Zap, Lightbulb, BookOpen, Loader2, Clock, ArrowRight, Eye, EyeOff, Archive, FolderDown, FolderUp, Sparkles, Sliders, Maximize2, Minimize2, BarChart3, Edit, Wifi, WifiOff, Layers } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { cn } from '../lib/utils';
@@ -137,6 +137,7 @@ interface PaperTrade {
   takeProfit?: number;
   stopLoss?: number;
   smartDca?: number[];
+  tpStages?: Array<{ targetPrice?: number; targetPnlPct?: number; closeRatio: number; executed?: boolean }>;
 }
 
 interface ActiveTradeItemProps {
@@ -147,7 +148,7 @@ interface ActiveTradeItemProps {
   handleChangeTradeMode: (tradeId: string, mode: string) => void | Promise<void>;
   handleLeverageChange: (tradeId: string, leverage: number) => void | Promise<void>;
   handleAverageTrade: (tradeId: string, amount: number) => void | Promise<void>;
-  handleSlTpChange: (tradeId: string, sl: number | null, tp: number | null) => void | Promise<void>;
+  handleSlTpChange: (tradeId: string, sl: number | null, tp: number | null, tpStages?: any[]) => void | Promise<void>;
   activeTerminalTradeId: string | null;
   setActiveTerminalTradeId: (id: string | null | ((prev: string | null) => string | null)) => void;
   key?: string | number;
@@ -477,6 +478,65 @@ const ActiveTradeItem = ({
   useEffect(() => {
     setLocalTP(trade.takeProfit ? trade.takeProfit.toString() : '');
   }, [trade.takeProfit]);
+
+  // Каскадные стадии Take-Profit (TP1, TP2, TP3, TP4)
+  const [activeTpTab, setActiveTpTab] = useState<number>(0); // 0 = TP1, 1 = TP2, 2 = TP3, 3 = TP4, 4 = СВОДКА
+  const [showCascadeTp, setShowCascadeTp] = useState<boolean>(Boolean(trade.tpStages && trade.tpStages.length > 0));
+
+  const defaultTpStages = useMemo(() => {
+    if (trade.tpStages && Array.isArray(trade.tpStages) && trade.tpStages.length > 0) {
+      return trade.tpStages.map(st => ({
+        targetPrice: Number(st.targetPrice || 0),
+        targetPnlPct: st.targetPnlPct !== undefined ? Number(st.targetPnlPct) : undefined,
+        closeRatio: Number(st.closeRatio || 0.25),
+        executed: Boolean(st.executed)
+      }));
+    }
+    const ep = Number(trade.entryPrice || 1);
+    const isShort = trade.side === 'SHORT';
+    const sign = isShort ? -1 : 1;
+    const finalTp = trade.takeProfit ? Number(trade.takeProfit) : (isShort ? ep * 0.94 : ep * 1.06);
+    const dist = Math.abs(finalTp - ep) || (ep * 0.06);
+
+    return [
+      { targetPrice: Number((ep + sign * dist * 0.25).toFixed(5)), closeRatio: 0.25, executed: false },
+      { targetPrice: Number((ep + sign * dist * 0.50).toFixed(5)), closeRatio: 0.25, executed: false },
+      { targetPrice: Number((ep + sign * dist * 0.75).toFixed(5)), closeRatio: 0.25, executed: false },
+      { targetPrice: Number(finalTp.toFixed(5)), closeRatio: 0.25, executed: false }
+    ];
+  }, [trade.tpStages, trade.entryPrice, trade.takeProfit, trade.side]);
+
+  const [localTpStages, setLocalTpStages] = useState(defaultTpStages);
+
+  useEffect(() => {
+    if (trade.tpStages && Array.isArray(trade.tpStages) && trade.tpStages.length > 0) {
+      setLocalTpStages(trade.tpStages.map(st => ({
+        targetPrice: Number(st.targetPrice || 0),
+        targetPnlPct: st.targetPnlPct !== undefined ? Number(st.targetPnlPct) : undefined,
+        closeRatio: Number(st.closeRatio || 0.25),
+        executed: Boolean(st.executed)
+      })));
+      setShowCascadeTp(true);
+    }
+  }, [trade.tpStages]);
+
+  const handleUpdateStage = (index: number, updates: Partial<{ targetPrice: number; closeRatio: number; executed: boolean }>) => {
+    setLocalTpStages(prev => {
+      const copy = [...prev];
+      if (copy[index]) {
+        copy[index] = { ...copy[index], ...updates };
+      }
+      return copy;
+    });
+  };
+
+  const handleApplyQuickPctToStage = (index: number, pctGain: number) => {
+    if (!trade.entryPrice || !trade.leverage) return;
+    const isShort = trade.side === 'SHORT';
+    const factor = (pctGain / 100) / trade.leverage;
+    const targetPrice = isShort ? trade.entryPrice * (1 - factor) : trade.entryPrice * (1 + factor);
+    handleUpdateStage(index, { targetPrice: Number(targetPrice.toFixed(5)) });
+  };
 
   const getPriceFromPnlPct = (pct: number, isTp: boolean) => {
     if (!trade.entryPrice || !trade.leverage) return 0;
@@ -867,6 +927,214 @@ const ActiveTradeItem = ({
                        </div>
                      </div>
 
+                     {/* Cascade TP Tabs & Configuration */}
+                     <div className="border-t border-zinc-800/80 pt-2.5 flex flex-col gap-2">
+                       <div className="flex items-center justify-between">
+                         <button
+                           type="button"
+                           onClick={() => setShowCascadeTp(!showCascadeTp)}
+                           className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors"
+                         >
+                           <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                           <span>Каскадный Take Profit (TP1 - TP4)</span>
+                           <span className="text-[8px] px-1.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-indigo-300 font-mono font-semibold">
+                             {localTpStages.filter(s => s.executed).length}/4 исполнено
+                           </span>
+                           <ChevronDown className={cn("w-3 h-3 transition-transform text-zinc-400", showCascadeTp ? "rotate-180" : "")} />
+                         </button>
+                         {showCascadeTp && (
+                           <span className="text-[8px] text-zinc-500 font-mono">Лестница 4 стадий</span>
+                         )}
+                       </div>
+
+                       {showCascadeTp && (
+                         <div className="flex flex-col gap-2 bg-zinc-900/60 p-2.5 rounded-lg border border-zinc-800/80 mt-1">
+                           {/* Tabs Navigation */}
+                           <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800/60">
+                             {[0, 1, 2, 3].map((idx) => {
+                               const stage = localTpStages[idx];
+                               const isDone = stage?.executed;
+                               const isCurrent = activeTpTab === idx;
+                               return (
+                                 <button
+                                   key={`tp-tab-${idx}`}
+                                   type="button"
+                                   onClick={() => setActiveTpTab(idx)}
+                                   className={cn(
+                                     "flex-1 py-1 px-1.5 rounded text-[9px] font-bold transition-all flex items-center justify-center gap-1",
+                                     isCurrent
+                                       ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm"
+                                       : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                                   )}
+                                 >
+                                   <span>TP{idx + 1}</span>
+                                   {isDone && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400 shrink-0" />}
+                                 </button>
+                               );
+                             })}
+                             <button
+                               type="button"
+                               onClick={() => setActiveTpTab(4)}
+                               className={cn(
+                                 "py-1 px-2 rounded text-[9px] font-bold transition-all",
+                                 activeTpTab === 4
+                                   ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm"
+                                   : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
+                               )}
+                             >
+                               Сводка
+                             </button>
+                           </div>
+
+                           {/* Active Tab Body */}
+                           {activeTpTab >= 0 && activeTpTab <= 3 && (
+                             <div className="flex flex-col gap-2 mt-1 text-xs">
+                               {(() => {
+                                 const stage = localTpStages[activeTpTab] || { targetPrice: 0, closeRatio: 0.25, executed: false };
+                                 const pnlPct = getPnlPctFromPrice(stage.targetPrice, true);
+                                 return (
+                                   <>
+                                     <div className="flex items-center justify-between">
+                                       <span className="text-[10px] font-bold text-zinc-300 flex items-center gap-1">
+                                         Цель TP{activeTpTab + 1}:
+                                         <span className="font-mono text-emerald-400">
+                                           ${stage.targetPrice || 0}
+                                         </span>
+                                       </span>
+                                       <div className="flex items-center gap-1.5">
+                                         <span className={cn(
+                                           "text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase",
+                                           stage.executed 
+                                             ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" 
+                                             : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                                         )}>
+                                           {stage.executed ? "Исполнен ✅" : "Ожидание ⏳"}
+                                         </span>
+                                         <button
+                                           type="button"
+                                           onClick={() => handleUpdateStage(activeTpTab, { executed: !stage.executed })}
+                                           className="text-[8px] text-zinc-500 hover:text-zinc-300 underline"
+                                         >
+                                           {stage.executed ? "Сброс" : "Отметить"}
+                                         </button>
+                                       </div>
+                                     </div>
+
+                                     <div className="grid grid-cols-2 gap-2">
+                                       <div>
+                                         <label className="text-[8px] text-zinc-500 uppercase tracking-wider mb-1 block">
+                                           Цена выхода ($)
+                                         </label>
+                                         <input
+                                           type="number"
+                                           step="0.00001"
+                                           value={stage.targetPrice || ''}
+                                           onChange={(e) => handleUpdateStage(activeTpTab, { targetPrice: Number(e.target.value) })}
+                                           className="w-full bg-zinc-950 border border-zinc-800 rounded px-2 py-1 text-xs text-white font-mono"
+                                           placeholder="0.00"
+                                         />
+                                         <div className="text-[8px] text-zinc-500 font-mono mt-0.5">
+                                           {stage.targetPrice > 0 ? (
+                                             <span className={pnlPct >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                                               ~ {pnlPct >= 0 ? `+${pnlPct.toFixed(1)}%` : `${pnlPct.toFixed(1)}%`} PnL
+                                             </span>
+                                           ) : (
+                                             <span>не задана</span>
+                                           )}
+                                         </div>
+                                       </div>
+
+                                       <div>
+                                         <label className="text-[8px] text-zinc-500 uppercase tracking-wider mb-1 block">
+                                           Закрыть объем
+                                         </label>
+                                         <div className="flex gap-1">
+                                           {[0.15, 0.25, 0.35, 0.50].map((ratio) => (
+                                             <button
+                                               key={ratio}
+                                               type="button"
+                                               onClick={() => handleUpdateStage(activeTpTab, { closeRatio: ratio })}
+                                               className={cn(
+                                                 "flex-1 py-1 rounded text-[8px] font-mono font-bold border transition-colors",
+                                                 Math.abs((stage.closeRatio || 0.25) - ratio) < 0.01
+                                                   ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                                                   : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:border-zinc-700"
+                                               )}
+                                             >
+                                               {Math.round(ratio * 100)}%
+                                             </button>
+                                           ))}
+                                         </div>
+                                         <div className="text-[8px] text-zinc-500 font-mono mt-0.5 text-right">
+                                           Текущая доля: {Math.round((stage.closeRatio || 0.25) * 100)}%
+                                         </div>
+                                       </div>
+                                     </div>
+
+                                     {/* Quick Preset Buttons */}
+                                     <div className="flex items-center gap-1.5 pt-1 border-t border-zinc-800/40">
+                                       <span className="text-[8px] text-zinc-500 uppercase font-mono">Шаг профита:</span>
+                                       <div className="flex gap-1 flex-1">
+                                         {[3, 6, 10, 15].map((pct) => (
+                                           <button
+                                             key={pct}
+                                             type="button"
+                                             onClick={() => handleApplyQuickPctToStage(activeTpTab, pct)}
+                                             className="flex-1 py-0.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 rounded text-[8px] font-mono text-emerald-400 font-bold transition-colors"
+                                           >
+                                             +{pct}%
+                                           </button>
+                                         ))}
+                                       </div>
+                                     </div>
+                                   </>
+                                 );
+                               })()}
+                             </div>
+                           )}
+
+                           {/* Overview Tab */}
+                           {activeTpTab === 4 && (
+                             <div className="flex flex-col gap-1.5 mt-1">
+                               <div className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider mb-0.5">
+                                 Лестница каскадной фиксации прибыли:
+                                </div>
+                               <div className="grid grid-cols-4 gap-1.5">
+                                 {localTpStages.map((st, i) => {
+                                   const pnl = getPnlPctFromPrice(st.targetPrice, true);
+                                   return (
+                                     <div
+                                       key={`stage-ov-${i}`}
+                                       className={cn(
+                                         "p-1.5 rounded-lg border flex flex-col text-[8px] font-mono",
+                                         st.executed
+                                           ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-300"
+                                           : "bg-zinc-950/60 border-zinc-800/60 text-zinc-300"
+                                       )}
+                                     >
+                                       <div className="flex items-center justify-between font-bold">
+                                         <span>TP{i + 1}</span>
+                                         <span>{Math.round((st.closeRatio || 0.25) * 100)}%</span>
+                                       </div>
+                                       <div className="text-zinc-100 font-bold text-[9px] mt-0.5">
+                                         ${st.targetPrice || '-'}
+                                       </div>
+                                       <div className={st.targetPrice > 0 ? "text-emerald-400 mt-0.5" : "text-zinc-500 mt-0.5"}>
+                                         {st.targetPrice > 0 ? `+${pnl.toFixed(1)}%` : '-'}
+                                       </div>
+                                       <div className="mt-1 text-[7px] uppercase font-bold text-zinc-500">
+                                         {st.executed ? "✅ Закрыт" : "⏳ Ждет"}
+                                       </div>
+                                     </div>
+                                   );
+                                 })}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+                       )}
+                     </div>
+
                      <button
                        onClick={() => {
                          const slVal = localSL && !isNaN(Number(localSL)) 
@@ -875,11 +1143,11 @@ const ActiveTradeItem = ({
                          const tpVal = localTP && !isNaN(Number(localTP)) 
                            ? (tpMode === 'PERCENT' ? getPriceFromPnlPct(Number(localTP), true) : Number(localTP))
                            : null;
-                         handleSlTpChange(trade.id, slVal, tpVal);
+                         handleSlTpChange(trade.id, slVal, tpVal, showCascadeTp ? localTpStages : undefined);
                        }}
                        className="w-full py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold transition-all"
                      >
-                       Применить TP / SL
+                       Применить TP / SL / Каскад
                      </button>
                    </div>
 
@@ -1525,7 +1793,52 @@ export function TradingTerminal({
     window.open(url, '_blank', 'width=1400,height=900,status=no,menubar=no,resizable=yes');
   };
 
-  const [paperTrades, setPaperTrades] = useState<any[]>([]);
+  const [paperTrades, setPaperTrades] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('qs_cached_trades');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+  const paperTradesRef = useRef<any[]>(paperTrades);
+  useEffect(() => {
+    paperTradesRef.current = paperTrades;
+    try {
+      // Кэшируем облегченную версию сделок для предотвращения прыжков статистики
+      const lean = paperTrades.slice(0, 500).map(t => {
+        const { decisionTrace, gateDiagnostics, correlationContext, ...rest } = t;
+        return rest;
+      });
+      localStorage.setItem('qs_cached_trades', JSON.stringify(lean));
+    } catch {}
+  }, [paperTrades]);
+
+  // Стабильное слияние сделок по ID: сохраняет полную историю и не дает статистике прыгать
+  const mergeTradesById = useCallback((existing: any[], incoming: any[]) => {
+    if (!incoming || incoming.length === 0) return existing;
+    const map = new Map<string, any>();
+    for (const t of existing) {
+      if (t && t.id) map.set(t.id, t);
+    }
+    for (const t of incoming) {
+      if (t && t.id) {
+        const prev = map.get(t.id);
+        const { decisionTrace, gateDiagnostics, correlationContext, ...leanIncoming } = t;
+        map.set(t.id, prev ? { ...prev, ...leanIncoming } : leanIncoming);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.status === 'OPEN' && b.status !== 'OPEN') return -1;
+      if (a.status !== 'OPEN' && b.status === 'OPEN') return 1;
+      const timeA = a.closeTime || a.openTime || 0;
+      const timeB = b.closeTime || b.openTime || 0;
+      return timeB - timeA;
+    });
+  }, []);
+
   const [realTrades, setRealTrades] = useState<any[]>([]);
   const [virtualBalance, setVirtualBalance] = useState<number>(() => {
     try {
@@ -1674,23 +1987,19 @@ export function TradingTerminal({
               return s;
             });
 
-            // 3. Retain older closed trades for history tabs if missing in light payload
-            const olderClosedTrades = paperTradesRef.current.filter(p => 
-              p.status === 'CLOSED' && !serverTradeIds.has(p.id)
-            );
-
-            const fullSynced = [...syncedTrades, ...locallyAdded, ...olderClosedTrades];
+            // 3. Стабильное слияние: сохраняем все исторические закрытые сделки без потерь и перестановок
+            const merged = mergeTradesById(paperTradesRef.current, [...syncedTrades, ...locallyAdded]);
 
             // Only update paperTrades if list changed
-            const isChanged = fullSynced.length !== paperTradesRef.current.length ||
-              fullSynced.some((t, i) => {
+            const isChanged = merged.length !== paperTradesRef.current.length ||
+              merged.some((t, i) => {
                 const prev = paperTradesRef.current[i];
                 return !prev || prev.id !== t.id || prev.status !== t.status || prev.pnl !== t.pnl || prev.amount !== t.amount;
               });
 
             if (isChanged) {
-              setPaperTrades(fullSynced);
-              paperTradesRef.current = fullSynced;
+              setPaperTrades(merged);
+              paperTradesRef.current = merged;
             }
 
             if (d.balance !== undefined) updateSafeVirtualBalance(d.balance, false);
@@ -2389,11 +2698,12 @@ export function TradingTerminal({
     } catch (e) {}
   };
 
-  const handleSlTpChange = async (tradeId: string, sl: number | null, tp: number | null) => {
+  const handleSlTpChange = async (tradeId: string, sl: number | null, tp: number | null, tpStages?: any[]) => {
     try {
       const body: any = { id: tradeId };
       if (sl !== null) body.stopLoss = sl;
       if (tp !== null) body.takeProfit = tp;
+      if (tpStages !== undefined) body.tpStages = tpStages;
 
       const res = await fetch('/api/paper-trade/update-state', {
         method: 'POST', 
@@ -2403,11 +2713,16 @@ export function TradingTerminal({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.success) {
-        if (addToast) addToast('SL/TP успешно обновлены', 'success');
-        setPaperTrades(prev => prev.map(t => t.id === tradeId ? { ...t, stopLoss: sl ?? undefined, takeProfit: tp ?? undefined } : t));
+        if (addToast) addToast('Параметры выхода (SL / TP / Каскад) успешно сохранены', 'success');
+        setPaperTrades(prev => prev.map(t => t.id === tradeId ? { 
+          ...t, 
+          stopLoss: sl ?? undefined, 
+          takeProfit: tp ?? undefined,
+          tpStages: tpStages !== undefined ? tpStages : t.tpStages
+        } : t));
       }
     } catch (e) {
-      if (addToast) addToast('Ошибка обновления SL/TP', 'error');
+      if (addToast) addToast('Ошибка обновления параметров выхода', 'error');
     }
   };
 
@@ -2872,16 +3187,20 @@ export function TradingTerminal({
                 return s;
               });
 
-              // 3. Keep older closed trades
-              const olderClosedTrades = paperTradesRef.current.filter(p => 
-                p.status === 'CLOSED' && !serverTradeIds.has(p.id)
-              );
-
-              return [...syncedTrades, ...locallyAdded, ...olderClosedTrades];
+              // 3. Стабильное слияние: сохраняем все исторические закрытые сделки без потерь и перестановок
+              return mergeTradesById(paperTradesRef.current, [...syncedTrades, ...locallyAdded]);
             })();
 
-            setPaperTrades(synced);
-            paperTradesRef.current = synced;
+            const isChanged = synced.length !== paperTradesRef.current.length ||
+              synced.some((t, i) => {
+                const prev = paperTradesRef.current[i];
+                return !prev || prev.id !== t.id || prev.status !== t.status || prev.pnl !== t.pnl || prev.amount !== t.amount;
+              });
+
+            if (isChanged) {
+              setPaperTrades(synced);
+              paperTradesRef.current = synced;
+            }
             
             setActiveTerminalTradeId(prev => {
                if (prev) {
@@ -2995,11 +3314,9 @@ export function TradingTerminal({
     };
   }, [reconnectTrigger]);
 
-  const paperTradesRef = useRef(paperTrades);
   const signalsRefInternal = useRef(signals);
   const closingTradesRef = useRef<Set<string>>(new Set());
   const autoPilotCooldownsRef = useRef<Record<string, number>>({});
-  useEffect(() => { paperTradesRef.current = paperTrades; }, [paperTrades]);
   useEffect(() => { signalsRefInternal.current = signals; }, [signals]);
 
   useEffect(() => {

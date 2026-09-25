@@ -137,11 +137,11 @@ function _evaluateExitPolicyInternal(
   const { grossPnlPct, netPnlPct, peakNetPnlPct } = calculateNetPnlPct(trade, market);
 
   const minNormalAutoCloseThreshold = settings.minNormalAutoCloseNetPnlPct ?? 4.0;
-  const minPttpActivation = settings.minPttpActivationNetPnlPct ?? 4.0;
-  const minPttpPeak = settings.minPttpPeakNetPnlPct ?? 6.0;
-  const pttpDropPct = settings.pttpTrailingDropPct ?? 25.0; // % drop from peak
+  const minPttpActivation = settings.minPttpActivationNetPnlPct ?? 12.0;
+  const minPttpPeak = settings.minPttpPeakNetPnlPct ?? 18.0;
+  const pttpDropPct = settings.pttpTrailingDropPct ?? 35.0; // % drop from peak
   const maxLifetimeMs = (settings.maxLifetimeHours ?? 24) * 3600 * 1000;
-  const timeoutProfitMs = (settings.timeoutProfitHours ?? 12) * 3600 * 1000;
+  const timeoutProfitMs = (settings.timeoutProfitHours ?? 18) * 3600 * 1000;
 
   const tradeAgeMs = currentTime - trade.createdAt;
 
@@ -312,9 +312,9 @@ function _evaluateExitPolicyInternal(
 
   // PRIORITY 6: Time-based Scalping Stagnation Timeout Exit
   const enableStagnation = settings.enableStagnationTimeout ?? false;
-  const timeoutStagnationHours = settings.timeoutStagnationHours ?? 3.5;
+  const timeoutStagnationHours = settings.timeoutStagnationHours ?? 8.0;
   const timeoutStagnationMs = timeoutStagnationHours * 3600 * 1000;
-  const maxStagnationPnl = settings.maxStagnationPnlPct ?? 1.0;
+  const maxStagnationPnl = settings.maxStagnationPnlPct ?? 0.5;
 
   if (enableStagnation && tradeAgeMs >= timeoutStagnationMs) {
     // ЛЕГАСИ-ЛОГИКА: ранее требовалось (netPnlPct <= maxStagnationPnl && peakNetPnlPct < 3.5), что блокировало закрытие
@@ -334,8 +334,8 @@ function _evaluateExitPolicyInternal(
   }
 
   // PRIORITY 7: Protective Trailing Stop Adjustment / Exit
-  const trailingTriggerPnl = settings.trailingStopTriggerPnlPct ?? 5.0;
-  const trailingDistancePct = settings.trailingStopDistancePct ?? 1.5;
+  const trailingTriggerPnl = settings.trailingStopTriggerPnlPct ?? 14.0;
+  const trailingDistancePct = settings.trailingStopDistancePct ?? 3.0;
 
   if (peakNetPnlPct >= trailingTriggerPnl) {
     const calcTrailPrice = trade.side === 'LONG'

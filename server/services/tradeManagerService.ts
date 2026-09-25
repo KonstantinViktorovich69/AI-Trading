@@ -204,8 +204,15 @@ export class TradeManagerService {
     
     // 1. Force close paper positions
     const virtualTrades = this.deps.getVirtualTrades();
+    const currentSettings = this.deps.getGlobalSettings ? this.deps.getGlobalSettings() : {};
     for (const t of virtualTrades) {
       if (t.status === 'OPEN') {
+        // Если включен режим виртуального баланса и автопилот, виртуальные позиции никогда не закрываются брейкером
+        if (currentSettings?.isAutopilotEnabled && currentSettings?.tradingMode === 'virtual' && !t.isReal) {
+           console.log(`[CB] Пропуск принудительного закрытия для виртуальной сделки ${t.symbol}: активен режим виртуального баланса и автопилот.`);
+           continue;
+        }
+
         // АДДИТИВНО: Проверяем, если просадка была спровоцирована реальным аккаунтом,
         // мы НЕ трогаем виртуальные/обучающиеся сделки, чтобы не искажать симулятор и RL-обучение.
         if (isRealDrawdown && !t.isReal) {

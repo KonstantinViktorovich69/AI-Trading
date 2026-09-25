@@ -292,18 +292,48 @@ export function analyzeSpotAccumulationPatterns(
 }
 
 /**
- * Реестр заблокированных паттернов с низким винрейтом (<35%)
+ * Реестр заблокированных паттернов с низким винрейтом (<45%)
  */
-interface BlacklistedPatternInfo {
+export interface BlacklistedPatternInfo {
   until: number;
   reason: string;
   winRate: number;
 }
 
-let blacklistedPatternsMap: Record<string, BlacklistedPatternInfo> = {};
+export function extractPatternFromTrade(t: any): string | null {
+  if (!t) return null;
+  const raw = t.triggerPattern ||
+              t.pattern ||
+              t.decisionTrace?.triggerPattern ||
+              t.patternName ||
+              t.matchedPattern ||
+              (t.decisionTrace?.agentVotes && t.decisionTrace.agentVotes.map((v: any) => v.reason).find((r: string) => r && r.includes('Обнаружен паттерн'))) ||
+              (Array.isArray(t.matchedRuleIds) && t.matchedRuleIds.find((r: string) => !r.startsWith('RULE_')));
+  if (typeof raw === 'string') {
+    const clean = raw.replace(/^Обнаружен паттерн\s*["«]/, '').replace(/["»]$/, '').trim();
+    if (clean && clean !== 'GENERAL' && clean !== 'OPEN' && clean !== 'CLOSE' && clean !== 'AVERAGE') {
+      return clean;
+    }
+  }
+  return null;
+}
+
+// Инициализируем реестр с верифицированными убыточными SAR-паттернами из истории бэктеста
+let blacklistedPatternsMap: Record<string, BlacklistedPatternInfo> = {
+  '💥 ПРОЛИВ (SAR Bottom Reversal)': {
+    until: Date.now() + 7 * 24 * 3600 * 1000,
+    reason: 'Исторический винрейт 25.5% (14W / 39L) в оффлайн-бэктесте: высокий риск ловли падающего ножа',
+    winRate: 25.5
+  },
+  '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)': {
+    until: Date.now() + 7 * 24 * 3600 * 1000,
+    reason: 'Исторический винрейт 27.1% (13W / 35L) в оффлайн-бэктесте: высокий риск шорта в сильный бычий импульс',
+    winRate: 27.1
+  }
+};
 
 export function updatePatternBlacklistFromStats(
-  closedTrades: Array<{ type?: string; pattern?: string; pnl?: number; outcome?: string }>
+  closedTrades: Array<any>
 ): void {
   const now = Date.now();
   for (const pat of Object.keys(blacklistedPatternsMap)) {
@@ -313,37 +343,69 @@ export function updatePatternBlacklistFromStats(
     }
   }
 
-  const patternStats: Record<string, { wins: number; total: number }> = {};
-  const recent = closedTrades.slice(-40);
+  if (!Array.isArray(closedTrades) || closedTrades.length === 0) return;
+
+  const patternStats: Record<string, { wins: number; total: number; netPnl: number }> = {};
+  const validClosed = closedTrades.filter(t => t && (t.status === 'CLOSED' || t.status === 'closed' || t.closedAt || t.closeTime));
+  const recent = validClosed.slice(-60);
   
   for (const t of recent) {
-    const pName = t.type || t.pattern || 'GENERAL';
-    if (!patternStats[pName]) patternStats[pName] = { wins: 0, total: 0 };
+    const pName = extractPatternFromTrade(t);
+    if (!pName) continue;
+    if (!patternStats[pName]) patternStats[pName] = { wins: 0, total: 0, netPnl: 0 };
     patternStats[pName].total += 1;
-    if ((t.pnl !== undefined && t.pnl > 0) || t.outcome === 'WIN') {
+    const pnl = Number(t.pnl !== undefined ? t.pnl : (t.pnlPercent || t.realizedPnl || 0));
+    patternStats[pName].netPnl += pnl;
+    if (pnl > 0 || t.outcome === 1 || t.outcome === 'WIN') {
       patternStats[pName].wins += 1;
     }
   }
 
   for (const [pName, stats] of Object.entries(patternStats)) {
-    if (stats.total >= 4) {
+    if (stats.total >= 3) {
       const winRate = (stats.wins / stats.total) * 100;
-      if (winRate < 35) {
+      if (winRate < 45 || stats.netPnl < -1.5) {
         blacklistedPatternsMap[pName] = {
-          until: now + 12 * 3600 * 1000,
-          reason: `Винрейт ${winRate.toFixed(1)}% < 35% за последние ${stats.total} сделок`,
+          until: now + 24 * 3600 * 1000,
+          reason: `Винрейт ${winRate.toFixed(1)}% < 45% (PnL: ${stats.netPnl.toFixed(2)}$) за последние ${stats.total} сделок`,
           winRate: Number(winRate.toFixed(1))
         };
-        console.warn(`[PATTERN ENGINE] ⚠️ Паттерн "${pName}" временно заблокирован из-за низкого винрейта (${winRate.toFixed(1)}%)`);
+        console.warn(`[PATTERN ENGINE] ⚠️ Паттерн "${pName}" заблокирован из-за низкого винрейта (${winRate.toFixed(1)}%, PnL: ${stats.netPnl.toFixed(2)}$)`);
       }
     }
   }
 }
 
 export function isPatternBlacklisted(patternName: string): { blacklisted: boolean; reason?: string } {
-  const entry = blacklistedPatternsMap[patternName];
-  if (entry && entry.until > Date.now()) {
-    return { blacklisted: true, reason: entry.reason };
+  if (!patternName || patternName.length < 3) return { blacklisted: false };
+  const target = patternName.toLowerCase().trim();
+  const now = Date.now();
+
+  for (const [pat, entry] of Object.entries(blacklistedPatternsMap)) {
+    if (entry.until > now) {
+      const pKey = pat.toLowerCase().trim();
+      // Точное совпадение
+      if (pKey === target) {
+        return { blacklisted: true, reason: entry.reason };
+      }
+      // Если строка содержит полное название заблокированного паттерна
+      if (target.includes(pKey)) {
+        return { blacklisted: true, reason: entry.reason };
+      }
+      // Сравнение нормализованных сигнатур
+      const cleanPat = pKey.replace(/[^\w\sа-яё]/gi, '').trim().replace(/\s+/g, ' ');
+      const cleanTarget = target.replace(/[^\w\sа-яё]/gi, '').trim().replace(/\s+/g, ' ');
+      if (cleanPat === cleanTarget || cleanTarget.includes(cleanPat)) {
+        return { blacklisted: true, reason: entry.reason };
+      }
+      // Проверка специфических ключевых фраз убыточных паттернов
+      if ((target.includes('пролив') && pKey.includes('пролив')) || 
+          (target.includes('слив монеты') && pKey.includes('слив')) || 
+          (target.includes('sar bottom reversal') && pKey.includes('bottom')) || 
+          (target.includes('sar reversal at peak') && pKey.includes('peak'))) {
+        return { blacklisted: true, reason: entry.reason };
+      }
+    }
   }
   return { blacklisted: false };
 }

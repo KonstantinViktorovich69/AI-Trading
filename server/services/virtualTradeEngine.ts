@@ -3,6 +3,7 @@ import { getUnifiedTradeClosePnl } from '../quant.ts';
 import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
 import { getOtePendingCandidates, processOtePendingQueue } from './oteVirtualQueue.ts';
+import { updatePatternBlacklistFromStats } from './signalEngine.ts';
 
 export interface VirtualTradeEngineDependencies {
   getVirtualTrades: () => any[];
@@ -236,24 +237,24 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         currentTime: Date.now()
       },
       {
-        minNormalAutoCloseNetPnlPct: 4.0,
-        minPttpActivationNetPnlPct: 4.0,
-        minPttpPeakNetPnlPct: 6.0,
-        pttpTrailingDropPct: 25.0,
-        maxLifetimeHours: (globalSettings as any).maxLifetimeHours ?? 12,
+        minNormalAutoCloseNetPnlPct: 6.0,
+        minPttpActivationNetPnlPct: 12.0,
+        minPttpPeakNetPnlPct: 18.0,
+        pttpTrailingDropPct: 35.0,
+        maxLifetimeHours: (globalSettings as any).maxLifetimeHours ?? 24,
         allowEmergencyMaxLifetime: (globalSettings as any).allowEmergencyMaxLifetime ?? true,
-        timeoutProfitHours: 12,
-        minTimeoutProfitNetPnlPct: 4.0,
+        timeoutProfitHours: 18,
+        minTimeoutProfitNetPnlPct: 6.0,
         enableStagnationTimeout: true,
-        timeoutStagnationHours: (globalSettings as any).timeoutStagnationHours ?? 3.5,
-        maxStagnationPnlPct: 1.0,
+        timeoutStagnationHours: (globalSettings as any).timeoutStagnationHours ?? 8.0,
+        maxStagnationPnlPct: 0.5,
         enableMultiTp: trade.isMultiTp !== false,
         multiTpTargets: trade.tpStages,
         bypassProfitFloorForMultiTp: true,
         bypassProfitFloorForPrimaryTp: true,
         enableTrailingStop: true,
-        trailingStopTriggerPnlPct: 5.0,
-        trailingStopDistancePct: 1.5
+        trailingStopTriggerPnlPct: 14.0,
+        trailingStopDistancePct: 3.0
       }
     );
 
@@ -366,7 +367,9 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
     }
 
-    if ((unleveragedPnlNow >= 0.60 || pnlNow >= 2.00) && !trade.isProtected && !shouldClose) {
+    // Защита позиции в безубыток: активируется только при чистом импульсе >= +1.2% (или +5% с плечом),
+    // давая сделке возможность дышать и не закрываться преждевременно на микро-колебаниях стакана
+    if ((unleveragedPnlNow >= 1.20 || pnlNow >= 5.00) && !trade.isProtected && !shouldClose) {
       const breakevenPrice = trade.side === 'SHORT'
         ? Number((trade.entryPrice * 0.9995).toFixed(5))
         : Number((trade.entryPrice * 1.0005).toFixed(5));
@@ -735,6 +738,13 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
 
       console.log(`[Watchdog] Closing trade ${trade.symbol} at ${currentPrice} reason: ${reason}`);
+
+      // Автоматическое обновление блэклиста паттернов на основе актуальных результатов
+      try {
+        updatePatternBlacklistFromStats(virtualTrades as any);
+      } catch (err: any) {
+        console.warn('[WATCHDOG BLACKLIST REFRESH ERROR]', err?.message || err);
+      }
 
       // Background AI Evaluation
       (async () => {

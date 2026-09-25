@@ -93,7 +93,7 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     fundingShieldLimit: -0.15,
     isDcaEnabled: false,
     dcaMultiplierFactor: 1.0,
-    timeoutStagnationHours: 3.0,
+    timeoutStagnationHours: 8.0,
     isAiPartialCloseRealEnabled: true,
     isEma200FilterEnabled: true,
     isFvgAboveFilterEnabled: true,
@@ -112,7 +112,7 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     maxSameDirectionPositions: 3,
     tradingExecutionMode: 'auto',
     tradingMarketMode: 'HYBRID',
-    excludeBinanceCrossListed: true,
+    excludeBinanceCrossListed: false,
     maxSpotAllocationPct: 10
   };
 }

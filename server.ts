@@ -1529,6 +1529,7 @@ const aiContext: AiRoutesContext = {
   getCcxtExchanges: () => ccxtExchanges,
   getRestBlockedExchanges: () => restBlockedExchanges,
   formatFuturesSymbol: (sym: string, ex: string) => formatFuturesSymbol(sym, ex),
+  isWeexApiSupported: (sym: string) => isWeexApiSupported(sym),
   getGlobalRawOHLCV: () => GLOBAL_RAW_OHLCV,
   getGlobalTrueOHLCV: () => GLOBAL_TRUE_OHLCV
 };

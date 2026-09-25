@@ -122,14 +122,19 @@ export class DecisionTraceService {
     // 3. Структура рынка (Wick, Liquidity Sweep, BOS/ChoCh)
     if (ind.topWickPct !== undefined || ind.bottomWickPct !== undefined) {
       const wick = params.side === 'SHORT' ? (ind.topWickPct || 0) : (ind.bottomWickPct || 0);
+      const isWickSignificant = wick >= 0.20;
+      const isReversalConfirmed = !!(ind.sarReversal || ind.bosChoch || ind.liquiditySweep);
+      const passed = isWickSignificant || (isReversalConfirmed && wick >= 0.03);
       factors.push({
         name: params.side === 'SHORT' ? 'TOP_WICK_REJECTION' : 'BOTTOM_WICK_REJECTION',
         category: 'STRUCTURE',
         value: `${(wick * 100).toFixed(1)}%`,
         weight: 15,
         direction: params.side,
-        passed: wick >= 0.25,
-        notes: `Размер разворотного фитиля: ${(wick * 100).toFixed(1)}% от диапазона свечи`
+        passed,
+        notes: isWickSignificant
+          ? `Размер разворотного фитиля: ${(wick * 100).toFixed(1)}% (отказ от продолжения движения)`
+          : (isReversalConfirmed ? `Разворот подтвержден структурой/SAR при локальном фитиле ${(wick * 100).toFixed(1)}%` : `Недостаточный фитиль ${(wick * 100).toFixed(1)}%`)
       });
     }
 

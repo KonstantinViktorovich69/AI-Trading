@@ -4,6 +4,7 @@ import { Type } from '@google/genai';
 import { RSI } from 'technicalindicators';
 import ccxt, { Exchange } from 'ccxt';
 import { MarketDataHubService, ensureExchangeMarket } from '../services/marketDataHubService.ts';
+import { isWeexApiSupported } from '../data/defaultStrategyKnowledge.ts';
 
 export interface AiRoutesContext {
   getGlobalSettings: () => any;
@@ -41,6 +42,7 @@ export interface AiRoutesContext {
   getCcxtExchanges: () => Record<string, any>;
   getRestBlockedExchanges: () => Set<string>;
   formatFuturesSymbol: (sym: string, ex: string) => string;
+  isWeexApiSupported?: (sym: string) => boolean;
   getGlobalRawOHLCV?: () => Record<string, Record<string, any[][]>>;
   getGlobalTrueOHLCV?: () => Record<string, any>;
 }
@@ -49,17 +51,10 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
   const router = express.Router();
 
   // High-performance isolated CCXT clients for chart requests
-  // Uses enableRateLimit: false and tight timeout so user chart clicks are NEVER queued behind background scanner routines
+  // WEEX is the exclusive execution exchange; Binance is used exclusively as a benchmark
   const chartCcxtClients: Record<string, Exchange> = {
     weex: new ccxt.weex({ enableRateLimit: false, timeout: 5000, headers: MarketDataHubService.WEEX_HEADERS }),
-    bybit: new ccxt.bybit({ enableRateLimit: false, timeout: 5000 }),
-    binance: new ccxt.binance({ enableRateLimit: false, timeout: 5000 }),
-    mexc: new ccxt.mexc({ enableRateLimit: false, timeout: 5000 }),
-    gateio: new ccxt.gate({ enableRateLimit: false, timeout: 5000 }),
-    okx: new ccxt.okx({ enableRateLimit: false, timeout: 5000 }),
-    kucoin: new ccxt.kucoin({ enableRateLimit: false, timeout: 5000 }),
-    bitget: new ccxt.bitget({ enableRateLimit: false, timeout: 5000 }),
-    htx: new ccxt.htx({ enableRateLimit: false, timeout: 5000 })
+    binance: new ccxt.binance({ enableRateLimit: false, timeout: 5000 })
   };
 
   // GET /api/settings/default-instructions
@@ -588,7 +583,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
 
   // POST /api/paper-trade/update-state
   router.post('/paper-trade/update-state', (req: Request, res: Response) => {
-    const { id, highestPrice, lowestPrice, trailingStopActive, stopLoss, takeProfit, aiEvaluation, feedback, notes, closePrice, pnl, pnlPercent, outcome } = req.body;
+    const { id, highestPrice, lowestPrice, trailingStopActive, stopLoss, takeProfit, tpStages, aiEvaluation, feedback, notes, closePrice, pnl, pnlPercent, outcome } = req.body;
     const virtualTrades = ctx.getVirtualTrades();
     const trade = virtualTrades.find(t => t.id === id);
     if (!trade) return res.status(404).json({ success: false, error: 'Trade not found' });
@@ -598,6 +593,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
     if (trailingStopActive !== undefined) trade.trailingStopActive = trailingStopActive;
     if (stopLoss !== undefined) trade.stopLoss = stopLoss;
     if (takeProfit !== undefined) trade.takeProfit = takeProfit;
+    if (tpStages !== undefined) trade.tpStages = tpStages;
     if (aiEvaluation !== undefined) trade.aiEvaluation = aiEvaluation;
     if (feedback !== undefined) trade.feedback = feedback;
     if (notes !== undefined) trade.notes = notes;
@@ -791,11 +787,10 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
 
     const fetchTask = async () => {
       const restBlockedExchanges = ctx.getRestBlockedExchanges();
-      const primaryCandidate = chartCcxtClients[reqEx] ? reqEx : 'weex';
 
-      // Deduplicated candidate order
-      const candidateExchanges = [primaryCandidate, 'weex', 'bybit', 'binance', 'mexc', 'gateio', 'okx', 'bitget', 'kucoin', 'htx']
-        .filter((val, idx, arr) => arr.indexOf(val) === idx && !restBlockedExchanges.has(val));
+      // WEEX is the exclusive execution exchange; Binance is used solely as liquidity/candle benchmark
+      const candidateExchanges = ['weex', 'binance']
+        .filter((val) => !restBlockedExchanges.has(val));
 
       let lastError: any = null;
       for (const exName of candidateExchanges) {
@@ -806,12 +801,8 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
         let curSymbol = realSymbol;
         if (exName === 'weex') {
           curSymbol = ctx.formatFuturesSymbol(realSymbol, 'weex');
-        } else if (exName === 'mexc') {
-          curSymbol = ctx.formatFuturesSymbol(realSymbol, 'mexc');
-        } else if (exName === 'bybit') {
-          curSymbol = realSymbol.includes(':') ? realSymbol : (realSymbol.includes('/') ? realSymbol : `${baseToken}/USDT`);
         } else {
-          // Spot format e.g. Binance / Gate / OKX: BTC/USDT
+          // Binance benchmark format: BTC/USDT
           curSymbol = realSymbol.split(':')[0];
           if (!curSymbol.includes('/')) curSymbol = `${curSymbol}/USDT`;
         }
@@ -853,7 +844,11 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
         } catch (err: any) {
           lastError = err;
           const msg = err.message || '';
-          console.warn(`[CHART] Attempt on ${exName} for ${curSymbol} failed: ${msg.slice(0, 100)}`);
+          if (msg.includes('-1142') || msg.includes("Parameter 'symbol' is invalid") || msg.includes('does not have market symbol') || msg.includes('symbol not found')) {
+            console.debug(`[CHART] Symbol ${curSymbol} not available on ${exName} (${msg.slice(0, 80)}), trying fallback exchange...`);
+          } else {
+            console.warn(`[CHART] Attempt on ${exName} for ${curSymbol} failed: ${msg.slice(0, 100)}`);
+          }
           if (msg.includes('451') || msg.includes('Unavailable For Legal Reasons') || msg.includes('restricted') || msg.includes('Cloudflare') || msg.includes('403')) {
             restBlockedExchanges.add(exName);
           }

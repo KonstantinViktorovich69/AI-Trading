@@ -134,7 +134,8 @@ export async function runCanonicalAutoEntry(
   }
 
   // Consensus and Strategy Checklist Guard
-  if (currentSig?.decisionTrace) {
+  const isCommitteeConsensusEnabled = (params.marketInput as any)?.isCommitteeConsensusEnabled !== false;
+  if (currentSig?.decisionTrace && isCommitteeConsensusEnabled) {
     const dt = currentSig.decisionTrace;
     const requiredScore = typeof dt.requiredScore === 'number' ? dt.requiredScore : 75;
     if (dt.passedConsensus === false || (typeof dt.consensusScore === 'number' && dt.consensusScore < requiredScore)) {
@@ -146,7 +147,10 @@ export async function runCanonicalAutoEntry(
         decision
       } as any;
     }
+  }
 
+  if (currentSig?.decisionTrace) {
+    const dt = currentSig.decisionTrace;
     const liquidityFactor = dt.factors?.find((f: any) => f.name === 'LIQUIDITY_SWEEP');
     if (liquidityFactor && liquidityFactor.passed === false) {
       return {
@@ -158,8 +162,10 @@ export async function runCanonicalAutoEntry(
       } as any;
     }
 
+    const sigType = (currentSig.type || (currentSig as any).sctoPattern || (currentSig as any).pattern || '').toUpperCase();
+    const isStrictWickPattern = sigType.includes('SPIRE') || sigType.includes('WICK') || sigType.includes('PINBAR') || sigType.includes('ШПИЛЬ') || sigType.includes('ФИТИЛ');
     const wickFactor = dt.factors?.find((f: any) => f.name && f.name.includes('WICK_REJECTION'));
-    if (wickFactor && wickFactor.passed === false) {
+    if (isStrictWickPattern && wickFactor && wickFactor.passed === false) {
       return {
         executed: false,
         status: 'REJECTED',

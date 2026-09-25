@@ -2,6 +2,7 @@ import { processIncomingStateMessage } from './stateSync.ts';
 import { withFirestoreTimeout } from './dbStorageService.ts';
 import { ensureHistoricalDataSeeded } from '../db/seedData.ts';
 import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive.ts';
+import { updatePatternBlacklistFromStats } from './signalEngine.ts';
 
 export interface AgentExchangeLog {
   id: string;
@@ -220,6 +221,13 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
         }
         virtualTrades.push(trade);
       });
+    }
+
+    // Инициализация адаптивного блэклиста паттернов на основе исторических данных сделок
+    try {
+      updatePatternBlacklistFromStats(virtualTrades);
+    } catch (e) {
+      console.warn('[STARTUP BLACKLIST REFRESH ERROR]', e);
     }
 
     const globalSettings = ctx.getGlobalSettings();

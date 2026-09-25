@@ -10,6 +10,9 @@ import { type AutoEntryExecutionPort } from './autoEntryService.ts';
 import { calculateStructuralStopLoss, calculateStructuralTpLadder } from './structuralExitLevels.ts';
 import { calculateOteEntryZone } from './oteEntryCalculator.ts';
 import { addOtePendingCandidate } from './oteVirtualQueue.ts';
+import { isTraditionalEquitySymbol } from './marketSignalScanner.ts';
+import { isPatternBlacklisted } from './signalEngine.ts';
+import { SignalPerformanceAnalyticsService } from './signalPerformanceAnalyticsService.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -117,6 +120,17 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
     const virtualTrades = deps.getVirtualTrades();
     let virtualBalance = deps.getVirtualBalance();
     const startOfDayBalance = deps.getStartOfDayBalance();
+
+    // Защита от остановки симулятора: если баланс упал ниже минимальной маржи при включенном автопилоте,
+    // автоматически пополняем виртуальный баланс, чтобы торговля никогда не останавливалась
+    if (globalSettings.isAutopilotEnabled && globalSettings.tradingMode === 'virtual' && virtualBalance < 25) {
+      virtualBalance = Math.max(500, startOfDayBalance || 500);
+      deps.setVirtualBalance(virtualBalance);
+      globalSettings.virtualBalance = virtualBalance;
+      deps.saveBalanceDB().catch(() => {});
+      console.log(`[VIRTUAL AUTOPILOT] Virtual balance auto-restored to $${virtualBalance} USDT for continuous simulation.`);
+    }
+
     const GLOBAL_CCXT_TICKERS = deps.getGlobalCcxtTickers();
     const GLOBAL_TRUE_OHLCV = deps.getGlobalTrueOhlcv();
     const GLOBAL_ADX = deps.getGlobalAdx();
@@ -141,9 +155,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
     const wonAuto = closedAuto.filter(t => (t.pnlPercent || 0) > 0).length;
     const autoWinRate = closedAuto.length >= 3 ? wonAuto / closedAuto.length : 0.70;
 
-    // Считаем раздельно для обхода ограничений на виртуальных сделках и сделках фонового обучения
+    // Считаем раздельно для реальных и виртуальных режимов
     const autoWinRateForReal = autoWinRate;
-    const autoWinRateForVirtual = 0.80; // Всегда высокая точность для виртуального робота
+    const autoWinRateForVirtual = autoWinRate; // Динамически адаптируется под реальный винрейт контура
 
     // 1. Параметры для виртуальных/обучающих сделок (всегда без ограничений)
     let requiredAutoScoreVirtual = 94;
@@ -276,6 +290,20 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         const volatility = typeof currentSig.volatility !== 'undefined' ? Number(currentSig.volatility) : 2.0;
 
         // --- STRICT SIGNAL QUALITY & PATTERN FILTER ---
+        const rawPatternName = currentSig.matchedPattern || currentSig.patternName || currentSig.type || currentSig.pattern || '';
+        const blCheck = isPatternBlacklisted(rawPatternName);
+        if (blCheck.blacklisted) {
+            console.log(`[AUTOPILOT BLACKLIST GUARD] Skipping entry for ${symbol}: Pattern "${rawPatternName}" is blacklisted (${blCheck.reason})`);
+            continue;
+        }
+
+        // Rolling win rate check over the last 20 trades via SignalPerformanceAnalyticsService (< 45% threshold)
+        const rollingPerf = SignalPerformanceAnalyticsService.evaluatePatternRollingPerformance(virtualTrades, rawPatternName, 20);
+        if (!rollingPerf.allowed) {
+            console.log(`[AUTOPILOT ROLLING WINRATE GUARD] Skipping virtual entry for ${symbol}: ${rollingPerf.reason}`);
+            continue;
+        }
+
         // Disallow entries into unclassified / low-conviction signals lacking volume spike or verified core pattern
         const sigType = (currentSig.type || currentSig.sctoPattern || currentSig.pattern || '').toUpperCase();
         const hasVerifiedPattern = sigType.includes('SAR') || sigType.includes('SPIRE') || sigType.includes('WICK') || 
@@ -290,14 +318,18 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         }
 
         // --- HARD BLOCK ON CONSENSUS REJECT & STRATEGY CHECKLIST ---
-        if (currentSig.decisionTrace) {
+        const isCommitteeConsensusEnabled = (globalSettings as any).isCommitteeConsensusCheckEnabled !== false;
+        if (currentSig.decisionTrace && isCommitteeConsensusEnabled) {
             const dt = currentSig.decisionTrace;
             const requiredScore = typeof dt.requiredScore === 'number' ? dt.requiredScore : 75;
             if (dt.passedConsensus === false || (typeof dt.consensusScore === 'number' && dt.consensusScore < requiredScore)) {
                 console.log(`[AUTOPILOT CONSENSUS GUARD] Rejected entry for ${symbol}: Consensus score ${dt.consensusScore} < ${requiredScore} or passedConsensus is false`);
                 continue;
             }
+        }
 
+        if (currentSig.decisionTrace) {
+            const dt = currentSig.decisionTrace;
             // Mandatory checklist rule: Liquidity Sweep verification
             if (globalSettings.isLiquiditySweepFilterEnabled !== false) {
                 const liquidityFactor = dt.factors?.find((f: any) => f.name === 'LIQUIDITY_SWEEP');
@@ -308,9 +340,12 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             }
 
             // Mandatory checklist rule: Candlestick Wick Rejection verification
+            // Strict wick rejection is enforced for Spire / Wick Retest / Pinbar setups.
+            // For SAR Reversal / Structure Shift (BOS/ChoCh), confirmed structural reversal satisfies entry.
             const wickFactor = dt.factors?.find((f: any) => f.name && f.name.includes('WICK_REJECTION'));
-            if (wickFactor && wickFactor.passed === false) {
-                console.log(`[AUTOPILOT CHECKLIST GUARD] Skipping entry for ${symbol}: WICK_REJECTION unconfirmed (insufficient candlestick wick rejection)`);
+            const isStrictWickPattern = sigType.includes('SPIRE') || sigType.includes('WICK') || sigType.includes('PINBAR') || sigType.includes('ШПИЛЬ') || sigType.includes('ФИТИЛ');
+            if (isStrictWickPattern && wickFactor && wickFactor.passed === false) {
+                console.log(`[AUTOPILOT CHECKLIST GUARD] Skipping entry for ${symbol}: WICK_REJECTION unconfirmed for wick pattern`);
                 continue;
             }
         }
@@ -333,6 +368,10 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         if (isBullishExpansion && finalAiScore < 85 && (currentSig.signal.includes('SELL') || currentSig.signal.includes('SHORT'))) {
             continue;
         }
+        if (isTraditionalEquitySymbol(symbol)) {
+            continue; // Skip traditional stock equities (DELL, AAL, CRM, etc.) from crypto scalp engine
+        }
+
         const isBearishExpansion = marketRegime === 'BEAR_TREND' || marketRegime === 'DUMP';
         if (isBearishExpansion && finalAiScore < 85 && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'))) {
             continue;
@@ -416,7 +455,10 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         }
 
         // 1. VIRTUAL / AUTO LEARNING ENTRY
-        if (finalAiScore >= dynamicRequiredAutoScoreVirtual && (isSellSignal || isBuySignal)) {
+        // Синхронизация контуров: в реальном режиме виртуальные фоновые сделки открываются ТОЛЬКО если явно включено параллельное обучение (isParallelAutoLearningEnabled),
+        // исключая нежелательное открытие 12 сделок одновременно (6 виртуальных + 6 реальных).
+        const allowVirtualEntry = globalSettings.tradingMode === 'virtual' || (globalSettings as any).isParallelAutoLearningEnabled === true;
+        if (allowVirtualEntry && finalAiScore >= dynamicRequiredAutoScoreVirtual && (isSellSignal || isBuySignal)) {
             const existingAutoTrade = virtualTrades.find(t => {
                 const tNorm = normalizeSymbol(t.symbol);
                 return t.status === 'OPEN' && tNorm === normalizedSymbol && !!(t as any).isAutoLearning === !!targetIsAutoLearning;
@@ -544,13 +586,21 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                 let challengeRiskMultiplier = 1.0; // Для виртуальных и обучающих сделок отключены любые ограничения по просадке баланса или точности сделок
                 const sctoSizeMult = currentSig.sctoSizeMultiplier || 1.0;
 
+                if (virtualBalance < 25) {
+                    const replenishedBal = Math.max(500, startOfDayBalance || 500);
+                    console.log(`[VIRTUAL AUTOPILOT] Virtual balance ($${virtualBalance.toFixed(2)}) is low. Replenishing to $${replenishedBal} USDT to prevent autopilot trade block.`);
+                    virtualBalance = replenishedBal;
+                    deps.setVirtualBalance(virtualBalance);
+                    globalSettings.virtualBalance = virtualBalance;
+                    deps.saveBalanceDB().catch(() => {});
+                }
+
                 let calculatedAmount = Number((baseSize * sizeMultiplierVirtual * portfolioOverexposureMultiplier * challengeRiskMultiplier * sctoSizeMult).toFixed(1));
                 const requiredMargin = calculatedAmount / adaptiveLeverageVirtual;
                 if (requiredMargin > virtualBalance * 0.95) {
                     calculatedAmount = Number((virtualBalance * 0.95 * adaptiveLeverageVirtual).toFixed(1));
                     if (calculatedAmount < 1.0) {
-                        console.log(`[VIRTUAL AUTOPILOT] Entry for ${symbol} blocked: virtual balance is too low ($${virtualBalance.toFixed(2)} USDT) to cover minimum trade size`);
-                        continue;
+                        calculatedAmount = Math.max(5.0, Number((virtualBalance * 0.5 * adaptiveLeverageVirtual).toFixed(1)));
                     }
                 }
 
@@ -672,9 +722,11 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                     strategyId: (globalSettings as any).activeStrategy || 'ADAPTIVE_DYNAMIC',
                     strategyVersion: '2.1.0',
                     stateRevision: deps.getAtomicStoreRevision(),
-                    action: isDailyLimitExceeded || isSameDirLimitReached || isVirtualLimitReached ? 'REJECT' : 'APPROVE',
+                    // Критическое правило: для виртуального баланса и авто-обучения блокировки по просадке депозита отключены.
+                    // Торговля продолжается непрерывно до тех пор, пока автопилот не будет выключен.
+                    action: isSameDirLimitReached || isVirtualLimitReached ? 'REJECT' : 'APPROVE',
                     confidence: 85,
-                    approved: !isDailyLimitExceeded && !isSameDirLimitReached && !isVirtualLimitReached,
+                    approved: !isSameDirLimitReached && !isVirtualLimitReached,
                     decisionSource: 'AI',
                     rationale: `Risk parameters within limits (Volatility: ${volatility}%, OB Imbalance: ${autoImbVal}%)`,
                     createdAt: mainVirtualHunterTimestamp
@@ -894,24 +946,35 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
             const rsiVal = currentSig.indicators?.rsi1h ?? currentSig.rsi ?? 50;
             const bbVal = currentSig.indicators?.bbStatus ?? currentSig.bbStatus;
+            const rawPatternNameReal = currentSig.matchedPattern || currentSig.patternName || currentSig.type || currentSig.pattern || '';
+            const blCheckReal = isPatternBlacklisted(rawPatternNameReal);
+            if (blCheckReal.blacklisted) {
+                console.log(`[AUTOPILOT REAL BLACKLIST GUARD] Skipping real entry for ${symbol}: Pattern "${rawPatternNameReal}" is blacklisted (${blCheckReal.reason})`);
+                continue;
+            }
+
+            // Rolling win rate check over the last 20 trades via SignalPerformanceAnalyticsService (< 45% threshold)
+            const rollingPerfReal = SignalPerformanceAnalyticsService.evaluatePatternRollingPerformance(virtualTrades, rawPatternNameReal, 20);
+            if (!rollingPerfReal.allowed) {
+                console.log(`[AUTOPILOT REAL ROLLING WINRATE GUARD] Skipping real entry for ${symbol}: ${rollingPerfReal.reason}`);
+                continue;
+            }
+
             const isVerifiedPattern = !!(currentSig.matchedPattern && (
-                currentSig.matchedPattern.includes('SAR') || 
                 currentSig.matchedPattern.includes('Spire') || 
                 currentSig.matchedPattern.includes('False Breakout') || 
                 currentSig.matchedPattern.includes('Retest') || 
                 currentSig.matchedPattern.includes('ИДЕАЛЬНЫЙ') || 
                 currentSig.matchedPattern.includes('EXTREME') || 
-                currentSig.matchedPattern.includes('Exhaustion') || 
-                currentSig.matchedPattern.includes('СЛИВ') || 
-                currentSig.matchedPattern.includes('ПРОЛИВ')
+                currentSig.matchedPattern.includes('Exhaustion')
             ));
 
             const hasLiquiditySweep = isSellSignal
-                ? (bbVal === 'OVERBOUGHT' || (currentSig.funding && currentSig.funding > 0.05) || currentSig.dropProb > 65 || currentSig.indicators?.topWickPct > 0.25 || isVerifiedPattern)
-                : (bbVal === 'OVERSOLD' || (currentSig.funding && currentSig.funding < -0.05) || currentSig.riseProb > 65 || currentSig.indicators?.bottomWickPct > 0.25 || isVerifiedPattern);
+                ? (bbVal === 'OVERBOUGHT' || (currentSig.funding && currentSig.funding > 0.05) || currentSig.indicators?.topWickPct > 0.25 || currentSig.indicators?.isLiquiditySweep)
+                : (bbVal === 'OVERSOLD' || (currentSig.funding && currentSig.funding < -0.05) || currentSig.indicators?.bottomWickPct > 0.25 || currentSig.indicators?.isLiquiditySweepLow);
             const hasConfirmedReversal = isSellSignal
-                ? (bbVal === 'OVERBOUGHT' || rsiVal > 62 || currentSig.dropProb > 65 || isVerifiedPattern)
-                : (bbVal === 'OVERSOLD' || rsiVal < 38 || currentSig.riseProb > 65 || isVerifiedPattern);
+                ? (bbVal === 'OVERBOUGHT' || rsiVal > 62 || (currentSig.indicators?.topWickPct > 0.35) || isVerifiedPattern)
+                : (bbVal === 'OVERSOLD' || rsiVal < 38 || (currentSig.indicators?.bottomWickPct > 0.35) || isVerifiedPattern);
             const isRetestPeakSignal = isVerifiedPattern || (currentSig.type && (currentSig.type.includes('РЕТЕСТ ПИКА') || currentSig.type.includes('РЕТЕСТ ДНА')));
             
             const cleanSymUpper = (symbol || '').split(':')[0].replace(/[\/:]/g, '').toUpperCase();

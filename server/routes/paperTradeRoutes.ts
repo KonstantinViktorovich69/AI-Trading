@@ -255,8 +255,8 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
     }
 
     const isBtcShockLock = (Date.now() - ctx.getLastBtcShockTime()) < (15 * 60 * 1000);
-    if (isBtcShockLock) {
-      return res.status(400).json({ success: false, error: 'Бумажная торговля приостановлена: зафиксирован резкий импульс BTC (Режим тишины). Входы заблокированы на 15 минут.' });
+    if (isBtcShockLock && isReal) {
+      return res.status(400).json({ success: false, error: 'Торговля приостановлена: зафиксирован резкий импульс BTC (Режим тишины). Входы заблокированы на 15 минут.' });
     }
     
     if (!symbol) {

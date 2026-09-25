@@ -586,5 +586,52 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
       const pending = getOtePendingCandidates();
       expect(pending.length).toBe(0);
     });
+
+    it('does NOT halt virtual trading when drawdown threshold is breached as long as autopilot is enabled', async () => {
+      const mockSignals = [
+        { rawSymbol: 'BTC/USDT', signal: 'LONG', aiScore: 98, price: 100, type: 'SAR', volumeSpike: 2.0, volume24h: 500000 }
+      ];
+
+      const executeMainVirtualAutoEntry = vi.fn(async (params, options) => {
+        return {
+          executed: true,
+          status: 'OPEN',
+          trade: { id: 'VT-DRAWDOWN-1', symbol: params.symbol, side: 'LONG' }
+        };
+      });
+
+      // Virtual balance is 100 but startOfDayBalance is 200 (-50% drawdown)
+      const { deps } = createMockAutopilotDeps({
+        getGlobalSettings: () => ({
+          isAutopilotEnabled: true,
+          tradingMode: 'virtual',
+          tradingExecutionMode: 'auto',
+          autopilotAggressiveness: 'aggressive',
+          allowedTradingDirections: 'BOTH',
+          maxActivePositionsVirtual: 6,
+          maxSameDirectionPositions: 3,
+          isCommitteeConsensusCheckEnabled: false
+        }),
+        getVirtualBalance: () => 100,
+        getStartOfDayBalance: () => 200,
+        executeMainVirtualAutoEntry,
+        isCircuitBreakerActive: () => false,
+        getCacheSignals: () => ({
+          data: mockSignals,
+          lastUpdated: Date.now(),
+          marketRegime: 'RANGING',
+          marketHealth: 80,
+          btcTrend24h: 0.5
+        })
+      });
+
+      await runAutopilotAndVirtualTradeEntry(deps);
+
+      // Verify that Bear approved and trade was executed despite -50% drawdown
+      expect(executeMainVirtualAutoEntry).toHaveBeenCalledTimes(1);
+      const calledContext = executeMainVirtualAutoEntry.mock.calls[0][1];
+      expect(calledContext.bearDecision.approved).toBe(true);
+      expect(calledContext.bearDecision.action).toBe('APPROVE');
+    });
   });
 });

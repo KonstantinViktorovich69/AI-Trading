@@ -214,7 +214,7 @@ export async function runProductionAutoEntryCoordinator(
   } else if (params.currentSig?.decisionTrace) {
     const dt = params.currentSig.decisionTrace;
     const requiredScore = typeof dt.requiredScore === 'number' ? dt.requiredScore : 75;
-    if (dt.passedConsensus === false || (typeof dt.consensusScore === 'number' && dt.consensusScore < requiredScore)) {
+    if (isCommitteeEnabled && (dt.passedConsensus === false || (typeof dt.consensusScore === 'number' && dt.consensusScore < requiredScore))) {
       verdict = 'REJECT';
       rejectReason = `CONSENSUS_REJECTED: Consensus score ${dt.consensusScore ?? 'N/A'} < ${requiredScore} or passedConsensus is false`;
     } else {
@@ -223,8 +223,10 @@ export async function runProductionAutoEntryCoordinator(
         verdict = 'REJECT';
         rejectReason = 'LIQUIDITY_SWEEP_UNCONFIRMED: Liquidity sweep check failed';
       } else {
+        const sigType = (params.currentSig?.type || (params.currentSig as any)?.sctoPattern || (params.currentSig as any)?.pattern || '').toUpperCase();
+        const isStrictWickPattern = sigType.includes('SPIRE') || sigType.includes('WICK') || sigType.includes('PINBAR') || sigType.includes('ШПИЛЬ') || sigType.includes('ФИТИЛ');
         const wickFactor = dt.factors?.find((f: any) => f.name && f.name.includes('WICK_REJECTION'));
-        if (wickFactor && wickFactor.passed === false) {
+        if (isStrictWickPattern && wickFactor && wickFactor.passed === false) {
           verdict = 'REJECT';
           rejectReason = 'WICK_REJECTION_UNCONFIRMED: Candlestick wick rejection check failed';
         }

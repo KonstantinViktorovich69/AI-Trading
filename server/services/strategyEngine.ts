@@ -390,7 +390,10 @@ export function evaluateStrategySignal(ctx: StrategyContext): SignalDecision {
   }
 
   // Gate 5: Pattern Blacklist Gate
-  const blacklistCheck = isPatternBlacklisted(patternResult.patternName);
+  const effectivePatternName = (ctx.tradeIntent as any)?.triggerPattern || (ctx as any)?.currentSig?.matchedPattern || patternResult.patternName;
+  const blacklistCheck = isPatternBlacklisted(effectivePatternName).blacklisted
+    ? isPatternBlacklisted(effectivePatternName)
+    : isPatternBlacklisted(patternResult.patternName);
   gateDiagnostics.patternNotBlacklisted = !blacklistCheck.blacklisted;
 
   if (blacklistCheck.blacklisted) {
@@ -402,7 +405,7 @@ export function evaluateStrategySignal(ctx: StrategyContext): SignalDecision {
       strategyVersion: CANONICAL_STRATEGY_VERSION,
       signalId,
       matchedRuleIds: [],
-      reason: `Паттерн "${patternResult.patternName}" заблокирован: ${blacklistCheck.reason}`,
+      reason: `Паттерн "${effectivePatternName}" заблокирован: ${blacklistCheck.reason}`,
       dataCompleteness: 'COMPLETE',
       rejectionReason: 'PATTERN_BLACKLISTED',
       scoreBonus: 0,

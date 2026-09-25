@@ -143,7 +143,7 @@ export default function App() {
   const [modelWeights, setModelWeights] = useState<Record<string, number> | null>(null);
   const [settingsTab, setSettingsTab] = useState<'system' | 'ai_settings' | 'integrations'>('system');
   
-  const [excludeBinanceCrossListed, setExcludeBinanceCrossListed] = useState<boolean>(true);
+  const [excludeBinanceCrossListed, setExcludeBinanceCrossListed] = useState<boolean>(false);
   const [maxSpotAllocationPct, setMaxSpotAllocationPct] = useState<number>(10);
   const [tradingMarketMode, setTradingMarketMode] = useState<'FUTURES' | 'SPOT' | 'HYBRID'>('HYBRID');
   const [virtualBalanceApp, setVirtualBalanceApp] = useState<number>(0);

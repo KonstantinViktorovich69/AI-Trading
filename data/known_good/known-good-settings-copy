@@ -1,6 +1,6 @@
 {
   "virtualBalance": 2500,
-  "startOfDayBalance": 135.7,
+  "startOfDayBalance": 131.06,
   "telegramBots": [
     {
       "muteWatchdog": true,
@@ -31,7 +31,9 @@
   "isVolatilityBrakeEnabled": false,
   "maxVolatilityLimit": 12,
   "fundingShieldLimit": -0.3,
+  "isDcaEnabled": false,
   "dcaMultiplierFactor": 1,
+  "timeoutStagnationHours": 8,
   "isAiPartialCloseRealEnabled": true,
   "isEma200FilterEnabled": true,
   "isFvgAboveFilterEnabled": true,
@@ -42,21 +44,21 @@
   "allowedTradingDirections": "BOTH",
   "activeStrategy": "ADAPTIVE_DYNAMIC",
   "isAutopilotEnabled": true,
-  "isSymmetricConfidenceFilterEnabled": false,
-  "isCommitteeConsensusCheckEnabled": false,
+  "isSymmetricConfidenceFilterEnabled": true,
+  "isCommitteeConsensusCheckEnabled": true,
   "isOteEntryEnabled": false,
   "maxActivePositionsVirtual": 6,
   "maxActivePositionsReal": 6,
   "maxSameDirectionPositions": 3,
   "tradingExecutionMode": "auto",
   "tradingMarketMode": "FUTURES",
-  "excludeBinanceCrossListed": true,
+  "excludeBinanceCrossListed": false,
   "maxSpotAllocationPct": 10,
   "modelStatusMetadata": {
     "totalLearnedTrades": 0,
     "lastRetrained": 0
   },
-  "stateRevision": 117,
-  "updatedAt": 1789971992181,
-  "virtualEquity": 135.7
+  "stateRevision": 129,
+  "updatedAt": 1790320401411,
+  "virtualEquity": 129.99
 }

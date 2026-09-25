@@ -747,4 +747,94 @@ export class SignalPerformanceAnalyticsService {
       rawAuditedTrades: auditedList
     };
   }
+
+  /**
+   * Calculates rolling win rate for a given pattern over the last N trades.
+   * If the pattern has at least minTradesForRejection (default 3) within the last windowSize (default 20) trades
+   * and the rolling win rate is below minWinRateThreshold (default 45%), entry is rejected.
+   */
+  public static evaluatePatternRollingPerformance(
+    trades: any[],
+    rawPatternName: string,
+    windowSize: number = 20,
+    minTradesForRejection: number = 3,
+    minWinRateThreshold: number = 45.0
+  ): {
+    allowed: boolean;
+    pattern: string;
+    normalizedPattern: string;
+    totalTrades: number;
+    winningTrades: number;
+    winRate: number;
+    reason?: string;
+  } {
+    const norm = SignalPerformanceAnalyticsService.normalizePattern(rawPatternName);
+    if (!rawPatternName || !Array.isArray(trades) || trades.length === 0) {
+      return {
+        allowed: true,
+        pattern: rawPatternName || 'UNKNOWN',
+        normalizedPattern: norm,
+        totalTrades: 0,
+        winningTrades: 0,
+        winRate: 100
+      };
+    }
+
+    const normalizedTarget = norm.toLowerCase();
+    const rawTarget = rawPatternName.toLowerCase().trim();
+
+    // Filter valid closed trades sorted descending by close time
+    const closed = trades
+      .filter(t => t && (t.status === 'CLOSED' || t.status === 'closed' || t.closeTime || t.closedAt))
+      .sort((a, b) => (b.closeTime || b.closedAt || 0) - (a.closeTime || a.closedAt || 0));
+
+    // Collect trades matching this pattern up to windowSize
+    const patternTrades: any[] = [];
+    for (const t of closed) {
+      const pRaw = t.triggerPattern || t.pattern || t.decisionTrace?.triggerPattern || t.patternName || t.matchedPattern || '';
+      if (!pRaw) continue;
+      const pNorm = SignalPerformanceAnalyticsService.normalizePattern(pRaw).toLowerCase();
+      const pLower = pRaw.toLowerCase();
+
+      if (pNorm === normalizedTarget || pLower.includes(rawTarget) || rawTarget.includes(pLower)) {
+        patternTrades.push(t);
+        if (patternTrades.length >= windowSize) break;
+      }
+    }
+
+    if (patternTrades.length < minTradesForRejection) {
+      return {
+        allowed: true,
+        pattern: rawPatternName,
+        normalizedPattern: norm,
+        totalTrades: patternTrades.length,
+        winningTrades: patternTrades.filter(t => (t.pnl || t.pnlPercent || 0) > 0 || t.outcome === 1 || t.outcome === 'WIN').length,
+        winRate: 100
+      };
+    }
+
+    const winningTrades = patternTrades.filter(t => (t.pnl || t.pnlPercent || 0) > 0 || t.outcome === 1 || t.outcome === 'WIN').length;
+    const winRate = Number(((winningTrades / patternTrades.length) * 100).toFixed(1));
+
+    if (winRate < minWinRateThreshold) {
+      return {
+        allowed: false,
+        pattern: rawPatternName,
+        normalizedPattern: norm,
+        totalTrades: patternTrades.length,
+        winningTrades,
+        winRate,
+        reason: `Скользящий винрейт паттерна "${rawPatternName}" за последние ${patternTrades.length} сделок равен ${winRate}% (< ${minWinRateThreshold}% порога)`
+      };
+    }
+
+    return {
+      allowed: true,
+      pattern: rawPatternName,
+      normalizedPattern: norm,
+      totalTrades: patternTrades.length,
+      winningTrades,
+      winRate
+    };
+  }
 }

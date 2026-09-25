@@ -51,7 +51,11 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
       const recentClosedTrades = virtualTrades
         .filter((t: any) => t.status === 'CLOSED')
         .sort((a: any, b: any) => (b.closeTime || 0) - (a.closeTime || 0))
-        .slice(0, 20);
+        .map((t: any) => {
+          // Send lean closed trades without heavy decisionTrace/gateDiagnostics
+          const { decisionTrace, gateDiagnostics, correlationContext, ...lean } = t;
+          return lean;
+        });
       const streamedPaperTrades = [...nonClosedTrades, ...recentClosedTrades];
 
       const data = {

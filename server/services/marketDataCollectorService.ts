@@ -110,6 +110,10 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
         } catch (e: any) {
           attempt++;
           const errorMsg = e.message || '';
+          const isInvalidSymbol = errorMsg.includes('-1142') || errorMsg.includes("Parameter 'symbol' is invalid") || errorMsg.includes('does not have market symbol');
+          if (isInvalidSymbol) {
+            return [];
+          }
           const isRateLimit = errorMsg.includes('510') || errorMsg.includes('frequent') || errorMsg.includes('429') || errorMsg.includes('rate limit') || errorMsg.includes('-1000') || errorMsg.includes('unknown error');
           
           if (attempt < maxRetries) {
