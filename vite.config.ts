@@ -10,9 +10,15 @@ export default defineConfig(({ mode }) => {
     define: {
     },
     resolve: {
+      dedupe: ['react', 'react-dom', 'react-is'],
       alias: {
         '@': path.resolve(__dirname, '.'),
+        'react': path.resolve(__dirname, 'node_modules/react'),
+        'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
       },
+    },
+    optimizeDeps: {
+      include: ['react', 'react-dom', 'react-dom/client'],
     },
     server: {
       hmr: false,

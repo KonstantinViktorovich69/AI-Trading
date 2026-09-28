@@ -61,12 +61,13 @@ describe('System Enhancements & Bugfixes Audit', () => {
     });
 
     it('dynamically blacklists any newly failing pattern with winrate < 45%', () => {
-      const mockFailingTrades = [
-        { triggerPattern: 'Test Toxic Pattern', pnl: -10, outcome: 0, status: 'CLOSED' },
-        { triggerPattern: 'Test Toxic Pattern', pnl: -15, outcome: 0, status: 'CLOSED' },
-        { triggerPattern: 'Test Toxic Pattern', pnl: 5, outcome: 1, status: 'CLOSED' },
-        { triggerPattern: 'Test Toxic Pattern', pnl: -12, outcome: 0, status: 'CLOSED' },
-      ];
+      // 20 trades for statistical significance: 5 wins (25%), 15 losses (75%)
+      const mockFailingTrades = Array.from({ length: 20 }, (_, i) => ({
+        triggerPattern: 'Test Toxic Pattern',
+        pnl: i < 5 ? 5 : -10,
+        outcome: i < 5 ? 1 : 0,
+        status: 'CLOSED'
+      }));
 
       updatePatternBlacklistFromStats(mockFailingTrades);
 
@@ -100,7 +101,7 @@ describe('System Enhancements & Bugfixes Audit', () => {
   });
 
   describe('3. SignalPerformanceAnalyticsService Rolling WinRate Feedback', () => {
-    it('allows trade entry when pattern has insufficient trade history (< 3 closed trades)', () => {
+    it('allows trade entry when pattern has insufficient trade history (< 20 closed trades)', () => {
       const fewTrades = [
         { triggerPattern: 'New Pattern', pnl: -5, status: 'CLOSED', closeTime: 1000 }
       ];
@@ -110,19 +111,14 @@ describe('System Enhancements & Bugfixes Audit', () => {
     });
 
     it('rejects entry when rolling win rate over last 20 trades is under 45%', () => {
-      // 10 trades: 3 wins (30%), 7 losses (70%)
-      const failingTrades = [
-        { triggerPattern: 'Failing Scalp Pattern', pnl: -10, outcome: 0, status: 'CLOSED', closeTime: 10 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: -15, outcome: 0, status: 'CLOSED', closeTime: 20 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: 20, outcome: 1, status: 'CLOSED', closeTime: 30 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: -8, outcome: 0, status: 'CLOSED', closeTime: 40 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: -12, outcome: 0, status: 'CLOSED', closeTime: 50 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: 25, outcome: 1, status: 'CLOSED', closeTime: 60 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: -14, outcome: 0, status: 'CLOSED', closeTime: 70 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: -9, outcome: 0, status: 'CLOSED', closeTime: 80 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: 18, outcome: 1, status: 'CLOSED', closeTime: 90 },
-        { triggerPattern: 'Failing Scalp Pattern', pnl: -11, outcome: 0, status: 'CLOSED', closeTime: 100 }
-      ];
+      // 20 trades: 6 wins (30%), 14 losses (70%)
+      const failingTrades = Array.from({ length: 20 }, (_, i) => ({
+        triggerPattern: 'Failing Scalp Pattern',
+        pnl: i < 6 ? 20 : -10,
+        outcome: i < 6 ? 1 : 0,
+        status: 'CLOSED',
+        closeTime: (i + 1) * 10
+      }));
 
       const res = SignalPerformanceAnalyticsService.evaluatePatternRollingPerformance(failingTrades, 'Failing Scalp Pattern', 20);
       expect(res.allowed).toBe(false);
@@ -132,13 +128,14 @@ describe('System Enhancements & Bugfixes Audit', () => {
     });
 
     it('approves entry when rolling win rate is healthy (>= 45%)', () => {
-      const winningTrades = [
-        { triggerPattern: '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)', pnl: 25, outcome: 1, status: 'CLOSED', closeTime: 10 },
-        { triggerPattern: '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)', pnl: -10, outcome: 0, status: 'CLOSED', closeTime: 20 },
-        { triggerPattern: '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)', pnl: 30, outcome: 1, status: 'CLOSED', closeTime: 30 },
-        { triggerPattern: '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)', pnl: 20, outcome: 1, status: 'CLOSED', closeTime: 40 },
-        { triggerPattern: '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)', pnl: -8, outcome: 0, status: 'CLOSED', closeTime: 50 },
-      ];
+      // 20 trades: 12 wins (60%), 8 losses (40%)
+      const winningTrades = Array.from({ length: 20 }, (_, i) => ({
+        triggerPattern: '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)',
+        pnl: i < 12 ? 25 : -10,
+        outcome: i < 12 ? 1 : 0,
+        status: 'CLOSED',
+        closeTime: (i + 1) * 10
+      }));
 
       const res = SignalPerformanceAnalyticsService.evaluatePatternRollingPerformance(winningTrades, '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)', 20);
       expect(res.allowed).toBe(true);

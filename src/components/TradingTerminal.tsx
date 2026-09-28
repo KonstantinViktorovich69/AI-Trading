@@ -5,10 +5,10 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { cn } from '../lib/utils';
 
-const TradingChart = lazy(() => import('./TradingChart').then(m => ({ default: m.TradingChart })));
-const AnalyticsTab = lazy(() => import('./AnalyticsTab').then(m => ({ default: m.AnalyticsTab })));
-const SignalAnalyticsDashboard = lazy(() => import('./SignalAnalyticsDashboard').then(m => ({ default: m.SignalAnalyticsDashboard })));
-const FundingArbitragePanel = lazy(() => import('./FundingArbitragePanel').then(m => ({ default: m.FundingArbitragePanel })));
+const TradingChart = lazy(() => import('./TradingChart').then(m => ({ default: m.default || m.TradingChart })));
+const AnalyticsTab = lazy(() => import('./AnalyticsTab').then(m => ({ default: m.default || m.AnalyticsTab })));
+const SignalAnalyticsDashboard = lazy(() => import('./SignalAnalyticsDashboard').then(m => ({ default: m.default || m.SignalAnalyticsDashboard })));
+const FundingArbitragePanel = lazy(() => import('./FundingArbitragePanel').then(m => ({ default: m.default || m.FundingArbitragePanel })));
 
 function Tooltip({ text, children, className }: { text: string, children: React.ReactNode, position?: 'top' | 'right' | 'bottom', className?: string, key?: string | number }) {
   return (
@@ -7871,7 +7871,7 @@ export function TradingTerminal({
 
                 {/* Элегантные кнопки фильтра по направлениям (ALL, LONG, SHORT, POSITIONS) */}
                 <div className="flex items-center bg-black/40 border border-white/[0.04] p-1 rounded-xl gap-1 shrink-0">
-                  {paperTrades.filter(t => t.status === 'OPEN').length > 0 && (
+                  {displayActiveTrades.length > 0 && (
                     <button
                       onClick={() => setSignalDirectionFilter(signalDirectionFilter === 'POSITIONS' ? 'ALL' : 'POSITIONS')}
                       className={cn(
@@ -7883,7 +7883,7 @@ export function TradingTerminal({
                       title="Показать только пары с открытыми позициями"
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping" />
-                      В СДЕЛКЕ ({paperTrades.filter(t => t.status === 'OPEN').length})
+                      В СДЕЛКЕ ({displayActiveTrades.length})
                     </button>
                   )}
                   <button

@@ -66,6 +66,13 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     const result = processOtePendingQueue(currentPrices);
     for (const candidate of result.filled) {
       try {
+        const currentOpenCount = Array.isArray(virtualTrades) ? virtualTrades.filter(t => t && t.status === 'OPEN').length : 0;
+        const maxVirtualAllowed = Math.min(6, (globalSettings as any)?.maxActivePositionsVirtual ?? 6);
+        if (currentOpenCount >= maxVirtualAllowed) {
+          console.log(`[OTE VIRTUAL CAPACITY GUARD] Skipping execution for candidate ${candidate.id} (${candidate.symbol}): open trades limit reached (${currentOpenCount}/${maxVirtualAllowed})`);
+          continue;
+        }
+
         if (candidate.context && typeof candidate.context.executeVirtualEntry === 'function') {
           await candidate.context.executeVirtualEntry(currentPrices[candidate.symbol]);
         } else {

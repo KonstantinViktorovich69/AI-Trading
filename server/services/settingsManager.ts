@@ -112,7 +112,7 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     maxSameDirectionPositions: 3,
     tradingExecutionMode: 'auto',
     tradingMarketMode: 'HYBRID',
-    excludeBinanceCrossListed: false,
+    excludeBinanceCrossListed: true,
     maxSpotAllocationPct: 10
   };
 }

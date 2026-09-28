@@ -133,28 +133,41 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
           
           let _tickers: any = {};
           try {
-            const fetchTimeout = exName === 'mexc' ? 30000 : (exName === 'weex' ? 35000 : 20000);
+            const fetchTimeout = exName === 'mexc' ? 15000 : (exName === 'weex' ? 12000 : 10000);
             let success = false;
             let attempt = 0;
             const maxAttempts = exName === 'weex' ? 2 : 1;
             
             while (!success && attempt < maxAttempts) {
+              let timerId: NodeJS.Timeout | null = null;
               try {
+                const timeoutPromise = new Promise((_, reject) => {
+                  timerId = setTimeout(() => reject(new Error('timeout')), fetchTimeout);
+                });
                 const fetchPromise = exName === 'mexc' 
                   ? (ctx.fetchMexcTickersDirect || fetchMexcTickersDirect)() 
                   : (exName === 'weex' ? (ctx.fetchWeexTickersDirect || fetchWeexTickersDirect)() : ex.fetchTickers());
                 _tickers = await Promise.race([
                   fetchPromise,
-                  new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), fetchTimeout))
+                  timeoutPromise
                 ]);
                 success = true;
               } catch (innerErr: any) {
                 attempt++;
+                // Resilient recovery for WEEX: if we have cached tickers, seamlessly use them
+                const fallback = (globalThis as any).WEEX_CACHED_TICKERS || GLOBAL_CCXT_TICKERS[exName];
+                if (exName === 'weex' && fallback && Object.keys(fallback).length > 0) {
+                  _tickers = fallback;
+                  success = true;
+                  break;
+                }
                 if (attempt >= maxAttempts) {
                   throw innerErr;
                 }
                 console.warn(`[SCANNER] Soft retry ${attempt}/${maxAttempts} for ${exName} tickers fetch due to: ${innerErr.message || innerErr}`);
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                await new Promise(resolve => setTimeout(resolve, 800));
+              } finally {
+                if (timerId) clearTimeout(timerId);
               }
             }
           } catch (err: any) {
@@ -162,26 +175,32 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
             const isGeoBlocked = errMsg.includes('403') || errMsg.includes('451') || errMsg.includes('Forbidden') || errMsg.includes('DDoS') || errMsg.includes('restricted location') || errMsg.includes('Eligibility');
             const isTimeoutOrNetwork = errMsg.includes('timed out') || errMsg.includes('timeout') || errMsg.includes('ETIMEDOUT') || errMsg.includes('ENOTFOUND') || errMsg.includes('ECONNREFUSED') || errMsg.includes('NetworkError');
 
-            if (isGeoBlocked || isTimeoutOrNetwork) {
-              if (exName.toLowerCase() !== 'weex') {
-                restBlockedExchanges.add(exName.toLowerCase());
-                if (exName.toLowerCase() === 'binance') {
-                  ctx.setBinanceGeoblocked(true);
-                }
-                if (isGeoBlocked) {
-                  console.warn(`[SCANNER] ${exName} REST API is blocked by CloudFront/geo-firewall (${errMsg.includes('451') || errMsg.includes('restricted') ? '451 Restricted Location' : '403 Forbidden'}). Added to REST blocklist.`);
+            const fallback = (globalThis as any).WEEX_CACHED_TICKERS || GLOBAL_CCXT_TICKERS[exName];
+            if (exName === 'weex' && fallback && Object.keys(fallback).length > 0) {
+              _tickers = fallback;
+              apiHealth[exName] = { latency: 120, status: 'degraded', lastCheck: Date.now() };
+            } else {
+              if (isGeoBlocked || isTimeoutOrNetwork) {
+                if (exName.toLowerCase() !== 'weex') {
+                  restBlockedExchanges.add(exName.toLowerCase());
+                  if (exName.toLowerCase() === 'binance') {
+                    ctx.setBinanceGeoblocked(true);
+                  }
+                  if (isGeoBlocked) {
+                    console.warn(`[SCANNER] ${exName} REST API is blocked by CloudFront/geo-firewall (${errMsg.includes('451') || errMsg.includes('restricted') ? '451 Restricted Location' : '403 Forbidden'}). Added to REST blocklist.`);
+                  } else {
+                    console.warn(`[SCANNER] ${exName} REST API timed out or is unreachable. Added to REST blocklist.`);
+                  }
                 } else {
-                  console.warn(`[SCANNER] ${exName} REST API timed out or is unreachable. Added to REST blocklist.`);
+                  console.warn(`[SCANNER] WEEX REST API returned error (${errMsg}). Retrying on next interval.`);
                 }
               } else {
-                console.warn(`[SCANNER] WEEX REST API returned error (${errMsg}). NOT adding to blocklist because it has no WebSocket fallback. Retrying on next interval.`);
+                console.error(`[ERROR] Fetching tickers for ${exName}:`, errMsg);
               }
-            } else {
-              console.error(`[ERROR] Fetching tickers for ${exName}:`, errMsg);
-            }
-            apiHealth[exName] = { latency: 0, status: 'offline', lastCheck: Date.now() };
-            if (ctx.captureException && !isGeoBlocked && !isTimeoutOrNetwork) {
-              ctx.captureException(err, { extra: { exchange: exName } });
+              apiHealth[exName] = { latency: 0, status: 'offline', lastCheck: Date.now() };
+              if (ctx.captureException && !isGeoBlocked && !isTimeoutOrNetwork) {
+                ctx.captureException(err, { extra: { exchange: exName } });
+              }
             }
           }
           

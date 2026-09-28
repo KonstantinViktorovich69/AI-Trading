@@ -1396,3 +1396,5 @@ export function SignalAnalyticsDashboard({ onRefresh, trades }: SignalAnalyticsD
     </div>
   );
 }
+
+export default SignalAnalyticsDashboard;

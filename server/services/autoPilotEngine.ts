@@ -101,9 +101,13 @@ export function buildBalancedCandidateQueue(rawSignals: any[], options?: Candida
       if (i < longCandidates.length) balancedCandidateSignals.push(longCandidates[i]);
       if (i < shortCandidates.length) balancedCandidateSignals.push(shortCandidates[i]);
     }
+    // Limit to the most reliable high-confidence candidates (max 6 balanced candidates)
+    if (balancedCandidateSignals.length >= 6) {
+      break;
+    }
   }
 
-  return balancedCandidateSignals;
+  return balancedCandidateSignals.slice(0, 6);
 }
 
 export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDependencies): Promise<void> {
@@ -281,6 +285,14 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
     });
 
     for (const currentSig of balancedCandidateSignals) {
+        // Жесткий глобальный лимит: если в системе уже 6 или более открытых сделок — прекращаем цикл входа
+        const currentTotalOpen = virtualTrades.filter(t => t.status === 'OPEN').length;
+        const configuredMaxLimit = (globalSettings as any).maxActivePositionsVirtual !== undefined ? Number((globalSettings as any).maxActivePositionsVirtual) : 6;
+        const maxCapacityAllowed = Math.min(6, Math.max(2, configuredMaxLimit || 6));
+        if (currentTotalOpen >= maxCapacityAllowed) {
+            break;
+        }
+
         if (!currentSig || currentSig.signal === 'NEUTRAL' || (currentSig.aiScore || 0) < 70) continue;
         const symbol = currentSig.rawSymbol || currentSig.symbol;
         if (!symbol || typeof symbol !== 'string') continue;
@@ -370,6 +382,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         }
         if (isTraditionalEquitySymbol(symbol)) {
             continue; // Skip traditional stock equities (DELL, AAL, CRM, etc.) from crypto scalp engine
+        }
+        if (globalSettings.excludeBinanceCrossListed === true && currentSig.isBinanceCrossListed === true) {
+            continue; // Skip Binance cross-listed coins to protect against market maker manipulation
         }
 
         const isBearishExpansion = marketRegime === 'BEAR_TREND' || marketRegime === 'DUMP';
@@ -468,28 +483,35 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             // Для виртуального баланса (авто-обучения) кулдаун полностью отключен.
             const recentlyClosedAuto = undefined;
 
-            const activeVirtualCount = virtualTrades.filter(t => t.status === 'OPEN' && !!(t as any).isAutoLearning === !!targetIsAutoLearning).length;
+            // Жесткое совокупное ограничение: во всей системе не более 6 открытых сделок одновременно!
+            const totalOpenTradesCount = virtualTrades.filter(t => t.status === 'OPEN').length;
+            const activeVirtualCount = virtualTrades.filter(t => t.status === 'OPEN' && (t.isReal ? !targetIsAutoLearning : true)).length;
             
-            // Balanced capacity: target 6 positions (3 LONG + 3 SHORT) — жесткий лимит не более 6
+            // Balanced capacity: target 6 positions (3 LONG + 3 SHORT) — жесткий глобальный лимит не более 6
             const configuredMax = (globalSettings as any).maxActivePositionsVirtual !== undefined ? Number((globalSettings as any).maxActivePositionsVirtual) : 6;
             const maxVirtualPositions = Math.min(6, Math.max(2, configuredMax || 6));
             
-            const isVirtualLimitReached = activeVirtualCount >= maxVirtualPositions;
+            const isVirtualLimitReached = totalOpenTradesCount >= maxVirtualPositions || activeVirtualCount >= maxVirtualPositions;
 
             const sameDirVirtualCount = virtualTrades.filter(t => 
                 t.status === 'OPEN' && 
-                !!(t as any).isAutoLearning === !!targetIsAutoLearning && 
                 t.side === (isSellSignal ? 'SHORT' : 'LONG')
             ).length;
 
-            // Strict directional quota: exactly half the limit (e.g. 3 of 6) to eliminate one-sided skew
+            // Strict directional quota: exactly half the limit (3 of 6) to eliminate one-sided skew
             const maxSameDir = (globalSettings as any)?.maxSameDirectionPositions !== undefined
                 ? Math.min(3, Math.max(1, Number((globalSettings as any).maxSameDirectionPositions)))
                 : Math.max(1, Math.min(3, Math.ceil(maxVirtualPositions / 2)));
             const isSameDirLimitReached = sameDirVirtualCount >= maxSameDir;
 
-            if (isSameDirLimitReached && !isVirtualLimitReached && !existingAutoTrade && !recentlyClosedAuto) {
+            if (isVirtualLimitReached) {
+                console.log(`[AUTOPILOT CAPACITY GUARD] Virtual auto-trade for ${symbol} skipped: Total open positions limit reached (${totalOpenTradesCount}/${maxVirtualPositions})`);
+                continue;
+            }
+
+            if (isSameDirLimitReached && !existingAutoTrade && !recentlyClosedAuto) {
                 console.log(`[RISK ACTUATOR] Virtual auto-trade for ${symbol} blocked: Max active positions in the same direction reached (${sameDirVirtualCount}/${maxSameDir})`);
+                continue;
             }
 
             if (!isVirtualLimitReached && !isSameDirLimitReached && !existingAutoTrade && !recentlyClosedAuto) {
@@ -820,7 +842,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
                         if (autoEntryRes.executed && autoEntryRes.trade) {
                             deps.pushVirtualTrade(autoEntryRes.trade);
-                            virtualTrades.push(autoEntryRes.trade);
+                            if (!virtualTrades.some(t => t.id === autoEntryRes.trade.id)) {
+                                virtualTrades.push(autoEntryRes.trade);
+                            }
                             if (targetIsAutoLearning) {
                                 console.log(`[AUTO-LEARNING] [MAIN-THREAD] Started tracking ${validatedIntent.side === 'SHORT' ? 'SHORT' : 'LONG'} trade for ${symbol} with dynamic required score ${dynamicRequiredAutoScoreVirtual}% (WinRate: ${(autoWinRate * 100).toFixed(1)}%). CorrelationID: ${autoEntryRes.trade.id}`);
                             } else {
@@ -957,6 +981,11 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             const rollingPerfReal = SignalPerformanceAnalyticsService.evaluatePatternRollingPerformance(virtualTrades, rawPatternNameReal, 20);
             if (!rollingPerfReal.allowed) {
                 console.log(`[AUTOPILOT REAL ROLLING WINRATE GUARD] Skipping real entry for ${symbol}: ${rollingPerfReal.reason}`);
+                continue;
+            }
+
+            if (globalSettings.excludeBinanceCrossListed === true && currentSig.isBinanceCrossListed === true) {
+                console.log(`[AUTOPILOT REAL BINANCE GUARD] Skipping real entry for ${symbol}: Coin is cross-listed on Binance`);
                 continue;
             }
 
@@ -1323,7 +1352,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
                                     if (realAutoEntryRes.executed && realAutoEntryRes.trade) {
                                         deps.pushVirtualTrade(realAutoEntryRes.trade);
-                                        virtualTrades.push(realAutoEntryRes.trade);
+                                        if (!virtualTrades.some(t => t.id === realAutoEntryRes.trade.id)) {
+                                            virtualTrades.push(realAutoEntryRes.trade);
+                                        }
                                     } else if (!realAutoEntryRes.executed && realAutoEntryRes.reason) {
                                         const failReason = realAutoEntryRes.reason;
                                         const lowerReason = failReason.toLowerCase();

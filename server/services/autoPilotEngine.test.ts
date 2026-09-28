@@ -633,5 +633,81 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
       expect(calledContext.bearDecision.approved).toBe(true);
       expect(calledContext.bearDecision.action).toBe('APPROVE');
     });
+
+    it('strictly caps total simultaneous open trades to maximum 6 even when 20 signals are generated', async () => {
+      const executeMainVirtualAutoEntry = vi.fn(async (params) => {
+        return {
+          executed: true,
+          status: 'SUCCESS',
+          trade: {
+            id: `VT-${Date.now()}-${params.symbol}`,
+            symbol: params.symbol,
+            side: params.tradeIntent.side,
+            status: 'OPEN',
+            amount: 50,
+            entryPrice: 100
+          }
+        };
+      });
+
+      // Provide 20 candidate signals (10 LONG + 10 SHORT) with high scores
+      const massiveSignals = [];
+      for (let i = 1; i <= 10; i++) {
+        massiveSignals.push({
+          id: `sig_long_${i}`,
+          symbol: `L${i}/USDT`,
+          signal: 'BUY',
+          price: 100,
+          exchange: 'weex',
+          aiScore: 95 - i,
+          volatility: 2.0,
+          volumeSpike: 2.5,
+          volume24h: 300000,
+          matchedPattern: '1m Spire Climax',
+          atr: 1.5,
+          orderBookImbalance: 60
+        });
+        massiveSignals.push({
+          id: `sig_short_${i}`,
+          symbol: `S${i}/USDT`,
+          signal: 'SELL',
+          price: 100,
+          exchange: 'weex',
+          aiScore: 95 - i,
+          volatility: 2.0,
+          volumeSpike: 2.5,
+          volume24h: 300000,
+          matchedPattern: '1m Spire Climax',
+          atr: 1.5,
+          orderBookImbalance: 40
+        });
+      }
+
+      const virtualTrades: any[] = [];
+      const { deps } = createMockAutopilotDeps({
+        getVirtualTrades: () => virtualTrades,
+        pushVirtualTrade: (t: any) => {
+          if (!virtualTrades.some(existing => existing.id === t.id)) {
+            virtualTrades.push(t);
+          }
+        },
+        executeMainVirtualAutoEntry,
+        getCacheSignals: () => ({
+          data: massiveSignals,
+          lastUpdated: Date.now(),
+          marketRegime: 'RANGING',
+          marketHealth: 80,
+          btcTrend24h: 0.5
+        })
+      });
+
+      await runAutopilotAndVirtualTradeEntry(deps);
+
+      // Must execute EXACTLY 6 trades (3 LONG + 3 SHORT), never 20!
+      expect(executeMainVirtualAutoEntry).toHaveBeenCalledTimes(6);
+      expect(virtualTrades.filter(t => t.status === 'OPEN').length).toBe(6);
+      expect(virtualTrades.filter(t => t.status === 'OPEN' && t.side === 'LONG').length).toBe(3);
+      expect(virtualTrades.filter(t => t.status === 'OPEN' && t.side === 'SHORT').length).toBe(3);
+    });
   });
 });

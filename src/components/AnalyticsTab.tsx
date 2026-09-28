@@ -400,3 +400,5 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading }: Analyti
     </div>
   );
 }
+
+export default AnalyticsTab;

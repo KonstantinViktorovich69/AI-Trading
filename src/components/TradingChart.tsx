@@ -1133,3 +1133,5 @@ export const TradingChart = memo(function TradingChart({
     </div>
   );
 });
+
+export default TradingChart;

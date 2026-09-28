@@ -1,6 +1,7 @@
 import { isOperationalTrade } from './tradeMetrics.ts';
 import { inferDataOrigin } from './tradeSchema.ts';
 import type { MarketRegime, DecisionTrace, TradePosition } from '../types/trading.ts';
+import { MIN_TRADES_FOR_PATTERN_STATISTICS } from './signalEngine.ts';
 
 export interface GranularBreakdownMetric {
   category: string;
@@ -750,14 +751,14 @@ export class SignalPerformanceAnalyticsService {
 
   /**
    * Calculates rolling win rate for a given pattern over the last N trades.
-   * If the pattern has at least minTradesForRejection (default 3) within the last windowSize (default 20) trades
+   * If the pattern has at least minTradesForRejection (default MIN_TRADES_FOR_PATTERN_STATISTICS = 20) within the last windowSize (default 20) trades
    * and the rolling win rate is below minWinRateThreshold (default 45%), entry is rejected.
    */
   public static evaluatePatternRollingPerformance(
     trades: any[],
     rawPatternName: string,
     windowSize: number = 20,
-    minTradesForRejection: number = 3,
+    minTradesForRejection: number = MIN_TRADES_FOR_PATTERN_STATISTICS,
     minWinRateThreshold: number = 45.0
   ): {
     allowed: boolean;

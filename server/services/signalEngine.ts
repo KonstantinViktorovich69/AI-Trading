@@ -332,6 +332,13 @@ let blacklistedPatternsMap: Record<string, BlacklistedPatternInfo> = {
   }
 };
 
+/**
+ * Минимальное количество закрытых сделок по паттерну для статистически значимой оценки и блокировки.
+ * Порог 20 сделок исключает случайные блокировки из-за дисперсии и шума на малых выборках
+ * (при N=3 даже прибыльная стратегия с WinRate 55% имеет шанс ~32% показать <45% винрейта).
+ */
+export const MIN_TRADES_FOR_PATTERN_STATISTICS = 20;
+
 export function updatePatternBlacklistFromStats(
   closedTrades: Array<any>
 ): void {
@@ -362,7 +369,7 @@ export function updatePatternBlacklistFromStats(
   }
 
   for (const [pName, stats] of Object.entries(patternStats)) {
-    if (stats.total >= 3) {
+    if (stats.total >= MIN_TRADES_FOR_PATTERN_STATISTICS) {
       const winRate = (stats.wins / stats.total) * 100;
       if (winRate < 45 || stats.netPnl < -1.5) {
         blacklistedPatternsMap[pName] = {

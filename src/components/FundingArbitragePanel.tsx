@@ -537,3 +537,5 @@ export const FundingArbitragePanel: React.FC<FundingArbitragePanelProps> = ({ ad
     </div>
   );
 };
+
+export default FundingArbitragePanel;

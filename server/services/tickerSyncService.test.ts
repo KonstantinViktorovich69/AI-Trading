@@ -133,5 +133,38 @@ describe('tickerSyncService', () => {
         if (originalTestMode) process.env.TEST_MODE = originalTestMode;
       }
     });
+
+    it('recovers seamlessly using cached tickers when WEEX REST API times out', async () => {
+      const originalTestMode = process.env.TEST_MODE;
+      delete process.env.TEST_MODE;
+
+      (globalThis as any).WEEX_CACHED_TICKERS = {
+        'ETH/USDT:USDT': {
+          symbol: 'ETH/USDT:USDT',
+          last: 3200,
+          bid: 3199,
+          ask: 3201,
+          percentage: 1.2
+        }
+      };
+
+      // Mock fetchWeexTickersDirect to reject with a timeout error
+      mockContext.fetchWeexTickersDirect = vi.fn().mockRejectedValue(new Error('timeout'));
+
+      try {
+        await syncGlobalTickers(mockContext, false);
+
+        expect(mockContext.updateSignalsCache).toHaveBeenCalled();
+        expect(mockContext.emitPriceUpdate).toHaveBeenCalled();
+        expect(globalCcxtTickers.weex).toBeDefined();
+        expect(globalCcxtTickers.weex['ETH/USDT:USDT']).toBeDefined();
+        expect(globalCcxtTickers.weex['ETH/USDT:USDT'].last).toBe(3200);
+        // WEEX should NOT be set offline
+        expect(apiHealth.weex?.status).not.toBe('offline');
+      } finally {
+        delete (globalThis as any).WEEX_CACHED_TICKERS;
+        if (originalTestMode) process.env.TEST_MODE = originalTestMode;
+      }
+    });
   });
 });

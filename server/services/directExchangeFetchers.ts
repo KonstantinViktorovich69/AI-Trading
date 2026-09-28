@@ -1,4 +1,5 @@
 import https from 'https';
+import zlib from 'zlib';
 
 /**
  * Прямой HTTP-парсер тикеров фьючерсов MEXC (в обход ограничений/задержек CCXT).
@@ -105,13 +106,20 @@ export async function fetchMexcTickersDirect(attempt: number = 1): Promise<Recor
 // In-memory resilient cache for WEEX tickers to ensure 0 data loss during network spikes or transient timeouts
 let cachedWeexTickers: Record<string, any> = {};
 
+function getAvailableWeexCache(): Record<string, any> | null {
+  if (cachedWeexTickers && Object.keys(cachedWeexTickers).length > 0) return cachedWeexTickers;
+  const globalCache = (globalThis as any).WEEX_CACHED_TICKERS;
+  if (globalCache && Object.keys(globalCache).length > 0) return globalCache;
+  return null;
+}
+
 /**
  * Прямой HTTP-парсер тикеров фьючерсов WEEX (в обход ограничений/задержек CCXT).
- * Поддерживает локальный resilient кэш на случай сетевых таймаутов и мягкий ретрай.
+ * Поддерживает локальный resilient кэш на случай сетевых таймаутов, сжатие gzip и мгновенный fallback.
  */
 export async function fetchWeexTickersDirect(attempt: number = 1): Promise<Record<string, any>> {
   return new Promise((resolve) => {
-    const timeoutVal = 10000;
+    const timeoutVal = 8000;
     let wasResolved = false;
 
     const options = {
@@ -120,32 +128,71 @@ export async function fetchWeexTickersDirect(attempt: number = 1): Promise<Recor
       path: '/capi/v3/market/ticker/24hr',
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'close'
       }
     };
 
     const timeout = setTimeout(() => {
       if (wasResolved) return;
       wasResolved = true;
-      console.warn(`[WEEX] Ticker fetch timed out (10s) - Attempt ${attempt}`);
+      console.warn(`[WEEX] Ticker fetch timed out (${timeoutVal / 1000}s) - Attempt ${attempt}`);
       try { request.destroy(); } catch {}
-      if (attempt < 2) {
+      const fallback = getAvailableWeexCache();
+      if (fallback) {
+        console.warn(`[WEEX] Serving ${Object.keys(fallback).length} resilient cached tickers on timeout.`);
+        resolve(fallback);
+      } else if (attempt < 2) {
         setTimeout(() => {
           fetchWeexTickersDirect(attempt + 1).then(resolve);
-        }, 500);
-      } else if (Object.keys(cachedWeexTickers).length > 0) {
-        console.warn(`[WEEX] Timeout on attempt ${attempt}. Serving ${Object.keys(cachedWeexTickers).length} resilient cached tickers.`);
-        resolve(cachedWeexTickers);
+        }, 400);
       } else {
         resolve({});
       }
     }, timeoutVal);
 
     const request = https.get(options, (res) => {
+      if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+        if (wasResolved) return;
+        clearTimeout(timeout);
+        wasResolved = true;
+        try { request.destroy(); } catch {}
+        const fallback = getAvailableWeexCache();
+        if (fallback) {
+          console.warn(`[WEEX] HTTP ${res.statusCode}. Serving ${Object.keys(fallback).length} cached tickers.`);
+          return resolve(fallback);
+        }
+        if (attempt < 2) {
+          return setTimeout(() => {
+            fetchWeexTickersDirect(attempt + 1).then(resolve);
+          }, 400);
+        }
+        return resolve({});
+      }
+
+      let stream: any = res;
+      const encoding = (res.headers && res.headers['content-encoding']) || '';
+      if (encoding === 'gzip') {
+        stream = res.pipe(zlib.createGunzip());
+      } else if (encoding === 'deflate') {
+        stream = res.pipe(zlib.createInflate());
+      }
+
       let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
+      stream.on('data', (chunk: any) => data += chunk);
+
+      stream.on('error', (streamErr: any) => {
+        if (wasResolved) return;
+        clearTimeout(timeout);
+        wasResolved = true;
+        const fallback = getAvailableWeexCache();
+        if (fallback) return resolve(fallback);
+        resolve({});
+      });
+
+      stream.on('end', () => {
         if (wasResolved) return;
         clearTimeout(timeout);
         wasResolved = true;
@@ -186,24 +233,26 @@ export async function fetchWeexTickersDirect(attempt: number = 1): Promise<Recor
             resolve(result);
           } else {
             console.warn(`[WEEX] API response is not an array - Attempt ${attempt}`);
-            if (attempt < 2) {
+            const fallback = getAvailableWeexCache();
+            if (fallback) {
+              resolve(fallback);
+            } else if (attempt < 2) {
               setTimeout(() => {
                 fetchWeexTickersDirect(attempt + 1).then(resolve);
-              }, 500);
-            } else if (Object.keys(cachedWeexTickers).length > 0) {
-              resolve(cachedWeexTickers);
+              }, 400);
             } else {
               resolve({});
             }
           }
         } catch (e) {
           console.warn(`[WEEX] JSON parse error - Attempt ${attempt}`);
-          if (attempt < 2) {
+          const fallback = getAvailableWeexCache();
+          if (fallback) {
+            resolve(fallback);
+          } else if (attempt < 2) {
             setTimeout(() => {
               fetchWeexTickersDirect(attempt + 1).then(resolve);
-            }, 500);
-          } else if (Object.keys(cachedWeexTickers).length > 0) {
-            resolve(cachedWeexTickers);
+            }, 400);
           } else {
             resolve({});
           }
@@ -216,15 +265,17 @@ export async function fetchWeexTickersDirect(attempt: number = 1): Promise<Recor
       clearTimeout(timeout);
       wasResolved = true;
       console.warn(`[WEEX] HTTP Request error (${err.message}) on attempt ${attempt}`);
-      if (attempt < 2) {
+      const fallback = getAvailableWeexCache();
+      if (fallback) {
+        resolve(fallback);
+      } else if (attempt < 2) {
         setTimeout(() => {
           fetchWeexTickersDirect(attempt + 1).then(resolve);
-        }, 500);
-      } else if (Object.keys(cachedWeexTickers).length > 0) {
-        resolve(cachedWeexTickers);
+        }, 400);
       } else {
         resolve({});
       }
     });
   });
 }
+

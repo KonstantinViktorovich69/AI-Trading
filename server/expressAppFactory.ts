@@ -82,6 +82,7 @@ export function createExpressApp(contexts: ExpressAppFactoryContexts): Express {
 export async function setupStaticAndViteMiddleware(app: Express, isProd = process.env.NODE_ENV === 'production'): Promise<void> {
   if (!isProd) {
     const vite = await createViteServer({
+      configFile: path.resolve(process.cwd(), 'vite.config.ts'),
       server: {
         middlewareMode: true,
         watch: {
