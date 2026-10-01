@@ -38,7 +38,8 @@ export const TRADITIONAL_EQUITY_SYMBOLS = new Set([
   'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'GOOGL', 'META', 'AMD', 'INTC', 'COIN',
   'MSTR', 'PLTR', 'BABA', 'UVXY', 'SPY', 'QQQ', 'SOXL', 'MSTU', 'NVDL',
   'DKNG', 'HPE', 'BIIB', 'HOOD', 'UBER', 'DIS', 'NFLX', 'BA', 'NKE', 'MARA',
-  'RIOT', 'CLSK', 'LCID', 'RIVN', 'SOFI', 'SMCI', 'ARM', 'PANW', 'CRWD', 'MRVL', 'SNOW', 'SQ', 'ROKU'
+  'RIOT', 'CLSK', 'LCID', 'RIVN', 'SOFI', 'SMCI', 'ARM', 'PANW', 'CRWD', 'MRVL', 'SNOW', 'SQ', 'ROKU',
+  'SAMSUNG', 'TWLO', 'RBLX', 'SONY', 'BIDU', 'JD', 'PDD', 'NIO', 'XPEV', 'LI', 'TSM', 'ASML', 'BILI'
 ]);
 
 export function isTraditionalEquitySymbol(symbol: string): boolean {
