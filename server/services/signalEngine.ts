@@ -321,23 +321,23 @@ export function extractPatternFromTrade(t: any): string | null {
 // Инициализируем реестр с верифицированными убыточными SAR-паттернами из истории бэктеста
 let blacklistedPatternsMap: Record<string, BlacklistedPatternInfo> = {
   '💥 ПРОЛИВ (SAR Bottom Reversal)': {
-    until: Date.now() + 7 * 24 * 3600 * 1000,
-    reason: 'Исторический винрейт 25.5% (14W / 39L) в оффлайн-бэктесте: высокий риск ловли падающего ножа',
+    until: Date.now() + 365 * 24 * 3600 * 1000,
+    reason: 'Исторический винрейт 25.5% (14W / 40L, PnL: -34.14$) в бэктесте: высокий риск ловли падающего ножа',
     winRate: 25.5
   },
   '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)': {
-    until: Date.now() + 7 * 24 * 3600 * 1000,
-    reason: 'Исторический винрейт 27.1% (13W / 35L) в оффлайн-бэктесте: высокий риск шорта в сильный бычий импульс',
+    until: Date.now() + 365 * 24 * 3600 * 1000,
+    reason: 'Исторический винрейт 27.1% (13W / 35L, PnL: -6.96$) в бэктесте: высокий риск шорта в сильный бычий импульс',
     winRate: 27.1
   }
 };
 
 /**
- * Минимальное количество закрытых сделок по паттерну для статистически значимой оценки и блокировки.
- * Порог 20 сделок исключает случайные блокировки из-за дисперсии и шума на малых выборках
- * (при N=3 даже прибыльная стратегия с WinRate 55% имеет шанс ~32% показать <45% винрейта).
+ * Минимальное количество закрытых сделок по конкретному паттерну для статистической оценки и блокировки.
+ * Порог 10 сделок в окне последних 200 сделок исключает случайные блокировки на единичных сделках (N=1..3)
+ * и при этом надёжно блокирует системно убыточные паттерны.
  */
-export const MIN_TRADES_FOR_PATTERN_STATISTICS = 20;
+export const MIN_TRADES_FOR_PATTERN_STATISTICS = 10;
 
 export function updatePatternBlacklistFromStats(
   closedTrades: Array<any>
@@ -354,7 +354,8 @@ export function updatePatternBlacklistFromStats(
 
   const patternStats: Record<string, { wins: number; total: number; netPnl: number }> = {};
   const validClosed = closedTrades.filter(t => t && (t.status === 'CLOSED' || t.status === 'closed' || t.closedAt || t.closeTime));
-  const recent = validClosed.slice(-60);
+  // Анализируем выборку до 200 последних закрытых сделок, чтобы дать достаточный объем выборки для каждого из 8-9 паттернов
+  const recent = validClosed.slice(-200);
   
   for (const t of recent) {
     const pName = extractPatternFromTrade(t);

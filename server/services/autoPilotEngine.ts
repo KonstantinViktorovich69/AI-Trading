@@ -410,13 +410,20 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             continue; // Ignore low-volume stagnant coins without volume spike
         }
 
-        // LONG Risk Controls:
+        // LONG Risk Controls (Защита лонгов от ловли падающих ножей):
         const isBuySignalCheck = currentSig.signal && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'));
         if (isBuySignalCheck) {
-            // В падающем/медвежьем рынке для LONG требуется повышенный балл или подтвержденный разворотный импульс
-            const isBearishRegime = marketRegime === 'BEAR_TREND' || marketRegime === 'PANIC_DUMP' || btcTrend24h < -3.0;
-            if (isBearishRegime && finalAiScore < 95 && !currentSig.volumeSpike && (Number(currentSig.riseFromLow) || 0) < 2.0) {
-                console.log(`[AUTOPILOT LONG SHIELD] Ignored ${symbol} LONG in Bearish Market: score ${finalAiScore} < 95 without volume spike or reversal rise`);
+            // 1. Игнорировать лонги при глубоком проливе цены под VWAP (> 0.8% ниже VWAP) без подтвержденного разворота
+            const sigVwap = currentSig.indicators?.vwap || currentSig.vwap;
+            if (sigVwap && price < sigVwap * 0.992 && !currentSig.volumeSpike && (Number(currentSig.riseFromLow) || 0) < 1.5) {
+                console.log(`[AUTOPILOT LONG SHIELD] Ignored ${symbol} falling knife LONG: price ${price} is below VWAP ${sigVwap} without reversal confirmation`);
+                continue;
+            }
+
+            // 2. В падающем/медвежьем рынке для LONG требуется повышенный балл или подтвержденный разворотный импульс
+            const isBearishRegime = marketRegime === 'BEAR_TREND' || marketRegime === 'PANIC_DUMP' || btcTrend24h < -2.5;
+            if (isBearishRegime && finalAiScore < 92 && !currentSig.volumeSpike && (Number(currentSig.riseFromLow) || 0) < 2.0) {
+                console.log(`[AUTOPILOT LONG SHIELD] Ignored ${symbol} LONG in Bearish Market: score ${finalAiScore} < 92 without volume spike or reversal rise`);
                 continue;
             }
         }

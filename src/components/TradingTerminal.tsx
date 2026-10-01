@@ -1490,7 +1490,7 @@ export function TradingTerminal({
         } catch (e) {
           // ignore network errors
         }
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 6000));
       }
     };
     pollTasks();
@@ -1798,7 +1798,17 @@ export function TradingTerminal({
       const saved = localStorage.getItem('qs_cached_trades');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Защита от зомби-сделок в кэше браузера:
+          // Любая сделка старше 2 часов не может оставаться OPEN в кэше
+          const now = Date.now();
+          return parsed.map((t: any) => {
+            if (t.status === 'OPEN' && (!t.openTime || now - t.openTime > 2 * 3600 * 1000)) {
+              return { ...t, status: 'CLOSED', closeTime: t.closeTime || now };
+            }
+            return t;
+          });
+        }
       }
     } catch {}
     return [];
@@ -1830,6 +1840,20 @@ export function TradingTerminal({
         map.set(t.id, prev ? { ...prev, ...leanIncoming } : leanIncoming);
       }
     }
+
+    // ВАЖНО: Сервер является абсолютным источником истины для статуса OPEN!
+    // Любая сделка из локального кэша, которой нет среди открытых на сервере (и которая не открыта локально < 15 сек назад),
+    // не может считаться открытой и принудительно переводится в статус CLOSED.
+    const serverOpenIds = new Set(incoming.filter((t: any) => t.status === 'OPEN').map((t: any) => t.id));
+    const now = Date.now();
+    for (const [id, t] of map.entries()) {
+      if (t.status === 'OPEN' && !serverOpenIds.has(id)) {
+        if (!t.openTime || (now - t.openTime >= 15000)) {
+          map.set(id, { ...t, status: 'CLOSED', closeTime: t.closeTime || now });
+        }
+      }
+    }
+
     return Array.from(map.values()).sort((a, b) => {
       if (a.status === 'OPEN' && b.status !== 'OPEN') return -1;
       if (a.status !== 'OPEN' && b.status === 'OPEN') return 1;
@@ -2012,7 +2036,7 @@ export function TradingTerminal({
     };
 
     syncPaperTrades();
-    const pollInterval = setInterval(syncPaperTrades, 3000);
+    const pollInterval = setInterval(syncPaperTrades, 6000);
     return () => clearInterval(pollInterval);
   }, []);
 
@@ -2196,7 +2220,7 @@ export function TradingTerminal({
     };
     
     fetchTelemetry();
-    const interval = setInterval(fetchTelemetry, 6000);
+    const interval = setInterval(fetchTelemetry, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -4152,25 +4176,53 @@ export function TradingTerminal({
       list = merged;
     }
 
-    // Дедупликация по ID для полного исключения повторного рендеринга одинаковых открытых сделок
+    // Дедупликация по символу и ID для полного исключения повторного рендеринга одинаковых открытых сделок
     const seen = new Set<string>();
-    return list.filter(t => {
+    const seenSymbols = new Set<string>();
+    const sorted = [...list].sort((a, b) => (b.openTime || 0) - (a.openTime || 0));
+    const deduplicated = sorted.filter(t => {
       const key = t.id || `${t.symbol}_${t.side}_${t.openTime}`;
-      if (seen.has(key)) return false;
+      const normSym = (t.symbol || '').replace(/[\/:]/g, '').toUpperCase();
+      if (seen.has(key) || seenSymbols.has(normSym)) return false;
       seen.add(key);
+      seenSymbols.add(normSym);
       return true;
     });
+
+    // Строгий глобальный лимит терминала: не более 6 открытых сделок одновременно (макс. 3 LONG и 3 SHORT)
+    let longCount = 0;
+    let shortCount = 0;
+    const cappedList: any[] = [];
+    for (const trade of deduplicated) {
+      const isLong = trade.side === 'LONG' || trade.side === 'long' || trade.side === 'BUY' || trade.side === 'buy';
+      if (isLong && longCount >= 3) continue;
+      if (!isLong && shortCount >= 3) continue;
+      if (cappedList.length >= 6) break;
+
+      if (isLong) longCount++;
+      else shortCount++;
+      cappedList.push(trade);
+    }
+
+    return cappedList;
   }, [tradingMode, paperTrades, realTrades]);
 
   const activePaperTrades = useMemo(() => {
     const raw = paperTrades.filter(t => t.status === 'OPEN' && !t.isReal && !t.isAutoLearning && !(t as any).isSyntheticSeed);
     const seen = new Set<string>();
-    return raw.filter(t => {
+    const seenSymbols = new Set<string>();
+    const sorted = [...raw].sort((a, b) => (b.openTime || 0) - (a.openTime || 0));
+    const deduplicated = sorted.filter(t => {
       const key = t.id || `${t.symbol}_${t.side}_${t.openTime}`;
-      if (seen.has(key)) return false;
+      const normSym = (t.symbol || '').replace(/[\/:]/g, '').toUpperCase();
+      if (seen.has(key) || seenSymbols.has(normSym)) return false;
       seen.add(key);
+      seenSymbols.add(normSym);
       return true;
     });
+
+    // Строгий глобальный лимит: не более 6 открытых виртуальных сделок
+    return deduplicated.slice(0, 6);
   }, [paperTrades]);
   
   const closedVirtualTrades = useMemo(() => paperTrades.filter(t => t.status === 'CLOSED' && !t.isReal && !t.isAutoLearning && !(t as any).isSyntheticSeed), [paperTrades]);

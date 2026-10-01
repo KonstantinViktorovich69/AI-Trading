@@ -374,12 +374,14 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
     }
 
-    // Защита позиции в безубыток: активируется только при чистом импульсе >= +1.2% (или +5% с плечом),
-    // давая сделке возможность дышать и не закрываться преждевременно на микро-колебаниях стакана
-    if ((unleveragedPnlNow >= 1.20 || pnlNow >= 5.00) && !trade.isProtected && !shouldClose) {
+    // Защита позиции в безубыток (Breakeven Guard):
+    // Активируется при движении в плюс >= +0.40% без плеча или >= +1.50% чистого PnL (с плечом).
+    // Покрывает комиссию биржи и переводит сделку в гарантированный безубыток,
+    // исключая разворот прибыльного импульса в полный Stop Loss.
+    if ((unleveragedPnlNow >= 0.40 || pnlNow >= 1.50) && !trade.isProtected && !shouldClose) {
       const breakevenPrice = trade.side === 'SHORT'
-        ? Number((trade.entryPrice * 0.9995).toFixed(5))
-        : Number((trade.entryPrice * 1.0005).toFixed(5));
+        ? Number((trade.entryPrice * 0.9990).toFixed(5))
+        : Number((trade.entryPrice * 1.0010).toFixed(5));
 
       const shouldUpdateSl = !trade.stopLoss || (
         trade.side === 'SHORT' ? breakevenPrice < trade.stopLoss : breakevenPrice > trade.stopLoss

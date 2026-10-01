@@ -28,9 +28,9 @@ export const MIN_RR_GUARD_TP1_BOUND = 0.012;
 export const RR_GUARD_TP1_MULTIPLIER = 1.8;
 
 /**
- * Минимально допустимый процент движения цены для Stop-Loss (0.8%)
+ * Минимально допустимый процент движения цены для Stop-Loss (1.0% - защита от рыночного шума и спреда WEEX)
  */
-export const MIN_SL_PCT = 0.008;
+export const MIN_SL_PCT = 0.010;
 
 /**
  * Максимально допустимый процент движения цены для Stop-Loss (2.2%)

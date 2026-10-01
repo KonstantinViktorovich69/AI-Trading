@@ -3,8 +3,10 @@
     {
       "fileMatch": [
         "/settings.json",
-        "/data/**/settings*.json",
-        "settings.json"
+        "settings.json",
+        "**/settings.json",
+        "**/known-good-settings-copy",
+        "known-good-settings-copy"
       ],
       "schema": {
         "type": "object",
@@ -14,8 +16,10 @@
     {
       "fileMatch": [
         "/database.json",
-        "/data/**/database*.json",
-        "database.json"
+        "database.json",
+        "**/database.json",
+        "**/known-good-database-copy",
+        "known-good-database-copy"
       ],
       "schema": {
         "type": "object",
@@ -23,5 +27,5 @@
       }
     }
   ],
-  "json.maxItemsComputed": 100000
+  "json.maxItemsComputed": 500000
 }

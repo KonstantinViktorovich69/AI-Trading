@@ -144,19 +144,19 @@ describe('System Enhancements & Bugfixes Audit', () => {
   });
 
   describe('4. Exit Tuning & OTE Limit Entry Calibration', () => {
-    it('calibrates breakeven activation to require pure movement >= +1.20% unleveraged', () => {
+    it('calibrates breakeven activation to require pure movement >= +0.40% unleveraged or >= +1.50% net PnL', () => {
       const isBreakevenQualified = (unleveragedPnl: number, pnlNow: number) => {
-        return unleveragedPnl >= 1.20 || pnlNow >= 5.00;
+        return unleveragedPnl >= 0.40 || pnlNow >= 1.50;
       };
 
       // Below threshold (noise zone)
-      expect(isBreakevenQualified(0.50, 2.50)).toBe(false);
-      expect(isBreakevenQualified(1.00, 4.00)).toBe(false);
+      expect(isBreakevenQualified(0.20, 0.80)).toBe(false);
+      expect(isBreakevenQualified(0.30, 1.20)).toBe(false);
 
-      // Above threshold (sustained breakout)
-      expect(isBreakevenQualified(1.20, 3.00)).toBe(true);
-      expect(isBreakevenQualified(1.50, 4.50)).toBe(true);
-      expect(isBreakevenQualified(0.90, 5.00)).toBe(true);
+      // Above threshold (profitable scalp impulse)
+      expect(isBreakevenQualified(0.40, 1.50)).toBe(true);
+      expect(isBreakevenQualified(0.50, 2.00)).toBe(true);
+      expect(isBreakevenQualified(0.35, 1.60)).toBe(true);
     });
 
     it('computes correct OTE entry target zone (mid-wick / 61.8% retracement)', () => {

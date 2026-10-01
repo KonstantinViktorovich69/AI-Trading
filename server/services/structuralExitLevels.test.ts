@@ -54,8 +54,8 @@ describe('calculateStructuralStopLoss', () => {
 
   it('triggers MIN_SL_PCT floor when structural level is too close', () => {
     // referencePrice = 100, localLow5m = 99.8, atr = 0.5, buffer = 0.075
-    // structuralDistance = 100 - (99.8 - 0.075) = 0.275 (0.275% < MIN_SL_PCT 0.8%)
-    // finalSlPct should clamp to MIN_SL_PCT (0.008)
+    // structuralDistance = 100 - (99.8 - 0.075) = 0.275 (0.275% < MIN_SL_PCT 1.0%)
+    // finalSlPct should clamp to MIN_SL_PCT (0.010)
     const res = calculateStructuralStopLoss({
       isSellSignal: false,
       referencePrice: 100,
@@ -66,7 +66,7 @@ describe('calculateStructuralStopLoss', () => {
     });
 
     expect(res.slPct).toBe(MIN_SL_PCT);
-    expect(res.stopLoss).toBe(99.2);
+    expect(res.stopLoss).toBe(99.0);
   });
 
   it('triggers R:R Guard cap when structural level is far and TP1 is small', () => {
