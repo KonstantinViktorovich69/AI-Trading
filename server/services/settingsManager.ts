@@ -70,6 +70,7 @@ export interface GlobalSettings {
   tradingMarketMode: 'HYBRID' | 'FUTURES' | 'SPOT';
   excludeBinanceCrossListed: boolean;
   maxSpotAllocationPct: number;
+  uiStatsResetTimestamp?: number;
 }
 
 export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPERT_INSTRUCTIONS): GlobalSettings {

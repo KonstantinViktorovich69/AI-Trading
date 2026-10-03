@@ -464,6 +464,7 @@ export async function saveBalanceToDB(ctx: DbStorageContext): Promise<void> {
     dbData.settings.main.userId = ownerId;
     dbData.settings.main.lastResetDate = new Date().toISOString().split('T')[0];
     dbData.settings.main.updatedAt = Date.now();
+    dbData.settings.main.uiStatsResetTimestamp = globalSettings?.uiStatsResetTimestamp || 0;
 
     if (globalSettings) {
       globalSettings.virtualBalance = virtualBalance;

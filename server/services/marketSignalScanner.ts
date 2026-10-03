@@ -371,7 +371,10 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
       }
 
       // 3. Фильтр Снятия Ликвидности (симметричный для SHORT и LONG без фиктивных обходов)
-      const sweepWickThreshold = globalSettings.liquiditySweepWickThreshold ?? 0.25;
+      // Ограничиваем порог разумным диапазоном 0.20-0.35 (согласно RULE[AGENTS_md] фитили от 25-30% подтверждают отказ от движения),
+      // чтобы исключить ложные блокировки при случайных завышенных значениях в настройках.
+      const configuredWickThreshold = globalSettings.liquiditySweepWickThreshold ?? 0.30;
+      const sweepWickThreshold = Math.min(0.35, Math.max(0.20, configuredWickThreshold));
       const isActualSweepConfirmed = signalSide === 'SHORT'
         ? !!(cachedIndicators.isLiquiditySweep || cachedIndicators.isLiquiditySweep1h || cachedIndicators.isLiquiditySweep5m || wicks.topPct >= sweepWickThreshold)
         : signalSide === 'LONG'

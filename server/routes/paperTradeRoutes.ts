@@ -59,7 +59,8 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
       balance: ctx.getVirtualBalance(),
       startOfDayBalance: ctx.getStartOfDayBalance(),
       startOfDayRealBalance: ctx.getStartOfDayRealBalance(),
-      startOfWeekBalance: ctx.getStartOfWeekBalance()
+      startOfWeekBalance: ctx.getStartOfWeekBalance(),
+      uiStatsResetTimestamp: ctx.getGlobalSettings()?.uiStatsResetTimestamp || 0
     });
   });
 
@@ -167,8 +168,8 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
 
   // POST /api/paper-trade/balance/update
   router.post('/paper-trade/balance/update', (req: Request, res: Response) => {
-    const { amount, closeActiveTrades } = req.body;
-    console.log(`[BALANCE UPDATE] Request received to update virtual balance to $${amount}, closeActiveTrades=${closeActiveTrades}`);
+    const { amount, closeActiveTrades, resetUiStats } = req.body;
+    console.log(`[BALANCE UPDATE] Request received to update virtual balance to $${amount}, closeActiveTrades=${closeActiveTrades}, resetUiStats=${resetUiStats}`);
     if (typeof amount !== 'number' || isNaN(amount) || amount < 0) {
       return res.status(400).json({ success: false, error: 'Invalid balance amount' });
     }
@@ -210,13 +211,45 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
       }
     }
 
+    let uiStatsResetTimestamp = 0;
+    if (resetUiStats) {
+      uiStatsResetTimestamp = Date.now();
+      const settings = ctx.getGlobalSettings();
+      if (settings) {
+        settings.uiStatsResetTimestamp = uiStatsResetTimestamp;
+      }
+    }
+
     ctx.setVirtualBalance(amount);
     ctx.setStartOfDayBalance(amount);
     ctx.setStartOfWeekBalance(amount);
     ctx.saveBalanceDB();
     ctx.streamEmitter.emit('signals_updated');
-    console.log(`[BALANCE UPDATE] 🟢 MANUALLY UPDATED (closeActiveTrades=${!!closeActiveTrades}) by user request to: $${amount.toFixed(2)}`);
-    res.json({ success: true, balance: amount, startOfDayBalance: amount, startOfWeekBalance: amount });
+    console.log(`[BALANCE UPDATE] 🟢 MANUALLY UPDATED (closeActiveTrades=${!!closeActiveTrades}, resetUiStats=${!!resetUiStats}) by user request to: $${amount.toFixed(2)}`);
+    res.json({
+      success: true,
+      balance: amount,
+      startOfDayBalance: amount,
+      startOfWeekBalance: amount,
+      uiStatsResetTimestamp: uiStatsResetTimestamp || ctx.getGlobalSettings()?.uiStatsResetTimestamp || 0
+    });
+  });
+
+  // POST /api/paper-trade/reset-ui-stats (Сброс статистики в UI без удаления сделок из базы)
+  router.post('/paper-trade/reset-ui-stats', (req: Request, res: Response) => {
+    const { enabled, timestamp } = req.body;
+    const settings = ctx.getGlobalSettings();
+    let resetTs = 0;
+    if (enabled !== false) {
+      resetTs = typeof timestamp === 'number' && timestamp > 0 ? timestamp : Date.now();
+    }
+    if (settings) {
+      settings.uiStatsResetTimestamp = resetTs;
+    }
+    ctx.saveBalanceDB();
+    ctx.streamEmitter.emit('signals_updated');
+    console.log(`[UI STATS RESET] 📊 uiStatsResetTimestamp updated to ${resetTs} (NO trades deleted, stats filtered in UI only)`);
+    res.json({ success: true, uiStatsResetTimestamp: resetTs });
   });
 
   // POST /api/paper-trade/start-balance
@@ -441,17 +474,17 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
         console.log(`[SL STRUCTURAL CLAMP] Corrected stopLoss for ${symbol} (${effectiveSide}) from ${stopLoss} to $${finalStopLoss} (${(clampedPct * 100).toFixed(1)}%)`);
       }
 
-      // 3-Level Staged Take-Profit Ladder (TP1: 1.2% / ratio 0.35, TP2: 2.5% / ratio 0.35, TP3: 4.5% / ratio 0.30)
+      // 3-Level Staged Take-Profit Ladder (TP1: 1.0% / ratio 0.35, TP2: 2.0% / ratio 0.35, TP3: 3.2% / ratio 1.0)
       let finalTpStages = tpStages;
       if (!finalTpStages || !Array.isArray(finalTpStages) || finalTpStages.length === 0) {
         const dir = effectiveSide === 'SHORT' ? -1 : 1;
-        const tp1Price = Number((finalEntryPrice * (1 + dir * 0.012)).toFixed(5));
-        const tp2Price = Number((finalEntryPrice * (1 + dir * 0.025)).toFixed(5));
-        const tp3Price = Number((finalEntryPrice * (1 + dir * 0.045)).toFixed(5));
+        const tp1Price = Number((finalEntryPrice * (1 + dir * 0.010)).toFixed(5));
+        const tp2Price = Number((finalEntryPrice * (1 + dir * 0.020)).toFixed(5));
+        const tp3Price = Number((finalEntryPrice * (1 + dir * 0.032)).toFixed(5));
         finalTpStages = [
-          { targetPrice: tp1Price, targetPercent: 1.2, closeRatio: 0.35, executed: false },
-          { targetPrice: tp2Price, targetPercent: 2.5, closeRatio: 0.35, executed: false },
-          { targetPrice: tp3Price, targetPercent: 4.5, closeRatio: 0.30, executed: false }
+          { targetPrice: tp1Price, targetPercent: 1.0, closeRatio: 0.35, executed: false },
+          { targetPrice: tp2Price, targetPercent: 2.0, closeRatio: 0.35, executed: false },
+          { targetPrice: tp3Price, targetPercent: 3.2, closeRatio: 1.0, executed: false }
         ];
       }
 

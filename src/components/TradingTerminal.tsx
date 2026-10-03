@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue, useCallback, lazy, Suspense } from 'react';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { Info, Bell, Calculator, TrendingDown, TrendingUp, AlertCircle, AlertTriangle, Rocket, HelpCircle, Play, Bot, Send, RefreshCw, Brain, ShieldAlert, CheckCircle2, Smartphone, Activity, ExternalLink, Filter, Search, ChevronDown, Check, Plus, Settings, X, History, Volume2, VolumeX, Star, Zap, Lightbulb, BookOpen, Loader2, Clock, ArrowRight, Eye, EyeOff, Archive, FolderDown, FolderUp, Sparkles, Sliders, Maximize2, Minimize2, BarChart3, Edit, Wifi, WifiOff, Layers } from 'lucide-react';
+import { Info, Bell, Calculator, TrendingDown, TrendingUp, AlertCircle, AlertTriangle, Rocket, HelpCircle, Play, Bot, Send, RefreshCw, Brain, ShieldAlert, CheckCircle2, Smartphone, Activity, ExternalLink, Filter, Search, ChevronDown, Check, Plus, Settings, X, History, Volume2, VolumeX, Star, Zap, Lightbulb, BookOpen, Loader2, Clock, ArrowRight, Eye, EyeOff, Archive, FolderDown, FolderUp, Sparkles, Sliders, Maximize2, Minimize2, BarChart3, Edit, Wifi, WifiOff, Layers, Database } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { cn } from '../lib/utils';
@@ -1571,6 +1571,19 @@ export function TradingTerminal({
   const [balanceInputVal, setBalanceInputVal] = useState('');
   const [balanceModalType, setBalanceModalType] = useState<'edit' | 'topup'>('edit');
   const [closeActiveTradesOnReset, setCloseActiveTradesOnReset] = useState<boolean>(true);
+  const [resetUiStatsOnBalanceChange, setResetUiStatsOnBalanceChange] = useState<boolean>(false);
+  const [uiStatsResetTimestamp, setUiStatsResetTimestamp] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('weex_ui_stats_reset_ts');
+      if (stored) {
+        const val = Number(stored);
+        if (!isNaN(val) && val > 0) return val;
+      }
+    } catch {}
+    return 0;
+  });
+  const [isStatsResetFilterActive, setIsStatsResetFilterActive] = useState<boolean>(true);
+  const [showAllDatabaseTrades, setShowAllDatabaseTrades] = useState<boolean>(false);
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null);
 
   const [entryPrice, setEntryPrice] = useState<number>(0);
@@ -2030,6 +2043,21 @@ export function TradingTerminal({
             if (d.startOfDayBalance !== undefined) setStartOfDayBalance(prev => prev === d.startOfDayBalance ? prev : d.startOfDayBalance);
             if (d.startOfWeekBalance !== undefined) setStartOfWeekBalance(prev => prev === d.startOfWeekBalance ? prev : d.startOfWeekBalance);
             if (d.startOfDayRealBalance !== undefined) setStartOfDayRealBalance(prev => prev === d.startOfDayRealBalance ? prev : d.startOfDayRealBalance);
+            if (d.uiStatsResetTimestamp !== undefined) {
+              setUiStatsResetTimestamp(prev => {
+                if (d.uiStatsResetTimestamp !== prev) {
+                  try {
+                    if (d.uiStatsResetTimestamp > 0) {
+                      localStorage.setItem('weex_ui_stats_reset_ts', d.uiStatsResetTimestamp.toString());
+                    } else {
+                      localStorage.removeItem('weex_ui_stats_reset_ts');
+                    }
+                  } catch {}
+                  return d.uiStatsResetTimestamp;
+                }
+                return prev;
+              });
+            }
           }
         })
         .catch(err => console.warn("Paper trades sync fetch error:", err));
@@ -2631,13 +2659,22 @@ export function TradingTerminal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           amount, 
-          closeActiveTrades: balanceModalType === 'edit' ? closeActiveTradesOnReset : false 
+          closeActiveTrades: balanceModalType === 'edit' ? closeActiveTradesOnReset : false,
+          resetUiStats: balanceModalType === 'edit' ? resetUiStatsOnBalanceChange : false
         })
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.success) {
         updateSafeVirtualBalance(data.balance, true);
+        if (data.uiStatsResetTimestamp) {
+          setUiStatsResetTimestamp(data.uiStatsResetTimestamp);
+          setIsStatsResetFilterActive(true);
+          try {
+            localStorage.setItem('weex_ui_stats_reset_ts', data.uiStatsResetTimestamp.toString());
+          } catch {}
+        }
+        setResetUiStatsOnBalanceChange(false);
         
         // Fetch fresh trades from the server to immediately synchronize the UI
         try {
@@ -3063,7 +3100,7 @@ export function TradingTerminal({
         if (d.isBtcShockLock !== undefined) setIsBtcShockLock(d.isBtcShockLock);
         if (d.btcShockRemainingSeconds !== undefined) setBtcShockRemaining(d.btcShockRemainingSeconds);
       }
-    }).catch(console.error);
+    }).catch(err => console.warn('[INIT_SIGNALS]', err));
 
     // Setup active 3s client-side synchronization for risk parameters
     const checkStateInterval = setInterval(async () => {
@@ -3086,7 +3123,7 @@ export function TradingTerminal({
       return { success: false };
     }).then(d => {
       if (d.success) setKnowledgeBase(d.data || []);
-    }).catch(console.error);
+    }).catch(err => console.warn('[INIT_KNOWLEDGE]', err));
 
     // Initial fetch for proliv peaks
     fetch('/api/proliv-peaks').then(r => {
@@ -3094,7 +3131,7 @@ export function TradingTerminal({
       return { success: false };
     }).then(d => {
       if (d.success) setProlivPeaks(d.data || []);
-    }).catch(console.error);
+    }).catch(err => console.warn('[INIT_PEAKS]', err));
 
     // Initial fetch for retrospective lessons
     fetch('/api/retrospective').then(r => {
@@ -3102,7 +3139,7 @@ export function TradingTerminal({
       return { success: false };
     }).then(d => {
       if (d.success) setRetrospectiveLessons(d.data || []);
-    }).catch(console.error);
+    }).catch(err => console.warn('[INIT_RETRO]', err));
 
     // Initial fetch for agent exchange logs
     fetch('/api/agent-exchange/logs').then(r => {
@@ -3110,7 +3147,7 @@ export function TradingTerminal({
       return { success: false };
     }).then(d => {
       if (d.success) setAgentExchangeLogs(d.data || []);
-    }).catch(console.error);
+    }).catch(err => console.warn('[INIT_LOGS]', err));
 
     // SSE for real-time signals and trades with resilient auto-reconnect and watchdog for VPN stability
     let mainEventSource: EventSource | null = null;
@@ -4293,11 +4330,107 @@ export function TradingTerminal({
     return 0;
   };
 
-  const totalTrades = currentHistoryTrades.length;
-  const winTrades = currentHistoryTrades.filter(t => getSafeHistoryTradePnl(t) > 0).length;
+  // Сделки для расчета статистики интерфейса (с учетом сброса в UI)
+  const statsTrades = useMemo(() => {
+    if (uiStatsResetTimestamp > 0) {
+      return currentHistoryTrades.filter(t => {
+        const raw = t.closeTime || t.closedAt || t.updatedAt || t.history?.[t.history?.length - 1]?.time || t.openTime || t.createdAt || 0;
+        if (!raw) return false;
+        const timeNum = typeof raw === 'number' ? raw : (isNaN(Number(raw)) ? new Date(raw).getTime() : Number(raw));
+        return !isNaN(timeNum) && timeNum >= uiStatsResetTimestamp;
+      });
+    }
+    return currentHistoryTrades;
+  }, [currentHistoryTrades, uiStatsResetTimestamp]);
+
+  const displayHistoryTrades = useMemo(() => {
+    if (showAllDatabaseTrades) {
+      return currentHistoryTrades;
+    }
+    return statsTrades;
+  }, [showAllDatabaseTrades, currentHistoryTrades, statsTrades]);
+
+  const totalTrades = statsTrades.length;
+  const winTrades = statsTrades.filter(t => getSafeHistoryTradePnl(t) > 0).length;
+  const lossTrades = statsTrades.filter(t => getSafeHistoryTradePnl(t) < 0).length;
   const winrate = totalTrades > 0 ? ((winTrades / totalTrades) * 100).toFixed(0) : 0;
-  const totalPnl = currentHistoryTrades.reduce((acc, t) => acc + getSafeHistoryTradePnl(t), 0);
-  const bestTrade = currentHistoryTrades.reduce((best, t) => (!best || getSafeHistoryTradePnl(t) > getSafeHistoryTradePnl(best)) ? t : best, null as any);
+  const totalPnl = statsTrades.reduce((acc, t) => acc + getSafeHistoryTradePnl(t), 0);
+  const bestTrade = statsTrades.reduce((best, t) => (!best || getSafeHistoryTradePnl(t) > getSafeHistoryTradePnl(best)) ? t : best, null as any);
+
+  const handleToggleUiStatsReset = async (newVal: boolean) => {
+    if (newVal) {
+      // Пользователь включает сброс статистики: отсчет начинается строго с текущей секунды
+      const now = Date.now();
+      setUiStatsResetTimestamp(now);
+      setIsStatsResetFilterActive(true);
+      setShowAllDatabaseTrades(false);
+      try {
+        localStorage.setItem('weex_ui_stats_reset_ts', now.toString());
+      } catch {}
+      try {
+        const res = await fetch('/api/paper-trade/reset-ui-stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: true, timestamp: now })
+        });
+        const data = await res.json();
+        if (data.success && data.uiStatsResetTimestamp) {
+          setUiStatsResetTimestamp(data.uiStatsResetTimestamp);
+          try {
+            localStorage.setItem('weex_ui_stats_reset_ts', data.uiStatsResetTimestamp.toString());
+          } catch {}
+        }
+        if (addToast) addToast('Статистика в интерфейсе сброшена с чистого листа! Все сделки в базе сохранены.', 'success');
+      } catch (e) {
+        console.error('Failed to reset UI stats:', e);
+      }
+    } else {
+      // Пользователь снимает галочку: отображаются все сделки и общая статистика за все время
+      setUiStatsResetTimestamp(0);
+      setIsStatsResetFilterActive(false);
+      setShowAllDatabaseTrades(false);
+      try {
+        localStorage.removeItem('weex_ui_stats_reset_ts');
+      } catch {}
+      try {
+        await fetch('/api/paper-trade/reset-ui-stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: false })
+        });
+        if (addToast) addToast('Отображается полная статистика за все время из базы данных', 'info');
+      } catch (e) {
+        console.error('Failed to clear UI stats reset:', e);
+      }
+    }
+  };
+
+  const handleForceResetUiStatsNow = async () => {
+    const now = Date.now();
+    setUiStatsResetTimestamp(now);
+    setIsStatsResetFilterActive(true);
+    setShowAllDatabaseTrades(false);
+    try {
+      localStorage.setItem('weex_ui_stats_reset_ts', now.toString());
+    } catch {}
+    try {
+      const res = await fetch('/api/paper-trade/reset-ui-stats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true, timestamp: now })
+      });
+      const data = await res.json();
+      if (data.success && data.uiStatsResetTimestamp) {
+        setUiStatsResetTimestamp(data.uiStatsResetTimestamp);
+        try {
+          localStorage.setItem('weex_ui_stats_reset_ts', data.uiStatsResetTimestamp.toString());
+        } catch {}
+      }
+      if (addToast) addToast('Отсчет статистики обновлен с текущего момента! Сделки в базе данных сохранены.', 'success');
+    } catch (e) {
+      if (addToast) addToast('Ошибка при сбросе статистики', 'error');
+    }
+  };
 
   const manualSync = async () => {
     try {
@@ -4308,6 +4441,21 @@ export function TradingTerminal({
         setPaperTrades(data.data);
         paperTradesRef.current = data.data;
         if (data.balance !== undefined) updateSafeVirtualBalance(data.balance, true);
+        if (data.uiStatsResetTimestamp !== undefined) {
+          setUiStatsResetTimestamp(prev => {
+            if (data.uiStatsResetTimestamp !== prev) {
+              try {
+                if (data.uiStatsResetTimestamp > 0) {
+                  localStorage.setItem('weex_ui_stats_reset_ts', data.uiStatsResetTimestamp.toString());
+                } else {
+                  localStorage.removeItem('weex_ui_stats_reset_ts');
+                }
+              } catch {}
+              return data.uiStatsResetTimestamp;
+            }
+            return prev;
+          });
+        }
         if (addToast) addToast('Данные синхронизированы', 'info');
       }
     } catch (e) {
@@ -4638,6 +4786,27 @@ export function TradingTerminal({
                         </div>
                       </div>
                     </button>
+                  </div>
+
+                  {/* Галочка сброса статистики */}
+                  <div className="pt-2">
+                    <label className="flex items-start gap-3 p-3 rounded-xl border border-zinc-800 bg-zinc-950/70 hover:border-zinc-700 transition-all cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={resetUiStatsOnBalanceChange}
+                        onChange={(e) => setResetUiStatsOnBalanceChange(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                      />
+                      <div className="flex-1">
+                        <div className="text-xs font-bold text-zinc-200 flex items-center gap-2">
+                          <span>Сбросить статистику в интерфейсе</span>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-semibold border border-indigo-500/30">Только UI</span>
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-1 leading-normal">
+                          Винрейт, суммарный PnL и счетчик сделок начнут рассчитываться заново с чистого листа. <strong className="text-zinc-300 font-medium">Сделки в базе данных НЕ удаляются</strong> и остаются доступными для логов и обучения ИИ.
+                        </div>
+                      </div>
+                    </label>
                   </div>
                 </div>
               ) : (
@@ -7216,7 +7385,16 @@ export function TradingTerminal({
           ? (realBalance || 0) 
           : (virtualBalance || 0);
 
-        const activeClosedTradesForPnl = isReal ? closedRealTrades : closedVirtualTrades;
+        const baseClosedTradesForPnl = isReal ? closedRealTrades : closedVirtualTrades;
+        const activeClosedTradesForPnl = uiStatsResetTimestamp > 0
+          ? baseClosedTradesForPnl.filter(t => {
+              const raw = t.closeTime || t.closedAt || t.updatedAt || t.history?.[t.history?.length - 1]?.time || t.openTime || t.createdAt || 0;
+              if (!raw) return false;
+              const timeNum = typeof raw === 'number' ? raw : (isNaN(Number(raw)) ? new Date(raw).getTime() : Number(raw));
+              return !isNaN(timeNum) && timeNum >= uiStatsResetTimestamp;
+            })
+          : baseClosedTradesForPnl;
+
         const totalClosedPnl = activeClosedTradesForPnl.reduce((acc, t) => acc + (t.pnl || 0), 0);
         const growthRoi = (startingDepot > 0) ? (totalClosedPnl / startingDepot) * 100 : 0;
         const isPositiveGrowth = totalClosedPnl >= 0;
@@ -7230,9 +7408,25 @@ export function TradingTerminal({
         const oneWeekAgoMs = nowMs - 7 * 24 * 60 * 60 * 1000;
         const oneMonthAgoMs = nowMs - 30 * 24 * 60 * 60 * 1000;
 
-        const todayTrades = activeClosedTradesForPnl.filter(t => (t.closeTime || 0) >= startOfTodayMs);
-        const weekTrades = activeClosedTradesForPnl.filter(t => (t.closeTime || 0) >= oneWeekAgoMs);
-        const monthTrades = activeClosedTradesForPnl.filter(t => (t.closeTime || 0) >= oneMonthAgoMs);
+        const effectiveStartOfToday = uiStatsResetTimestamp > 0 ? Math.max(startOfTodayMs, uiStatsResetTimestamp) : startOfTodayMs;
+        const effectiveOneWeekAgo = uiStatsResetTimestamp > 0 ? Math.max(oneWeekAgoMs, uiStatsResetTimestamp) : oneWeekAgoMs;
+        const effectiveOneMonthAgo = uiStatsResetTimestamp > 0 ? Math.max(oneMonthAgoMs, uiStatsResetTimestamp) : oneMonthAgoMs;
+
+        const todayTrades = activeClosedTradesForPnl.filter(t => {
+          const raw = t.closeTime || t.closedAt || t.updatedAt || t.history?.[t.history?.length - 1]?.time || t.openTime || t.createdAt || 0;
+          const timeNum = typeof raw === 'number' ? raw : (isNaN(Number(raw)) ? new Date(raw).getTime() : Number(raw));
+          return timeNum >= effectiveStartOfToday;
+        });
+        const weekTrades = activeClosedTradesForPnl.filter(t => {
+          const raw = t.closeTime || t.closedAt || t.updatedAt || t.history?.[t.history?.length - 1]?.time || t.openTime || t.createdAt || 0;
+          const timeNum = typeof raw === 'number' ? raw : (isNaN(Number(raw)) ? new Date(raw).getTime() : Number(raw));
+          return timeNum >= effectiveOneWeekAgo;
+        });
+        const monthTrades = activeClosedTradesForPnl.filter(t => {
+          const raw = t.closeTime || t.closedAt || t.updatedAt || t.history?.[t.history?.length - 1]?.time || t.openTime || t.createdAt || 0;
+          const timeNum = typeof raw === 'number' ? raw : (isNaN(Number(raw)) ? new Date(raw).getTime() : Number(raw));
+          return timeNum >= effectiveOneMonthAgo;
+        });
 
         const todayPnl = todayTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
         const weekPnl = weekTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
@@ -7259,11 +7453,17 @@ export function TradingTerminal({
         const totalGrossLosses = Math.abs(activeClosedTradesForPnl.filter(t => (t.pnl || 0) < 0).reduce((sum, t) => sum + (t.pnl || 0), 0));
         const losingClosedCount = totalClosedTrades - winningClosedCount;
         const netClosedPnl = totalGrossWins - totalGrossLosses;
-        const computedProfitFactor = totalGrossLosses > 0 ? (totalGrossWins / totalGrossLosses).toFixed(2) : (totalGrossWins > 0 ? '∞' : '1.00');
+        const computedProfitFactor = totalClosedTrades === 0 ? '---' : (totalGrossLosses > 0 ? (totalGrossWins / totalGrossLosses).toFixed(2) : (totalGrossWins > 0 ? '∞' : '1.00'));
 
         // Recent 3 closed trades for micro-ticker
         const lastClosedTrades = [...activeClosedTradesForPnl]
-          .sort((a, b) => (b.closeTime || 0) - (a.closeTime || 0))
+          .sort((a, b) => {
+            const rawB = b.closeTime || b.closedAt || b.updatedAt || b.openTime || 0;
+            const rawA = a.closeTime || a.closedAt || a.updatedAt || a.openTime || 0;
+            const numB = typeof rawB === 'number' ? rawB : Number(rawB) || 0;
+            const numA = typeof rawA === 'number' ? rawA : Number(rawA) || 0;
+            return numB - numA;
+          })
           .slice(0, 3);
 
         return (
@@ -7582,6 +7782,11 @@ export function TradingTerminal({
                       <h4 className="text-[8.5px] font-black text-zinc-500 tracking-[0.25em] uppercase">
                         ПРИРОСТ ДЕПОЗИТА ({tradingMode.toUpperCase()})
                       </h4>
+                      {uiStatsResetTimestamp > 0 && (
+                        <span className="text-[7.5px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Сброс UI
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-[8px] font-mono text-zinc-500 font-bold tracking-widest bg-white/[0.03] px-2 py-1 rounded border border-white/[0.04]">
@@ -7710,6 +7915,11 @@ export function TradingTerminal({
                     <div className="flex items-center gap-2">
                       <span className="w-1.5 h-3 bg-purple-500 rounded-full"></span>
                       <h4 className="text-[8.5px] font-black text-zinc-500 tracking-[0.25em] uppercase">АНАЛИТИКА ТОРГОВЛИ И ИСТОРИЯ</h4>
+                      {uiStatsResetTimestamp > 0 && (
+                        <span className="text-[7.5px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Сброс UI
+                        </span>
+                      )}
                     </div>
 
                     <button
@@ -7770,8 +7980,10 @@ export function TradingTerminal({
                   <div className="space-y-1.5">
                     <span className="text-[7px] text-zinc-500 font-mono uppercase tracking-widest mb-1 block">ПОСЛЕДНИЕ ЗАКРЫТЫЕ ПОЗИЦИИ:</span>
                     {lastClosedTrades.length === 0 ? (
-                      <div className="py-3 px-3 bg-black/10 border border-dashed border-white/[0.03] rounded-xl text-center text-zinc-650 text-[9.5px] font-mono uppercase">
-                        Сделки еще не зарегистрированы на балансе
+                      <div className="py-3 px-3 bg-black/10 border border-dashed border-white/[0.03] rounded-xl text-center text-zinc-500 text-[9.5px] font-mono">
+                        {uiStatsResetTimestamp > 0 
+                          ? `С момента сброса статистики (${formatTradeTime(uiStatsResetTimestamp)}) новых закрытых сделок пока нет` 
+                          : 'Сделки еще не зарегистрированы на балансе'}
                       </div>
                     ) : (
                       lastClosedTrades.map((t, idx) => {
@@ -8149,7 +8361,7 @@ export function TradingTerminal({
                     </div>
                     <div className="bg-black/40 border border-white/[0.04] rounded-2xl p-4.5 shadow-xl transition-all duration-300 hover:border-white/[0.08]">
                       <div className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em] mb-3 border-b border-white/[0.04] pb-2">ЦЕЛЬ ВЫХОДА</div>
-                      <div className="text-lg font-black text-amber-400 font-mono tracking-tighter">${(takeProfit || (selectedSignal.price * (isShort ? 0.85 : 1.15))).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+                      <div className="text-lg font-black text-amber-400 font-mono tracking-tighter">${(takeProfit || (selectedSignal.price * (isShort ? 0.972 : 1.028))).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
                       <div className="text-[9px] text-zinc-400 mt-1 flex items-center gap-1 font-mono uppercase">
                         ПОТЕНЦИАЛ: <span className="text-emerald-400 font-bold">+{potential.toFixed(1)}%</span>
                       </div>
@@ -8157,7 +8369,7 @@ export function TradingTerminal({
                     <div className="bg-black/40 border border-white/[0.04] rounded-2xl p-4.5 shadow-xl transition-all duration-300 hover:border-white/[0.08]">
                       <div className="text-[8px] font-bold text-zinc-500 uppercase tracking-[0.2em] mb-3 border-b border-white/[0.04] pb-2">ОЖИДАЕМЫЙ ИТОГ</div>
                       <div className={cn("text-lg font-black font-mono tracking-tighter", isShort ? "text-rose-400" : "text-emerald-400")}>
-                        ${(takeProfit || (selectedSignal.price * (isShort ? 0.85 : 1.15))).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        ${(takeProfit || (selectedSignal.price * (isShort ? 0.972 : 1.028))).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </div>
                       <div className="text-[9px] text-zinc-400 mt-1 uppercase font-bold tracking-wider">ГРЯЗНАЯ ПРИБЫЛЬ</div>
                     </div>
@@ -9216,6 +9428,140 @@ export function TradingTerminal({
             </div>
           </div>
 
+          {/* Сводная статистика и галочка сброса только в интерфейсе */}
+          <div className="bg-zinc-950/80 border border-zinc-850 rounded-xl p-4 mb-6 shadow-lg">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-zinc-850">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-indigo-400" />
+                  <span className="font-bold text-sm text-zinc-200">
+                    Сводная статистика сделок
+                  </span>
+                </div>
+                
+                {/* Галочка сброса статистики (только интерфейс) */}
+                <label
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-750 hover:border-indigo-500/50 cursor-pointer select-none transition-all group active:scale-98"
+                  title={uiStatsResetTimestamp > 0 ? "Нажмите, чтобы отключить сброс и вернуть полную статистику за все время" : "Нажмите, чтобы сбросить статистику в интерфейсе с чистого листа"}
+                >
+                  <input
+                    type="checkbox"
+                    checked={uiStatsResetTimestamp > 0}
+                    onChange={(e) => handleToggleUiStatsReset(e.target.checked)}
+                    className="w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-zinc-300 group-hover:text-white transition-colors">
+                      Сброс статистики (только UI)
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      БД не удаляется
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Управление точкой отсчета и архивом */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {uiStatsResetTimestamp > 0 && (
+                  <span className="text-[11px] text-zinc-400 font-mono flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-zinc-500" />
+                    Отсчет с: <strong className="text-zinc-200">{formatTradeTime(uiStatsResetTimestamp)}</strong>
+                  </span>
+                )}
+                {uiStatsResetTimestamp > 0 && (
+                  <button
+                    onClick={handleForceResetUiStatsNow}
+                    title="Начать отсчет статистики заново с текущего момента (сделки в БД сохраняются)"
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 hover:border-indigo-500/60 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Сбросить отсчет заново
+                  </button>
+                )}
+                {uiStatsResetTimestamp > 0 && (
+                  <button
+                    onClick={() => setShowAllDatabaseTrades(!showAllDatabaseTrades)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer",
+                      showAllDatabaseTrades 
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/40" 
+                        : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                    )}
+                  >
+                    <Database className="w-3.5 h-3.5" />
+                    {showAllDatabaseTrades ? "Скрыть архив БД" : `Показать архив БД (${currentHistoryTrades.length})`}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Карточки метрик статистики */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 pt-4">
+              <div className="bg-zinc-900/60 border border-zinc-850 rounded-lg p-3">
+                <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-1 flex justify-between items-center">
+                  <span>Сделок</span>
+                  {uiStatsResetTimestamp > 0 && (
+                    <span className="text-[9px] text-zinc-400 font-mono">из {currentHistoryTrades.length} в БД</span>
+                  )}
+                </div>
+                <div className="text-lg font-black text-zinc-100 font-mono">{totalTrades}</div>
+                <div className="text-[10px] text-zinc-400 mt-0.5">
+                  <span className="text-emerald-400 font-bold">{winTrades}W</span> / <span className="text-rose-400 font-bold">{lossTrades}L</span>
+                </div>
+              </div>
+
+              <div className="bg-zinc-900/60 border border-zinc-850 rounded-lg p-3">
+                <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-1">
+                  Винрейт (Win Rate)
+                </div>
+                <div className={cn("text-lg font-black font-mono", Number(winrate) >= 50 ? "text-emerald-400" : (totalTrades === 0 ? "text-zinc-400" : "text-amber-400"))}>
+                  {totalTrades > 0 ? `${winrate}%` : '---'}
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  {totalTrades > 0 ? `${winTrades} из ${totalTrades} в плюс` : 'Нет сделок'}
+                </div>
+              </div>
+
+              <div className="bg-zinc-900/60 border border-zinc-850 rounded-lg p-3">
+                <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-1">
+                  Суммарный PnL
+                </div>
+                <div className={cn("text-lg font-black font-mono", totalPnl >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                  {totalPnl >= 0 ? '+' : ''}{totalPnl.toFixed(2)}$
+                </div>
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  {totalTrades > 0 ? `Ср: ${(totalPnl / totalTrades).toFixed(2)}$` : '0.00$'}
+                </div>
+              </div>
+
+              <div className="bg-zinc-900/60 border border-zinc-850 rounded-lg p-3">
+                <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-1">
+                  Лучшая сделка
+                </div>
+                <div className="text-lg font-black text-emerald-400 font-mono truncate">
+                  {bestTrade ? `+${getSafeHistoryTradePnl(bestTrade).toFixed(2)}$` : '---'}
+                </div>
+                <div className="text-[10px] text-zinc-400 mt-0.5 truncate font-mono">
+                  {bestTrade ? bestTrade.symbol : '---'}
+                </div>
+              </div>
+
+              <div className="bg-zinc-900/60 border border-zinc-850 rounded-lg p-3 col-span-2 sm:col-span-1">
+                <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-1">
+                  База системы
+                </div>
+                <div className="text-lg font-black text-indigo-300 font-mono flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-indigo-400" />
+                  {currentHistoryTrades.length}
+                </div>
+                <div className="text-[10px] text-emerald-400/90 mt-0.5 flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-400" /> Логи в безопасности
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-xl relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -9293,7 +9639,7 @@ export function TradingTerminal({
                 <span className="text-xs text-zinc-400 font-mono">Загрузка аналитики...</span>
               </div>
             }>
-              <AnalyticsTab trades={allTradesArray} onRefresh={manualSync} onExport={handleExportDB} isLoading={loading} />
+              <AnalyticsTab trades={allTradesArray} onRefresh={manualSync} onExport={handleExportDB} isLoading={loading} uiStatsResetTimestamp={uiStatsResetTimestamp} />
             </Suspense>
           ) : historyTab === 'learning' ? (
             <div className="space-y-4">
@@ -9302,7 +9648,15 @@ export function TradingTerminal({
                   Нет фоновых сделок. ИИ автоматически откроет виртуальную сделку при уверенности выше 95% для обучения.
                 </div>
               ) : (
-                autoLearningTrades
+                (showAllDatabaseTrades || uiStatsResetTimestamp === 0
+                  ? autoLearningTrades
+                  : autoLearningTrades.filter(t => {
+                      const raw = t.closeTime || t.closedAt || t.updatedAt || t.history?.[t.history?.length - 1]?.time || t.openTime || t.createdAt || 0;
+                      if (!raw) return false;
+                      const timeNum = typeof raw === 'number' ? raw : (isNaN(Number(raw)) ? new Date(raw).getTime() : Number(raw));
+                      return !isNaN(timeNum) && timeNum >= uiStatsResetTimestamp;
+                    })
+                )
                   .sort((a, b) => (b.closeTime || b.openTime || 0) - (a.closeTime || a.openTime || 0))
                   .map((trade, idx) => {
                     const calculatedPct = trade.pnlPercent !== undefined && trade.pnlPercent !== null
@@ -9365,12 +9719,31 @@ export function TradingTerminal({
             </div>
           ) : (
             <div className="space-y-4">
-              {currentHistoryTrades.length === 0 ? (
-                <div className="text-zinc-500 text-sm text-center py-10 bg-zinc-950/50 rounded-lg border border-zinc-800/50">
-                  {historyTab === 'real' ? 'Нет истории реальных сделок' : 'Нет истории виртуальных сделок'}
-                </div>
+              {displayHistoryTrades.length === 0 ? (
+                currentHistoryTrades.length > 0 && uiStatsResetTimestamp > 0 && !showAllDatabaseTrades ? (
+                  <div className="text-zinc-400 text-sm text-center py-12 px-6 bg-zinc-950/60 rounded-xl border border-zinc-850 flex flex-col items-center justify-center space-y-3">
+                    <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-indigo-400">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div className="text-zinc-200 font-bold">С момента сброса статистики новых закрытых сделок пока нет</div>
+                    <div className="text-xs text-zinc-500 max-w-md">
+                      Статистика в интерфейсе сброшена ({formatTradeTime(uiStatsResetTimestamp)}). Вся полная история ({currentHistoryTrades.length} сделок) бережно сохранена в базе данных.
+                    </div>
+                    <button 
+                      onClick={() => setShowAllDatabaseTrades(true)}
+                      className="mt-1 px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <Database className="w-4 h-4" />
+                      Показать всю историю из базы ({currentHistoryTrades.length} сделок)
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-zinc-500 text-sm text-center py-10 bg-zinc-950/50 rounded-lg border border-zinc-800/50">
+                    {historyTab === 'real' ? 'Нет истории реальных сделок' : 'Нет истории виртуальных сделок'}
+                  </div>
+                )
               ) : (
-                currentHistoryTrades
+                displayHistoryTrades
                   .sort((a, b) => (b.closeTime || b.openTime || 0) - (a.closeTime || a.openTime || 0))
                   .map((trade, idx) => {
                     const pnlVal = trade.pnl !== undefined && trade.pnl !== null

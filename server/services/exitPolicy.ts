@@ -256,18 +256,26 @@ function _evaluateExitPolicyInternal(
 
           // Calculate lock-in Stop Loss price for previous TP steps
           let lockSlPrice: number | undefined;
-          if (i === 0) { // TP1: lock +1.0%
+          if (i === 0) { // TP1: move to Breakeven (+0.25% in profit direction to cover fees and lock win)
+            lockSlPrice = trade.side === 'SHORT'
+              ? Number((trade.entryPrice * 0.9975).toFixed(5))
+              : Number((trade.entryPrice * 1.0025).toFixed(5));
+          } else if (i === 1) { // TP2: lock +1.0% net profit
             lockSlPrice = trade.side === 'SHORT'
               ? Number((trade.entryPrice * 0.990).toFixed(5))
               : Number((trade.entryPrice * 1.010).toFixed(5));
-          } else if (i === 1) { // TP2: lock +3.0%
+          } else if (i === 2) { // TP3: lock +2.0% net profit
             lockSlPrice = trade.side === 'SHORT'
-              ? Number((trade.entryPrice * 0.970).toFixed(5))
-              : Number((trade.entryPrice * 1.030).toFixed(5));
-          } else if (i === 2) { // TP3: lock +5.0%
-            lockSlPrice = trade.side === 'SHORT'
-              ? Number((trade.entryPrice * 0.950).toFixed(5))
-              : Number((trade.entryPrice * 1.050).toFixed(5));
+              ? Number((trade.entryPrice * 0.980).toFixed(5))
+              : Number((trade.entryPrice * 1.020).toFixed(5));
+          }
+
+          // Only apply newStopLoss if it tightens/improves the existing stop loss
+          if (lockSlPrice && trade.stopLoss) {
+            const isBetterSl = trade.side === 'SHORT' ? lockSlPrice < trade.stopLoss : lockSlPrice > trade.stopLoss;
+            if (!isBetterSl) {
+              lockSlPrice = trade.stopLoss;
+            }
           }
 
           diagnostics.exitClass = 'PROFIT_TAKING';

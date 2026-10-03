@@ -257,9 +257,13 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
     ctx.setVirtualBalance(savedVirtualBalance);
     dbData.settings.main.virtualBalance = savedVirtualBalance;
     dbData.settings.main.virtualEquity = calculatedEquity;
+    const savedUiStatsResetTimestamp = typeof dbData.settings?.main?.uiStatsResetTimestamp === 'number'
+      ? dbData.settings.main.uiStatsResetTimestamp
+      : (typeof globalSettings?.uiStatsResetTimestamp === 'number' ? globalSettings.uiStatsResetTimestamp : 0);
     if (typeof globalSettings === 'object' && globalSettings !== null) {
       globalSettings.virtualBalance = savedVirtualBalance;
       globalSettings.virtualEquity = calculatedEquity;
+      globalSettings.uiStatsResetTimestamp = savedUiStatsResetTimestamp;
     }
 
     const todayStr = new Date().toISOString().split('T')[0];

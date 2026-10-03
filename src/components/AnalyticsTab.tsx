@@ -24,12 +24,20 @@ interface AnalyticsTabProps {
   onRefresh?: () => void;
   onExport?: () => void;
   isLoading?: boolean;
+  uiStatsResetTimestamp?: number;
+  onToggleUiStatsReset?: (enabled: boolean) => void;
 }
 
 const COLORS = ['#10b981', '#ef4444'];
 
 const getTradeCloseTimestamp = (t: any): number => {
-  return t.closeTime || t.closedAt || t.history?.[t.history?.length - 1]?.time || t.openTime || 0;
+  const raw = t.closeTime || t.closedAt || t.updatedAt || t.history?.[t.history?.length - 1]?.time || t.openTime || t.createdAt || 0;
+  if (!raw) return 0;
+  if (typeof raw === 'number') return raw;
+  const num = Number(raw);
+  if (!isNaN(num) && num > 0) return num;
+  const parsed = new Date(raw).getTime();
+  return isNaN(parsed) ? 0 : parsed;
 };
 
 const getTradePnlValue = (t: any): number => {
@@ -41,9 +49,10 @@ const getTradePnlValue = (t: any): number => {
   return 0;
 };
 
-export function AnalyticsTab({ trades, onRefresh, onExport, isLoading }: AnalyticsTabProps) {
+export function AnalyticsTab({ trades, onRefresh, onExport, isLoading, uiStatsResetTimestamp, onToggleUiStatsReset }: AnalyticsTabProps) {
   const [filterMode, setFilterMode] = useState<'all' | 'virtual' | 'learning' | 'real'>('all');
   const [period, setPeriod] = useState<'today' | 'week' | 'month' | 'all'>('all');
+  const [respectUiStatsReset, setRespectUiStatsReset] = useState<boolean>(true);
 
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
@@ -55,8 +64,13 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading }: Analyti
       if (filterMode === 'learning' && !(t.isAutoLearning || (t as any).mode === 'LEARNING' || (t as any).isSyntheticSeed)) return false;
       if (filterMode === 'real' && !t.isReal) return false;
 
-      // Date filter
+      // UI stats reset filter (только фильтрация отображения, база остается нетронутой)
       const closeTs = getTradeCloseTimestamp(t);
+      if (uiStatsResetTimestamp && uiStatsResetTimestamp > 0 && respectUiStatsReset) {
+        if (closeTs < uiStatsResetTimestamp) return false;
+      }
+
+      // Date filter
       if (!closeTs && period !== 'all') return false;
       const now = new Date();
       if (closeTs) {
@@ -67,7 +81,7 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading }: Analyti
 
       return true;
     });
-  }, [trades, filterMode, period]);
+  }, [trades, filterMode, period, uiStatsResetTimestamp, respectUiStatsReset]);
 
   const stats = useMemo(() => {
     const total = filteredTrades.length;
@@ -178,7 +192,20 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading }: Analyti
           <button onClick={() => setPeriod('all')} className={cn("px-3 py-1.5 rounded-md text-xs font-medium transition-colors", period === 'all' ? "bg-zinc-800 text-white" : "text-zinc-500 hover:text-zinc-300")}>Все время</button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {uiStatsResetTimestamp !== undefined && uiStatsResetTimestamp > 0 && (
+            <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 cursor-pointer select-none hover:border-indigo-500/40 transition-colors">
+              <input 
+                type="checkbox" 
+                checked={respectUiStatsReset} 
+                onChange={(e) => setRespectUiStatsReset(e.target.checked)} 
+                className="w-3.5 h-3.5 rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+              />
+              <span className="font-semibold">Сброс UI</span>
+              <span className="text-[10px] text-zinc-500 font-mono">({format(uiStatsResetTimestamp, 'dd.MM HH:mm')})</span>
+            </label>
+          )}
+
           {onExport && (
             <button 
               onClick={onExport}

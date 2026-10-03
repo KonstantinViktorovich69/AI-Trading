@@ -318,6 +318,35 @@ export function extractPatternFromTrade(t: any): string | null {
   return null;
 }
 
+// Реестр защищенных ключевых паттернов стратегии согласно RULE[AGENTS_md],
+// которые никогда не должны блокироваться динамической статистикой
+export const PROTECTED_CORE_PATTERNS = [
+  'ИДЕАЛЬНЫЙ ШОРТ',
+  'ИДЕАЛЬНЫЙ ЛОНГ',
+  '1m Spire',
+  'Шпиль',
+  'False Breakout',
+  'Ложный пробой',
+  'Wick Zone Retest',
+  'Ретест фитиля',
+  'Bottom Wick Retest',
+  'Ретест дна',
+  'EXTREME OVERSOLD DIP',
+  'EXTREME OVERBOUGHT PEAK',
+  'Volume Climax Bottom',
+  'Volume Climax (Predictive Dump)',
+  'Vertical Exhaustion',
+  'Разворот пролива',
+  'Reversal from Dump',
+  'BOS/ChoCh'
+];
+
+export function isPatternProtected(patternName: string): boolean {
+  if (!patternName) return false;
+  const lower = patternName.toLowerCase();
+  return PROTECTED_CORE_PATTERNS.some(p => lower.includes(p.toLowerCase()));
+}
+
 // Инициализируем реестр с верифицированными убыточными SAR-паттернами из истории бэктеста
 let blacklistedPatternsMap: Record<string, BlacklistedPatternInfo> = {
   '💥 ПРОЛИВ (SAR Bottom Reversal)': {
@@ -359,7 +388,7 @@ export function updatePatternBlacklistFromStats(
   
   for (const t of recent) {
     const pName = extractPatternFromTrade(t);
-    if (!pName) continue;
+    if (!pName || isPatternProtected(pName)) continue;
     if (!patternStats[pName]) patternStats[pName] = { wins: 0, total: 0, netPnl: 0 };
     patternStats[pName].total += 1;
     const pnl = Number(t.pnl !== undefined ? t.pnl : (t.pnlPercent || t.realizedPnl || 0));
@@ -370,6 +399,7 @@ export function updatePatternBlacklistFromStats(
   }
 
   for (const [pName, stats] of Object.entries(patternStats)) {
+    if (isPatternProtected(pName)) continue;
     if (stats.total >= MIN_TRADES_FOR_PATTERN_STATISTICS) {
       const winRate = (stats.wins / stats.total) * 100;
       if (winRate < 45 || stats.netPnl < -1.5) {
@@ -386,6 +416,7 @@ export function updatePatternBlacklistFromStats(
 
 export function isPatternBlacklisted(patternName: string): { blacklisted: boolean; reason?: string } {
   if (!patternName || patternName.length < 3) return { blacklisted: false };
+  if (isPatternProtected(patternName)) return { blacklisted: false };
   const target = patternName.toLowerCase().trim();
   const now = Date.now();
 
@@ -406,9 +437,9 @@ export function isPatternBlacklisted(patternName: string): { blacklisted: boolea
       if (cleanPat === cleanTarget || cleanTarget.includes(cleanPat)) {
         return { blacklisted: true, reason: entry.reason };
       }
-      // Проверка специфических ключевых фраз убыточных паттернов
-      if ((target.includes('пролив') && pKey.includes('пролив')) || 
-          (target.includes('слив монеты') && pKey.includes('слив')) || 
+      // Проверка специфических ключевых фраз убыточных неструктурированных SAR паттернов
+      if ((target.includes('пролив') && pKey.includes('sar bottom reversal')) || 
+          (target.includes('слив монеты') && pKey.includes('sar reversal at peak')) || 
           (target.includes('sar bottom reversal') && pKey.includes('bottom')) || 
           (target.includes('sar reversal at peak') && pKey.includes('peak'))) {
         return { blacklisted: true, reason: entry.reason };

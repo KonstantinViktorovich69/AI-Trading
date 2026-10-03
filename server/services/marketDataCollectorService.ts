@@ -260,14 +260,14 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
             const lastIdx = highs15.length - 1;
             const prevHighs = highs15.slice(Math.max(0, lastIdx - 20), lastIdx);
             const swingHigh = prevHighs.length > 0 ? Math.max(...prevHighs) : price;
-            const currentHigh = highs15[lastIdx];
+            const recentHighs15 = highs15.slice(Math.max(0, lastIdx - 1));
             const currentClose = closes15[lastIdx];
-            const isLiquiditySweep = currentHigh > swingHigh && currentClose < swingHigh;
+            const isLiquiditySweep = Math.max(...recentHighs15) > swingHigh && currentClose < swingHigh;
 
             const prevLows = lows15.slice(Math.max(0, lastIdx - 20), lastIdx);
             const swingLow = prevLows.length > 0 ? Math.min(...prevLows) : price;
-            const currentLow = lows15[lastIdx];
-            const isLiquiditySweepLow = currentLow < swingLow && currentClose > swingLow;
+            const recentLows15 = lows15.slice(Math.max(0, lastIdx - 1));
+            const isLiquiditySweepLow = Math.min(...recentLows15) < swingLow && currentClose > swingLow;
 
             // BB 15m
             let bbStatus = 'INSIDE';
@@ -393,11 +393,11 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
               const prevLows5 = lows5.slice(Math.max(0, lastIdx5 - 15), lastIdx5);
               const swingHigh5 = prevHighs5.length > 0 ? Math.max(...prevHighs5) : price;
               const swingLow5 = prevLows5.length > 0 ? Math.min(...prevLows5) : price;
-              const currentHigh5 = highs5[lastIdx5];
-              const currentLow5 = lows5[lastIdx5];
+              const recentHighs5 = highs5.slice(Math.max(0, lastIdx5 - 1));
+              const recentLows5 = lows5.slice(Math.max(0, lastIdx5 - 1));
               const currentClose5 = closes5[lastIdx5];
-              isLiquiditySweep5m = currentHigh5 > swingHigh5 && currentClose5 < swingHigh5;
-              isLiquiditySweepLow5m = currentLow5 < swingLow5 && currentClose5 > swingLow5;
+              isLiquiditySweep5m = Math.max(...recentHighs5) > swingHigh5 && currentClose5 < swingHigh5;
+              isLiquiditySweepLow5m = Math.min(...recentLows5) < swingLow5 && currentClose5 > swingLow5;
 
               for (let j = 1; j < ohlcv5m.length - 1; j++) {
                 const c1 = ohlcv5m[j - 1];

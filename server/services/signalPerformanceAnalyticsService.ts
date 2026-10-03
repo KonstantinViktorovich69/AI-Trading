@@ -1,7 +1,7 @@
 import { isOperationalTrade } from './tradeMetrics.ts';
 import { inferDataOrigin } from './tradeSchema.ts';
 import type { MarketRegime, DecisionTrace, TradePosition } from '../types/trading.ts';
-import { MIN_TRADES_FOR_PATTERN_STATISTICS } from './signalEngine.ts';
+import { MIN_TRADES_FOR_PATTERN_STATISTICS, isPatternProtected } from './signalEngine.ts';
 
 export interface GranularBreakdownMetric {
   category: string;
@@ -817,7 +817,7 @@ export class SignalPerformanceAnalyticsService {
     const winningTrades = patternTrades.filter(t => (t.pnl || t.pnlPercent || 0) > 0 || t.outcome === 1 || t.outcome === 'WIN').length;
     const winRate = Number(((winningTrades / patternTrades.length) * 100).toFixed(1));
 
-    if (winRate < minWinRateThreshold) {
+    if (winRate < minWinRateThreshold && !isPatternProtected(rawPatternName)) {
       return {
         allowed: false,
         pattern: rawPatternName,
