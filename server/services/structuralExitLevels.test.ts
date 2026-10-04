@@ -125,9 +125,9 @@ describe('calculateStructuralTpLadder', () => {
     // referencePrice = 100, swingHigh1h = 108, dAutoTp4Floor = 5.0
     // structuralDistance = 108 - 100 = 8.0 (8%)
     // floorDistance = 5.0, capDistance = 15.0 -> finalTp4Distance = 8.0
-    // stages: 0.15 * 8 = 1.2 -> 101.2
-    //         0.30 * 8 = 2.4 -> 102.4
+    // stages: 0.30 * 8 = 2.4 -> 102.4
     //         0.55 * 8 = 4.4 -> 104.4
+    //         0.80 * 8 = 6.4 -> 106.4
     //         1.00 * 8 = 8.0 -> 108.0
     const res = calculateStructuralTpLadder({
       isSellSignal: false,
@@ -138,18 +138,18 @@ describe('calculateStructuralTpLadder', () => {
     });
 
     expect(res.tp4DistancePct).toBe(8.0);
-    expect(res.stage1).toBe(101.2);
-    expect(res.stage2).toBe(102.4);
-    expect(res.stage3).toBe(104.4);
+    expect(res.stage1).toBe(102.4);
+    expect(res.stage2).toBe(104.4);
+    expect(res.stage3).toBe(106.4);
     expect(res.stage4).toBe(108.0);
   });
 
   it('handles normal case for SHORT position', () => {
     // referencePrice = 100, swingLow1h = 92, dAutoTp4Floor = 5.0
     // structuralDistance = 100 - 92 = 8.0 (8%)
-    // stages: 100 - 1.2 = 98.8
-    //         100 - 2.4 = 97.6
+    // stages: 100 - 2.4 = 97.6
     //         100 - 4.4 = 95.6
+    //         100 - 6.4 = 93.6
     //         100 - 8.0 = 92.0
     const res = calculateStructuralTpLadder({
       isSellSignal: true,
@@ -160,9 +160,9 @@ describe('calculateStructuralTpLadder', () => {
     });
 
     expect(res.tp4DistancePct).toBe(8.0);
-    expect(res.stage1).toBe(98.8);
-    expect(res.stage2).toBe(97.6);
-    expect(res.stage3).toBe(95.6);
+    expect(res.stage1).toBe(97.6);
+    expect(res.stage2).toBe(95.6);
+    expect(res.stage3).toBe(93.6);
     expect(res.stage4).toBe(92.0);
   });
 
@@ -179,7 +179,7 @@ describe('calculateStructuralTpLadder', () => {
 
     expect(res.tp4DistancePct).toBe(4.5);
     expect(res.stage4).toBe(104.5);
-    expect(res.stage1).toBe(100.675);
+    expect(res.stage1).toBe(101.35);
   });
 
   it('triggers cap when structural level is too far (> 3x floor)', () => {
@@ -196,7 +196,7 @@ describe('calculateStructuralTpLadder', () => {
 
     expect(res.tp4DistancePct).toBe(15.0);
     expect(res.stage4).toBe(85.0);
-    expect(res.stage1).toBe(97.75);
+    expect(res.stage1).toBe(95.5);
   });
 
   it('falls back to floor if swing level is on the wrong side of price', () => {

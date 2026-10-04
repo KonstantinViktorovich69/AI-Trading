@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { matchesStructuredFilter, calculateConfidenceProbability, executeUpdateMarketPulse, executeScrapeSocialSentiment, type QuantRiskEngineContext } from './quantRiskEngine.ts';
+import { matchesStructuredFilter, calculateConfidenceProbability, evaluateKnowledgeBaseForSignal, executeUpdateMarketPulse, executeScrapeSocialSentiment, type QuantRiskEngineContext } from './quantRiskEngine.ts';
 
 describe('quantRiskEngine', () => {
   describe('matchesStructuredFilter', () => {
@@ -143,6 +143,54 @@ describe('quantRiskEngine', () => {
       expect(res.score).toBe(82);
       expect(res.trend).toBe('PUMP_HYPE');
       expect(cache['BTC'].trend).toBe('PUMP_HYPE');
+    });
+  });
+
+  describe('evaluateKnowledgeBaseForSignal', () => {
+    it('returns empty result when knowledge base is empty', () => {
+      const res = evaluateKnowledgeBaseForSignal('ETHUSDT', { rsi: 70 }, []);
+      expect(res.isBlocked).toBe(false);
+      expect(res.penaltyScore).toBe(0);
+      expect(res.matchedRuleIds).toHaveLength(0);
+    });
+
+    it('applies blocking rule globally across all assets', () => {
+      const kb = [{
+        id: 'al_1',
+        text: '[Авто-Обучение | BTC/USDT | PnL -4.8%] Избегать входа при RSI > 80',
+        filterIndicator: 'rsi',
+        filterCondition: 'gt',
+        filterValue: 80,
+        filterAction: 'block',
+        impact: -12,
+        successRate: 0.15
+      }];
+
+      // Evaluated on SOLUSDT (different symbol from BTC)
+      const res = evaluateKnowledgeBaseForSignal('SOLUSDT', { rsi: 85 }, kb);
+      expect(res.isBlocked).toBe(true);
+      expect(res.matchedRuleIds).toContain('al_1');
+    });
+
+    it('applies penalty with asset-specific multiplier when matching same asset', () => {
+      const kb = [{
+        id: 'al_2',
+        text: '[Авто-Обучение | DOGE/USDT | PnL -3.5%] Штрафовать лонги при падении объема',
+        filterIndicator: 'volume',
+        filterCondition: 'lt',
+        filterValue: 1.5,
+        filterAction: 'penalty',
+        impact: 10,
+        successRate: 0.5
+      }];
+
+      const resDoge = evaluateKnowledgeBaseForSignal('DOGE/USDT', { volumeSpike: 1.0 }, kb);
+      const resOther = evaluateKnowledgeBaseForSignal('XRP/USDT', { volumeSpike: 1.0 }, kb);
+
+      expect(resDoge.penaltyScore).toBeGreaterThanOrEqual(5);
+      expect(resOther.penaltyScore).toBeGreaterThanOrEqual(5);
+      expect(resDoge.matchedRuleIds).toContain('al_2');
+      expect(resOther.matchedRuleIds).toContain('al_2');
     });
   });
 });

@@ -13,6 +13,7 @@ import { addOtePendingCandidate } from './oteVirtualQueue.ts';
 import { isTraditionalEquitySymbol } from './marketSignalScanner.ts';
 import { isPatternBlacklisted } from './signalEngine.ts';
 import { SignalPerformanceAnalyticsService } from './signalPerformanceAnalyticsService.ts';
+import { evaluateKnowledgeBaseForSignal } from './quantRiskEngine.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -49,6 +50,7 @@ export interface AutoPilotEngineDependencies {
   executeMainRealAutoEntry: (params: any, options: any) => Promise<any>;
   getLossStreakSizeDampening: (trades: any[]) => number;
   getWallAdjustedTp: (symbol: string, isSell: boolean, entry: number, target: number) => number;
+  getAiKnowledgeBase?: () => any[];
 }
 
 export interface CandidateQueueOptions {
@@ -298,8 +300,40 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         if (!symbol || typeof symbol !== 'string') continue;
         const price = currentSig.price;
         const exName = currentSig.exchange;
-        const finalAiScore = currentSig.aiScore;
+        let finalAiScore = currentSig.aiScore;
         const volatility = typeof currentSig.volatility !== 'undefined' ? Number(currentSig.volatility) : 2.0;
+
+        // --- КВАНТОВОЕ АВТО-ОБУЧЕНИЕ: ПРОВЕРКА ПРАВИЛ БАЗЫ ЗНАНИЙ ---
+        const aiKnowledgeBase = deps.getAiKnowledgeBase ? deps.getAiKnowledgeBase() : [];
+        const currentMarketPulse = deps.getGlobalMarketPulse ? deps.getGlobalMarketPulse() : { bias: 0 };
+        const kbEval = evaluateKnowledgeBaseForSignal(
+            symbol,
+            {
+                rsi: currentSig.rsi !== undefined ? Number(currentSig.rsi) : (currentSig?.indicators?.rsi1h !== undefined ? Number(currentSig.indicators.rsi1h) : undefined),
+                volumeSpike: Number(currentSig.volumeSpike) || undefined,
+                bias: currentMarketPulse?.bias,
+                volatility,
+                imbalance: orderBookImbalance[normalizeSymbol(symbol)]?.imbalance,
+                change24h: Number(currentSig.change24h) || undefined
+            },
+            aiKnowledgeBase
+        );
+
+        if (kbEval.isBlocked) {
+            console.log(`[AUTOPILOT KNOWLEDGE GUARD] Skipping entry for ${symbol}: ${kbEval.blockReason}`);
+            continue;
+        }
+
+        if (kbEval.penaltyScore > 0) {
+            const penalizedScore = Math.max(0, finalAiScore - kbEval.penaltyScore);
+            console.log(`[AUTOPILOT KNOWLEDGE PENALTY] Candidate ${symbol} penalized: score ${finalAiScore} -> ${penalizedScore} (-${kbEval.penaltyScore} pts from learned rules)`);
+            finalAiScore = penalizedScore;
+            if (finalAiScore < (requiredAutoScoreVirtual || 70)) {
+                continue;
+            }
+        } else if (kbEval.bonusScore > 0) {
+            finalAiScore = Math.min(100, finalAiScore + kbEval.bonusScore);
+        }
 
         // --- STRICT SIGNAL QUALITY & PATTERN FILTER ---
         const rawPatternName = currentSig.matchedPattern || currentSig.patternName || currentSig.type || currentSig.pattern || '';
@@ -545,50 +579,19 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                 const slippagePercent = Math.min(0.0015, 0.0005 * (1 + Math.max(0, signalVol - 2.0) * 0.15));
                 const slippagePrice = isSellSignal ? formatNumericPrice(price * (1 - slippagePercent)) : formatNumericPrice(price * (1 + slippagePercent));
 
-                const hasWickWorthy = typeof currentSig.wicks !== 'undefined' && currentSig.wicks && (isSellSignal ? currentSig.wicks.topPct > 0.25 : currentSig.wicks.bottomPct > 0.25);
-                let optimizedEntryPrice = slippagePrice;
-                if (hasWickWorthy) {
-                    const wickPct = isSellSignal ? currentSig.wicks.topPct : currentSig.wicks.bottomPct;
-                    // Оптимизация входа по лимитному ордеру в тело тени свечи (1/3 отката в фитиль)
-                    const shortWickPremium = Math.min(0.008, Math.max(0.002, (wickPct - 0.20) * 0.015));
-                    optimizedEntryPrice = isSellSignal
-                        ? formatNumericPrice(slippagePrice * (1 + shortWickPremium))
-                        : formatNumericPrice(slippagePrice * (1 - shortWickPremium));
-                    console.log(`[WICK RETEST ENTRY] Entry optimized for ${symbol}: entry price adjusted by ${isSellSignal ? '+' : '-'}${(shortWickPremium * 100).toFixed(2)}% to $${optimizedEntryPrice} inside the wick.`);
-                }
-
-                const wallCheckSym = normalizeSymbol(symbol);
-                const vObHist = GLOBAL_ORDER_BOOK_HISTORY[wallCheckSym];
-                let wallPersistence = 0.5;
-                if (vObHist && vObHist.length >= 3) {
-                    const lastSnaps = vObHist.slice(-8);
-                    let snapsWithWalls = 0;
-                    lastSnaps.forEach(snap => {
-                        if (snap.walls && snap.walls.some((w: any) => w.type === (isSellSignal ? 'ask' : 'bid') && w.distancePct <= 2.2)) {
-                            snapsWithWalls++;
-                        }
-                    });
-                    wallPersistence = snapsWithWalls / lastSnaps.length;
-                }
-                
-                if (wallPersistence < 0.25) {
-                    const extraBuffer = Math.min(0.003, volatility * 0.0005);
-                    optimizedEntryPrice = isSellSignal
-                        ? formatNumericPrice(optimizedEntryPrice * (1 + extraBuffer))
-                        : formatNumericPrice(optimizedEntryPrice * (1 - extraBuffer));
-                    console.log(`[ANTI-SPOOF FILTER] Warning for ${symbol}: High spoof probability detected (intensity ${(wallPersistence*100).toFixed(0)}%). Limit order entry adjusted ${isSellSignal ? 'upwards by +' : 'downwards by -'}${(extraBuffer*100).toFixed(3)}% to $${optimizedEntryPrice} to avoid quick fill and false breakdown.`);
-                }
+                // Реалистичная точка входа по рыночному исполнению (без искусственного завышения цен входа, искажающего PnL)
+                const optimizedEntryPrice = slippagePrice;
 
                 const autoVolSqueezeFactor = (currentSig.atr && price > 0) ? Math.max(0.5, Math.min(1.8, (Number(currentSig.atr) / price * 100) / 1.75)) : 1.0;
                 // Реалистичные цели скальпинга согласно правилу «3-15» базы знаний:
-                // TP1: 0.8%..1.2% (перенос SL в безубыток)
-                // TP2: 1.6%..2.2% (фиксация прибыли)
-                // TP3: 2.6%..3.2% (фиксация импульса)
-                // TP4: 3.2%..4.2% (полный выход из позиции)
-                const dAutoTp1 = Math.max(0.70, 0.90 * autoVolSqueezeFactor);
-                const dAutoTp2 = Math.max(1.30, 1.80 * autoVolSqueezeFactor);
-                const dAutoTp3 = Math.max(2.00, 2.70 * autoVolSqueezeFactor);
-                const dAutoTp4 = Math.max(2.80, Math.min(4.20, 3.60 * autoVolSqueezeFactor));
+                // TP1: 1.3%..1.6% (перенос SL в безубыток при подтверждении импульса)
+                // TP2: 2.2%..2.7% (фиксация прибыли)
+                // TP3: 3.3%..4.0% (фиксация импульса)
+                // TP4: 4.5%..6.0% (полный выход из позиции)
+                const dAutoTp1 = Math.max(1.30, 1.60 * autoVolSqueezeFactor);
+                const dAutoTp2 = Math.max(2.20, 2.70 * autoVolSqueezeFactor);
+                const dAutoTp3 = Math.max(3.30, 4.00 * autoVolSqueezeFactor);
+                const dAutoTp4 = Math.max(4.50, Math.min(6.50, 5.50 * autoVolSqueezeFactor));
 
                 // Structural Stop-Loss (привязанный к localLow5m/localHigh5m и буферу ATR)
                 const structuralSlVirtual = calculateStructuralStopLoss({
@@ -835,9 +838,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                             stopLoss: formatNumericPrice(structuralSlVirtual.stopLoss),
                             takeProfit: adjustedTakeProfit,
                             tpStages: [
-                                { targetPrice: stage1Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.15).toFixed(2)), closeRatio: autoRatios[0], executed: false },
-                                { targetPrice: stage2Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.30).toFixed(2)), closeRatio: autoRatios[1], executed: false },
-                                { targetPrice: stage3Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.55).toFixed(2)), closeRatio: autoRatios[2], executed: false },
+                                { targetPrice: stage1Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.25).toFixed(2)), closeRatio: autoRatios[0] || 0.25, executed: false },
+                                { targetPrice: stage2Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.50).toFixed(2)), closeRatio: autoRatios[1] || 0.30, executed: false },
+                                { targetPrice: stage3Target, targetPercent: Number((tpLadderVirtual.tp4DistancePct * 0.75).toFixed(2)), closeRatio: autoRatios[2] || 0.25, executed: false },
                                 { targetPrice: stage4Target, targetPercent: Number(tpLadderVirtual.tp4DistancePct.toFixed(2)), closeRatio: 1.0, executed: false }
                             ],
                             gridOrders: (() => {
@@ -865,6 +868,10 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                         });
 
                         if (autoEntryRes.executed && autoEntryRes.trade) {
+                            if (kbEval.matchedRuleIds.length > 0) {
+                                autoEntryRes.trade.matchedRules = kbEval.matchedRuleIds;
+                                autoEntryRes.trade.matchedRuleTexts = kbEval.matchedRuleTexts;
+                            }
                             deps.pushVirtualTrade(autoEntryRes.trade);
                             if (!virtualTrades.some(t => t.id === autoEntryRes.trade.id)) {
                                 virtualTrades.push(autoEntryRes.trade);
@@ -1079,21 +1086,13 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                             const cachedIndicatorsReal = GLOBAL_TRUE_OHLCV[normalizeSymbol(symbol)] || {};
                             const atr = currentSig.atr ? Number(currentSig.atr) : (GLOBAL_ATR[normalizeSymbol(symbol)] || (price * 0.015));
                             const realVolSqueezeFactor = (currentSig.atr && price > 0) ? Math.max(0.5, Math.min(1.8, (Number(currentSig.atr) / price * 100) / 1.75)) : 1.0;
-                            const dRealTp1 = Math.max(0.70, 0.90 * realVolSqueezeFactor);
-                            const dRealTp2 = Math.max(1.30, 1.80 * realVolSqueezeFactor);
-                            const dRealTp3 = Math.max(2.00, 2.70 * realVolSqueezeFactor);
-                            const dRealTp4 = Math.max(2.80, Math.min(4.20, 3.60 * realVolSqueezeFactor));
+                            const dRealTp1 = Math.max(1.30, 1.60 * realVolSqueezeFactor);
+                            const dRealTp2 = Math.max(2.20, 2.70 * realVolSqueezeFactor);
+                            const dRealTp3 = Math.max(3.30, 4.00 * realVolSqueezeFactor);
+                            const dRealTp4 = Math.max(4.50, Math.min(6.50, 5.50 * realVolSqueezeFactor));
 
-                            // Вход лимитным ордером в тело тени (Wick Retest Entry)
-                            const hasWickWorthyReal = typeof currentSig.wicks !== 'undefined' && currentSig.wicks && (isSellSignal ? currentSig.wicks.topPct > 0.25 : currentSig.wicks.bottomPct > 0.25);
-                            let optimizedEntryPriceReal = price;
-                            if (hasWickWorthyReal) {
-                                const wickPct = isSellSignal ? currentSig.wicks.topPct : currentSig.wicks.bottomPct;
-                                const shortWickPremium = Math.min(0.008, Math.max(0.002, (wickPct - 0.20) * 0.015));
-                                optimizedEntryPriceReal = isSellSignal
-                                    ? formatNumericPrice(price * (1 + shortWickPremium))
-                                    : formatNumericPrice(price * (1 - shortWickPremium));
-                            }
+                            // Реалистичная точка входа по рыночной котировке (без искусственного завышения цен входа, искажающего PnL)
+                            const optimizedEntryPriceReal = price;
 
                             // Structural Stop-Loss (привязанный к localLow5m/localHigh5m и буферу ATR)
                             const structuralSlReal = calculateStructuralStopLoss({
@@ -1363,9 +1362,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                         stopLoss: formatNumericPrice(structuralSlReal.stopLoss),
                                         takeProfit: adjustedTakeProfit,
                                         tpStages: [
-                                            { targetPrice: stage1Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.15).toFixed(2)), closeRatio: realRatios[0], executed: false },
-                                            { targetPrice: stage2Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.30).toFixed(2)), closeRatio: realRatios[1], executed: false },
-                                            { targetPrice: stage3Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.55).toFixed(2)), closeRatio: realRatios[2], executed: false },
+                                            { targetPrice: stage1Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.25).toFixed(2)), closeRatio: realRatios[0] || 0.25, executed: false },
+                                            { targetPrice: stage2Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.50).toFixed(2)), closeRatio: realRatios[1] || 0.30, executed: false },
+                                            { targetPrice: stage3Target, targetPercent: Number((tpLadderReal.tp4DistancePct * 0.75).toFixed(2)), closeRatio: realRatios[2] || 0.25, executed: false },
                                             { targetPrice: stage4Target, targetPercent: Number(tpLadderReal.tp4DistancePct.toFixed(2)), closeRatio: 1.0, executed: false }
                                         ],
                                         gridOrders: (() => {
@@ -1386,6 +1385,10 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                     });
 
                                     if (realAutoEntryRes.executed && realAutoEntryRes.trade) {
+                                        if (kbEval.matchedRuleIds.length > 0) {
+                                            realAutoEntryRes.trade.matchedRules = kbEval.matchedRuleIds;
+                                            realAutoEntryRes.trade.matchedRuleTexts = kbEval.matchedRuleTexts;
+                                        }
                                         deps.pushVirtualTrade(realAutoEntryRes.trade);
                                         if (!virtualTrades.some(t => t.id === realAutoEntryRes.trade.id)) {
                                             virtualTrades.push(realAutoEntryRes.trade);

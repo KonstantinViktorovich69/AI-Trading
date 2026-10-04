@@ -375,14 +375,14 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     }
 
     // Защита позиции в безубыток (Breakeven Guard):
-    // Активируется при устойчивом импульсе в плюс >= +0.75% без плеча (или >= +2.80% чистого PnL с плечом),
-    // давая позиции достаточное пространство для дыхания (0.50% буфер) на пути к первому Take-Profit (TP1).
-    // Устанавливает Stop-Loss на +0.25% в зону чистой прибыли, гарантированно покрывая
-    // комиссию биржи (0.12%) и фиксируя положительный результат (WIN) в случае разворота.
-    if ((unleveragedPnlNow >= 0.75 || pnlNow >= 2.80) && !trade.isProtected && !shouldClose) {
+    // Согласно правилу AGENTS.md: подтягивать SL в зону безубытка (+0.35%) при устойчивом движении цены
+    // в нашу пользу на >= +1.50% без плеча (или >= +5.50% чистого PnL с плечом).
+    // Это дает позиции полноценное пространство для дыхания (1.15% буфер от текущей цены) и исключает
+    // преждевременное выбивание по рыночному шуму на пути к целям TP1-TP4.
+    if ((unleveragedPnlNow >= 1.50 || pnlNow >= 5.50) && !trade.isProtected && !shouldClose) {
       const breakevenPrice = trade.side === 'SHORT'
-        ? Number((trade.entryPrice * 0.9975).toFixed(5))
-        : Number((trade.entryPrice * 1.0025).toFixed(5));
+        ? Number((trade.entryPrice * 0.9965).toFixed(5))
+        : Number((trade.entryPrice * 1.0035).toFixed(5));
 
       const shouldUpdateSl = !trade.stopLoss || (
         trade.side === 'SHORT' ? breakevenPrice < trade.stopLoss : breakevenPrice > trade.stopLoss

@@ -97,7 +97,8 @@ export class AutopilotEngineService {
       executeMainVirtualAutoEntry: (params: any, options: any) => executeMainVirtualAutoEntry(params, options),
       executeMainRealAutoEntry: (params: any, options: any) => executeMainRealAutoEntry(params, options),
       getLossStreakSizeDampening: (trades: any[]) => getLossStreakSizeDampening(trades),
-      getWallAdjustedTp: this.deps.getWallAdjustedTp
+      getWallAdjustedTp: this.deps.getWallAdjustedTp,
+      getAiKnowledgeBase: this.deps.getAiKnowledgeBase
     };
 
     await runAutopilotAndVirtualTradeEntry(autopilotDeps);

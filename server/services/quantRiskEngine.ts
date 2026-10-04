@@ -148,13 +148,13 @@ export function calculateConfidenceProbability(
     for (const rule of aiKnowledgeBase) {
       if (!rule || !rule.filterIndicator || rule.filterIndicator === 'none') continue;
 
-      let ruleSymbol: string | null = null;
+      let isAssetSpecific = false;
       const symbolMatch = rule.text?.toLowerCase()?.match(/\[авто-обучение\s*\|\s*([a-z0-9\/:]+)\s*\|/);
       if (symbolMatch) {
-        ruleSymbol = symbolMatch[1].replace(/[\/:]/g, '');
-      }
-      if (ruleSymbol && ruleSymbol !== symbol.toLowerCase()) {
-        continue;
+        const ruleSymbol = symbolMatch[1].replace(/[\/:]/g, '');
+        if (ruleSymbol === symbol.toLowerCase().replace(/[\/:]/g, '')) {
+          isAssetSpecific = true;
+        }
       }
 
       const structMatch = matchesStructuredFilter(
@@ -169,13 +169,14 @@ export function calculateConfidenceProbability(
       );
 
       if (structMatch.matched) {
-        const ruleWeight = (rule.successRate ?? 0.5) * (rule.impact || 10) / 100;
+        const assetMultiplier = isAssetSpecific ? 1.3 : 1.0;
+        const ruleWeight = (rule.successRate ?? 0.5) * (rule.impact || 10) / 100 * assetMultiplier;
         if (structMatch.isBonus) {
           probAdjustment += ruleWeight * 0.1;
         } else if (structMatch.isPenalty) {
           probAdjustment -= ruleWeight * 0.1;
         } else if (structMatch.isBlock) {
-          probAdjustment -= 0.3;
+          probAdjustment -= 0.3 * assetMultiplier;
         }
       }
     }
@@ -185,6 +186,96 @@ export function calculateConfidenceProbability(
 
   p = Math.max(0.01, Math.min(0.99, p + probAdjustment));
   return { p, features: [x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11] };
+}
+
+export interface KnowledgeBaseEvaluationResult {
+  isBlocked: boolean;
+  blockReason?: string;
+  penaltyScore: number;
+  bonusScore: number;
+  matchedRuleIds: string[];
+  matchedRuleTexts: string[];
+}
+
+/**
+ * Оценивает сигнал на соответствие выученным правилам из базы знаний ИИ.
+ * Применяет правила глобально ко всем активам, с повышенным приоритетом для правил той же монеты.
+ */
+export function evaluateKnowledgeBaseForSignal(
+  symbol: string,
+  indicators: {
+    rsi?: number;
+    volumeSpike?: number;
+    bias?: number;
+    volatility?: number;
+    imbalance?: number;
+    fomoIndex?: number;
+    change24h?: number;
+  },
+  aiKnowledgeBase: any[]
+): KnowledgeBaseEvaluationResult {
+  if (!Array.isArray(aiKnowledgeBase) || aiKnowledgeBase.length === 0) {
+    return { isBlocked: false, penaltyScore: 0, bonusScore: 0, matchedRuleIds: [], matchedRuleTexts: [] };
+  }
+
+  const cleanSym = symbol ? symbol.toLowerCase().replace(/[\/:]/g, '') : '';
+  let penaltyScore = 0;
+  let bonusScore = 0;
+  let isBlocked = false;
+  let blockReason: string | undefined;
+  const matchedRuleIds: string[] = [];
+  const matchedRuleTexts: string[] = [];
+
+  for (const rule of aiKnowledgeBase) {
+    if (!rule || rule.isArchived || !rule.filterIndicator || rule.filterIndicator === 'none') continue;
+
+    let isAssetSpecific = false;
+    const symbolMatch = rule.text?.toLowerCase()?.match(/\[авто-обучение\s*\|\s*([a-z0-9\/:]+)\s*\|/);
+    if (symbolMatch) {
+      const ruleSymbol = symbolMatch[1].replace(/[\/:]/g, '');
+      if (ruleSymbol === cleanSym) {
+        isAssetSpecific = true;
+      }
+    }
+
+    const structMatch = matchesStructuredFilter(
+      rule,
+      indicators.rsi ?? 50,
+      indicators.volumeSpike ?? 1,
+      indicators.bias ?? 0,
+      indicators.volatility ?? 10,
+      indicators.imbalance ?? 0,
+      indicators.fomoIndex ?? 50,
+      indicators.change24h ?? 0
+    );
+
+    if (structMatch.matched) {
+      matchedRuleIds.push(rule.id);
+      matchedRuleTexts.push(rule.text);
+
+      const assetMultiplier = isAssetSpecific ? 1.3 : 1.0;
+      const ruleWeight = (rule.successRate ?? 0.5) * (Math.abs(rule.impact || 10)) / 100 * assetMultiplier;
+
+      if (structMatch.isBlock) {
+        isBlocked = true;
+        blockReason = structMatch.reason || `Сработало блокирующее правило базы знаний: [${rule.text}]`;
+        break; // Hard block triggered
+      } else if (structMatch.isPenalty) {
+        penaltyScore += Math.max(5, Math.round(ruleWeight * 15));
+      } else if (structMatch.isBonus) {
+        bonusScore += Math.max(3, Math.round(ruleWeight * 10));
+      }
+    }
+  }
+
+  return {
+    isBlocked,
+    blockReason,
+    penaltyScore,
+    bonusScore,
+    matchedRuleIds,
+    matchedRuleTexts
+  };
 }
 
 /**

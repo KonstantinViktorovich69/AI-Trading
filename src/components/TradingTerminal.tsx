@@ -3283,6 +3283,21 @@ export function TradingTerminal({
           if (data.startOfDayRealBalance !== undefined) {
             setStartOfDayRealBalance(data.startOfDayRealBalance);
           }
+          if (data.uiStatsResetTimestamp !== undefined) {
+            setUiStatsResetTimestamp(prev => {
+              if (data.uiStatsResetTimestamp !== prev) {
+                try {
+                  if (data.uiStatsResetTimestamp > 0) {
+                    localStorage.setItem('weex_ui_stats_reset_ts', data.uiStatsResetTimestamp.toString());
+                  } else {
+                    localStorage.removeItem('weex_ui_stats_reset_ts');
+                  }
+                } catch {}
+                return data.uiStatsResetTimestamp;
+              }
+              return prev;
+            });
+          }
           if (data.marketHealth !== undefined) {
             setMarketHealth(data.marketHealth);
           }

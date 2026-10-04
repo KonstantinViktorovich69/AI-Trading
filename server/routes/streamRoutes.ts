@@ -70,6 +70,7 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
         startOfDayBalance: ctx.getStartOfDayBalance ? ctx.getStartOfDayBalance() : undefined,
         startOfDayRealBalance: ctx.getStartOfDayRealBalance ? ctx.getStartOfDayRealBalance() : undefined,
         startOfWeekBalance: ctx.getStartOfWeekBalance ? ctx.getStartOfWeekBalance() : undefined,
+        uiStatsResetTimestamp: dbDataForSse?.settings?.main?.uiStatsResetTimestamp || 0,
         prolivPeaks: ctx.getProlivPeaks(),
         retrospectiveMemory: dbDataForSse.retrospectiveMemory || [],
         agentExchangeLogs: ctx.getAgentExchangeLogs()
@@ -79,7 +80,7 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
       const sigsCount = data.signals.length;
       const topSig = data.signals[0] ? `${data.signals[0].symbol}_${data.signals[0].price}_${data.signals[0].aiScore}` : '';
       const openTradesCount = virtualTrades.filter((t: any) => t.status === 'OPEN').length;
-      const curHash = `${sigsCount}_${topSig}_${openTradesCount}_${data.balance}_${data.marketHealth}_${data.prolivPeaks.length}`;
+      const curHash = `${sigsCount}_${topSig}_${openTradesCount}_${data.balance}_${data.marketHealth}_${data.prolivPeaks.length}_${data.uiStatsResetTimestamp}`;
       const now = Date.now();
 
       if (!force && curHash === lastDataHash && (now - lastFullSendTime < 10000)) {

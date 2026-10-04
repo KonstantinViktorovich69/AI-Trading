@@ -45,9 +45,9 @@ export const TP_CAP_MULTIPLIER = 3.0;
 /**
  * Доли дистанции TP4 для лестницы фиксации прибыли TP1-TP4
  */
-export const TP_STAGE1_RATIO = 0.15;
-export const TP_STAGE2_RATIO = 0.30;
-export const TP_STAGE3_RATIO = 0.55;
+export const TP_STAGE1_RATIO = 0.30;
+export const TP_STAGE2_RATIO = 0.55;
+export const TP_STAGE3_RATIO = 0.80;
 export const TP_STAGE4_RATIO = 1.00;
 
 export interface StructuralStopLossParams {
