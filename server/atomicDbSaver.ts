@@ -178,12 +178,13 @@ export class AtomicStateStore {
             const totalNew = newTrades + newHistory;
 
             if (totalDisk > 5 && totalNew === 0) {
-              console.error(`[ATOMIC STORE GUARD] ⚠️ Blocked accidental wipeout: disk has ${totalDisk} total trades, new data has 0.`);
-              throw new Error(`ACCIDENTAL_WIPEOUT_PREVENTED: total trades dropped from ${totalDisk} to 0`);
+              console.warn(`[ATOMIC STORE GUARD] 🛡️ Auto-healed: disk has ${totalDisk} total trades, new data had 0. Restored ${diskTrades} trades from disk.`);
+              data.trades = existingData.trades;
+              if (Array.isArray(existingData.history)) data.history = existingData.history;
             }
             if (diskKb > 5 && newKb === 0) {
-              console.error(`[ATOMIC STORE GUARD] ⚠️ Blocked accidental wipeout: disk has ${diskKb} knowledge rules, new data has 0.`);
-              throw new Error(`ACCIDENTAL_WIPEOUT_PREVENTED: knowledge rules dropped from ${diskKb} to 0`);
+              console.warn(`[ATOMIC STORE GUARD] 🛡️ Auto-healed: disk has ${diskKb} knowledge rules, new data had 0. Restored ${diskKb} knowledge rules from disk.`);
+              data.knowledge = existingData.knowledge;
             }
           }
         }

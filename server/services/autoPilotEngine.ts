@@ -51,6 +51,7 @@ export interface AutoPilotEngineDependencies {
   getLossStreakSizeDampening: (trades: any[]) => number;
   getWallAdjustedTp: (symbol: string, isSell: boolean, entry: number, target: number) => number;
   getAiKnowledgeBase?: () => any[];
+  calculateConfidenceProbability?: (symbol: string, currentPrice: number, volume: number) => { p: number; features: number[] };
 }
 
 export interface CandidateQueueOptions {
@@ -333,6 +334,28 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             }
         } else if (kbEval.bonusScore > 0) {
             finalAiScore = Math.min(100, finalAiScore + kbEval.bonusScore);
+        }
+
+        // --- КВАНТОВАЯ ЛОГИСТИЧЕСКАЯ РЕГРЕССИЯ (MODEL WEIGHTS BETA0..BETA11) ---
+        if (deps.calculateConfidenceProbability) {
+            try {
+                const quantProb = deps.calculateConfidenceProbability(symbol, price, currentSig.volume || 0);
+                if (quantProb && typeof quantProb.p === 'number') {
+                    const probDiff = quantProb.p - 0.5;
+                    const probAdjustment = Math.round(probDiff * 24); // -12 до +12 пунктов
+                    if (probAdjustment !== 0) {
+                        const scoreBefore = finalAiScore;
+                        finalAiScore = Math.max(0, Math.min(100, finalAiScore + probAdjustment));
+                        console.log(`[QUANT LOGISTIC MODEL] ${symbol}: p=${(quantProb.p * 100).toFixed(1)}% -> AI Score adjusted ${scoreBefore} -> ${finalAiScore} (${probAdjustment > 0 ? '+' : ''}${probAdjustment} pts)`);
+                    }
+                    if (quantProb.p < 0.32) {
+                        console.log(`[QUANT LOGISTIC GUARD] Skipping entry for ${symbol}: Win probability ${(quantProb.p * 100).toFixed(1)}% is below 32% safety threshold.`);
+                        continue;
+                    }
+                }
+            } catch (probErr: any) {
+                // Non-blocking graceful fallback
+            }
         }
 
         // --- STRICT SIGNAL QUALITY & PATTERN FILTER ---
@@ -1012,6 +1035,22 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             const rollingPerfReal = SignalPerformanceAnalyticsService.evaluatePatternRollingPerformance(virtualTrades, rawPatternNameReal, 20);
             if (!rollingPerfReal.allowed) {
                 console.log(`[AUTOPILOT REAL ROLLING WINRATE GUARD] Skipping real entry for ${symbol}: ${rollingPerfReal.reason}`);
+                continue;
+            }
+
+            // Knowledge base validation for real entry
+            const realKbEval = evaluateKnowledgeBaseForSignal(
+                symbol,
+                {
+                    rsi: rsiVal,
+                    volumeSpike: Number(currentSig.volumeSpike) || undefined,
+                    volatility: Number(currentSig.volatility) || 2.0,
+                    change24h: Number(currentSig.change24h) || undefined
+                },
+                aiKnowledgeBase
+            );
+            if (realKbEval.isBlocked) {
+                console.log(`[AUTOPILOT REAL KNOWLEDGE GUARD] Skipping real entry for ${symbol}: ${realKbEval.blockReason}`);
                 continue;
             }
 

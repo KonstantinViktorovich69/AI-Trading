@@ -39,6 +39,7 @@ export interface AutopilotEngineServiceDependencies {
   runAiGeneration: (params: any) => Promise<{ text?: string }>;
   getAtomicStoreRevision?: () => number;
   getWallAdjustedTp: (symbol: string, isSell: boolean, entry: number, target: number) => number;
+  calculateConfidenceProbability?: (symbol: string, currentPrice: number, volume: number) => { p: number; features: number[] };
 }
 
 export class AutopilotEngineService {
@@ -98,7 +99,8 @@ export class AutopilotEngineService {
       executeMainRealAutoEntry: (params: any, options: any) => executeMainRealAutoEntry(params, options),
       getLossStreakSizeDampening: (trades: any[]) => getLossStreakSizeDampening(trades),
       getWallAdjustedTp: this.deps.getWallAdjustedTp,
-      getAiKnowledgeBase: this.deps.getAiKnowledgeBase
+      getAiKnowledgeBase: this.deps.getAiKnowledgeBase,
+      calculateConfidenceProbability: this.deps.calculateConfidenceProbability
     };
 
     await runAutopilotAndVirtualTradeEntry(autopilotDeps);

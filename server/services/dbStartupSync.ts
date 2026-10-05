@@ -3,6 +3,7 @@ import { withFirestoreTimeout } from './dbStorageService.ts';
 import { ensureHistoricalDataSeeded } from '../db/seedData.ts';
 import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive.ts';
 import { updatePatternBlacklistFromStats } from './signalEngine.ts';
+import { enrichKnowledgeBaseWithStructuredFilters } from './quantRiskEngine.ts';
 
 export interface AgentExchangeLog {
   id: string;
@@ -474,6 +475,10 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
     });
 
     dbData.knowledge = Array.from(existingKnowledgeMap.values());
+    const enrichedCount = enrichKnowledgeBaseWithStructuredFilters(dbData.knowledge);
+    if (enrichedCount > 0) {
+      console.log(`[STARTUP KNOWLEDGE ENRICH] 🧠 Successfully activated ${enrichedCount} knowledge rules with structured triggers.`);
+    }
     aiKnowledgeBase.length = 0;
     dbData.knowledge.forEach((r: any) => aiKnowledgeBase.push(r));
     await ctx.flushDB();

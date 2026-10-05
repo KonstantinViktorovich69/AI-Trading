@@ -1247,7 +1247,8 @@ const autopilotEngineService = new AutopilotEngineService({
   emitSignalsUpdated: () => streamEmitter.emit('signals_updated'),
   runAiGeneration: (params: any) => runAiGeneration(params),
   getAtomicStoreRevision: () => getAtomicStoreRevision(),
-  getWallAdjustedTp: (symbol: string, isSell: boolean, entry: number, target: number) => getWallAdjustedTp(symbol, isSell, entry, target)
+  getWallAdjustedTp: (symbol: string, isSell: boolean, entry: number, target: number) => getWallAdjustedTp(symbol, isSell, entry, target),
+  calculateConfidenceProbability: (symbol: string, currentPrice: number, volume: number) => calculateConfidenceProbability(symbol, currentPrice, volume)
 });
 
 async function runAutopilotAndVirtualTradeEntry() {

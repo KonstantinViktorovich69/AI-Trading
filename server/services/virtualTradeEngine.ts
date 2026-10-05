@@ -827,6 +827,35 @@ PnL %: ${trade.pnlPercent?.toFixed(2)}% (${trade.pnl?.toFixed(2)} USDT)
                 filterAct = resBody.structuredFilter.action;
               }
 
+              // Детерминированное извлечение триггера из фактических метрик сделки, если ИИ вернул абстрактный текст
+              if (!filterInd || typeof filterVal !== 'number') {
+                const entryRsiNum = typeof features[1] === 'number' ? features[1] + 50 : 50;
+                const isLoss = (trade.pnlPercent || 0) < 0;
+                if (isLoss) {
+                  if (entryRsiNum > 65) {
+                    filterInd = 'rsi';
+                    filterCond = 'gt';
+                    filterVal = Math.round(entryRsiNum - 3);
+                    filterAct = 'penalty';
+                  } else if (features[5] === 0) {
+                    filterInd = 'volume';
+                    filterCond = 'lt';
+                    filterVal = 1.0;
+                    filterAct = 'penalty';
+                  } else {
+                    filterInd = 'change24h';
+                    filterCond = 'gt';
+                    filterVal = 3.0;
+                    filterAct = 'penalty';
+                  }
+                } else {
+                  filterInd = 'volume';
+                  filterCond = 'gt';
+                  filterVal = 1.2;
+                  filterAct = 'bonus';
+                }
+              }
+
               const newRule: any = {
                 id: `al_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
                 agent: agentCat,
@@ -850,6 +879,42 @@ PnL %: ${trade.pnlPercent?.toFixed(2)}% (${trade.pnl?.toFixed(2)} USDT)
           const isQuota = err?.message?.includes("429") || err?.message?.includes("quota") || err?.message?.includes("Too Many");
           if (!isQuota) {
             console.warn("[Watchdog AI Eval] Error:", err?.message || err);
+          }
+
+          // Детерминированный фоллбэк самообучения: извлечение урока и правила даже при исчерпании квоты Gemini
+          try {
+            const isLoss = (trade.pnlPercent || 0) < 0;
+            const features = (trade as any).features || [];
+            const entryRsiNum = typeof features[1] === 'number' ? features[1] + 50 : 50;
+            const filterInd = isLoss && entryRsiNum > 65 ? 'rsi' : (isLoss ? 'volume' : 'change24h');
+            const filterCond = filterInd === 'rsi' ? 'gt' : (filterInd === 'volume' ? 'lt' : 'gt');
+            const filterVal = filterInd === 'rsi' ? 68 : (filterInd === 'volume' ? 1.0 : 4.0);
+            const filterAct = isLoss ? 'penalty' : 'bonus';
+            const advice = isLoss
+              ? `Избегать входов в ${trade.side} при экстремальной перекупленности и затухании объема.`
+              : `Успешное исполнение ${trade.side} по тренду с подтверждением объема.`;
+
+            trade.aiEvaluation = trade.aiEvaluation || advice;
+            trade.learnedRule = trade.learnedRule || advice;
+
+            const fallbackRule: any = {
+              id: `al_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+              agent: 'SCANNER',
+              text: `[Авто-Обучение | ${trade.symbol} | PnL ${trade.pnlPercent?.toFixed(1)}%] ${advice}`,
+              impact: isLoss ? -12 : 8,
+              successRate: isLoss ? 0.20 : 0.85,
+              usageCount: 1,
+              filterIndicator: filterInd,
+              filterCondition: filterCond,
+              filterValue: filterVal,
+              filterAction: filterAct
+            };
+            aiKnowledgeBase.push(fallbackRule);
+            deps.saveKnowledgeDB(fallbackRule);
+            deps.saveTradeDB(trade);
+            deps.emitSignalsUpdated();
+          } catch (fallbackErr) {
+            // graceful
           }
         }
       })();

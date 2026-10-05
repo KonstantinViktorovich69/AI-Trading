@@ -62,6 +62,14 @@ export function getCachedDB(ctx: DbStorageContext): any {
     cached = readLocalDB(ctx.getAtomicStore());
     ctx.setCachedDBData(cached);
   }
+  const memKnowledge = ctx.getAiKnowledgeBase ? ctx.getAiKnowledgeBase() : null;
+  if (Array.isArray(memKnowledge) && memKnowledge.length > 0) {
+    if (!Array.isArray(cached.knowledge) || cached.knowledge.length === 0) {
+      cached.knowledge = [...memKnowledge];
+    }
+  } else if (Array.isArray(cached.knowledge) && cached.knowledge.length > 0 && Array.isArray(memKnowledge) && memKnowledge.length === 0) {
+    cached.knowledge.forEach((r: any) => memKnowledge.push(r));
+  }
   return cached;
 }
 
@@ -72,6 +80,10 @@ export async function flushDB(ctx: DbStorageContext): Promise<void> {
     if (timeout) {
       clearTimeout(timeout);
       ctx.setDbWriteTimeout(null);
+    }
+    const memKnowledge = ctx.getAiKnowledgeBase ? ctx.getAiKnowledgeBase() : null;
+    if ((!cachedDBData.knowledge || cachedDBData.knowledge.length === 0) && Array.isArray(memKnowledge) && memKnowledge.length > 0) {
+      cachedDBData.knowledge = [...memKnowledge];
     }
     await writeLocalDB(cachedDBData, ctx.getAtomicStore());
     if (ctx.getIsPostgresConfigured() && ctx.syncTradesToPg && ctx.syncKnowledgeToPg) {
@@ -86,6 +98,10 @@ export async function flushDB(ctx: DbStorageContext): Promise<void> {
 export async function requestDBSave(ctx: DbStorageContext): Promise<void> {
   const cachedDBData = ctx.getCachedDBData();
   if (!cachedDBData) return;
+  const memKnowledge = ctx.getAiKnowledgeBase ? ctx.getAiKnowledgeBase() : null;
+  if ((!cachedDBData.knowledge || cachedDBData.knowledge.length === 0) && Array.isArray(memKnowledge) && memKnowledge.length > 0) {
+    cachedDBData.knowledge = [...memKnowledge];
+  }
   if (cachedDBData.trades) {
     const partitioned = partitionTradesForArchive(cachedDBData.trades);
     cachedDBData.trades = partitioned.keep;
@@ -277,6 +293,23 @@ export async function saveTradeToDB(trade: any, immediate: boolean = false, ctx:
     if (!dbData.settings) dbData.settings = {};
     if (!dbData.settings.main) dbData.settings.main = {};
 
+    // Ensure knowledge rules in cachedDBData are never empty if rules exist in memory or atomic store
+    if (!Array.isArray(dbData.knowledge) || dbData.knowledge.length === 0) {
+      const memKnowledge = ctx.getAiKnowledgeBase ? ctx.getAiKnowledgeBase() : null;
+      if (Array.isArray(memKnowledge) && memKnowledge.length > 0) {
+        dbData.knowledge = [...memKnowledge];
+      } else {
+        const diskState = ctx.getAtomicStore().loadState<any>({});
+        if (Array.isArray(diskState?.knowledge) && diskState.knowledge.length > 0) {
+          dbData.knowledge = diskState.knowledge;
+          if (Array.isArray(memKnowledge)) {
+            memKnowledge.length = 0;
+            diskState.knowledge.forEach((r: any) => memKnowledge.push(r));
+          }
+        }
+      }
+    }
+
     const virtualBalance = ctx.getVirtualBalance();
     const startOfDayBalance = ctx.getStartOfDayBalance();
     const startOfWeekBalance = ctx.getStartOfWeekBalance();
@@ -426,13 +459,17 @@ export async function saveKnowledgeToDB(rule: any, immediate: boolean = false, c
 
 export async function deleteKnowledgeFromDB(id: string, ctx: DbStorageContext): Promise<void> {
   try {
+    const dbData = getCachedDB(ctx);
     const aiKnowledgeBase = ctx.getAiKnowledgeBase();
     const updatedKb = aiKnowledgeBase.filter(r => String(r.id) !== String(id));
     aiKnowledgeBase.length = 0;
     updatedKb.forEach(r => aiKnowledgeBase.push(r));
 
-    const dbData = getCachedDB(ctx);
-    dbData.knowledge = aiKnowledgeBase;
+    if (Array.isArray(dbData.knowledge)) {
+      dbData.knowledge = dbData.knowledge.filter((r: any) => String(r.id) !== String(id));
+    } else {
+      dbData.knowledge = [...aiKnowledgeBase];
+    }
     await flushDB(ctx);
 
     const db = ctx.getFirebaseDb();

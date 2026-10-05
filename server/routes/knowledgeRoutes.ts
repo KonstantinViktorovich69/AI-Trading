@@ -134,14 +134,10 @@ export function createKnowledgeRouter(ctx: KnowledgeRouterContext): Router {
         const newRules = ctx.safeJsonParse(response.text, {});
         const activeRules = kb.filter(old => !old.isArchived);
         const activeRulesCopy = [...activeRules];
-
-        for (const old of activeRules) {
-          await ctx.deleteKnowledgeDB(old.id);
-        }
         const remainingArchived = kb.filter(old => old.isArchived);
-        ctx.setKnowledgeBase(remainingArchived);
 
-        newRules.forEach((r: any) => {
+        const builtNewRules: any[] = [];
+        (Array.isArray(newRules) ? newRules : []).forEach((r: any) => {
           let totalWeights = 0;
           let weightedSRSum = 0;
           let totalUsage = 0;
@@ -171,9 +167,16 @@ export function createKnowledgeRouter(ctx: KnowledgeRouterContext): Router {
             successRate: Number(inheritedSR.toFixed(4)),
             usageCount: inheritedUC
           };
-          ctx.getKnowledgeBase().push(newRule);
-          ctx.saveKnowledgeDB(newRule);
+          builtNewRules.push(newRule);
         });
+
+        const updatedAll = [...remainingArchived, ...builtNewRules];
+        ctx.setKnowledgeBase(updatedAll);
+        const dbData = ctx.getCachedDB();
+        if (dbData) {
+          dbData.knowledge = [...updatedAll];
+          ctx.flushDB();
+        }
         res.json({ success: true, data: ctx.getKnowledgeBase() });
       } else {
         res.status(500).json({ success: false, error: 'Empty AI response' });

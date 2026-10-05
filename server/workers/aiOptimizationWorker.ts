@@ -88,11 +88,9 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
         const newRules = ctx.safeJsonParse(response.text, []);
         if (Array.isArray(newRules) && newRules.length > 0) {
           const activeRulesCopy = aiKnowledgeBase.filter(old => !old.isArchived);
+          const archivedRules = aiKnowledgeBase.filter(old => old.isArchived);
           
-          for (const old of activeRulesCopy) {
-            await ctx.deleteKnowledgeDB(old.id);
-          }
-          
+          const builtNewRules: any[] = [];
           for (const r of newRules) {
             let totalWeights = 0;
             let weightedSRSum = 0;
@@ -123,8 +121,17 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
               successRate: Number(inheritedSR.toFixed(4)),
               usageCount: inheritedUC
             };
-            aiKnowledgeBase.push(newRule as any);
-            await ctx.saveKnowledgeDB(newRule);
+            builtNewRules.push(newRule);
+          }
+
+          // Atomically replace knowledge base without dropping to 0
+          aiKnowledgeBase.length = 0;
+          [...archivedRules, ...builtNewRules].forEach(r => aiKnowledgeBase.push(r));
+
+          const dbData = ctx.getCachedDB();
+          if (dbData) {
+            dbData.knowledge = [...aiKnowledgeBase];
+            await ctx.flushDB();
           }
           console.log(`[AUTONOMOUS-LEARNING] Knowledge base distilled safely with Jaccard statistics inheritance. Remaining rules count: ${aiKnowledgeBase.length}`);
         }

@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { matchesStructuredFilter, calculateConfidenceProbability, evaluateKnowledgeBaseForSignal, executeUpdateMarketPulse, executeScrapeSocialSentiment, type QuantRiskEngineContext } from './quantRiskEngine.ts';
+import {
+  matchesStructuredFilter,
+  calculateConfidenceProbability,
+  evaluateKnowledgeBaseForSignal,
+  inferStructuredFilterFromRule,
+  enrichKnowledgeBaseWithStructuredFilters,
+  executeUpdateMarketPulse,
+  executeScrapeSocialSentiment,
+  type QuantRiskEngineContext
+} from './quantRiskEngine.ts';
 
 describe('quantRiskEngine', () => {
   describe('matchesStructuredFilter', () => {
@@ -191,6 +200,54 @@ describe('quantRiskEngine', () => {
       expect(resOther.penaltyScore).toBeGreaterThanOrEqual(5);
       expect(resDoge.matchedRuleIds).toContain('al_2');
       expect(resOther.matchedRuleIds).toContain('al_2');
+    });
+
+    it('dynamically infers triggers from text-only rules and applies penalties', () => {
+      const kb = [{
+        id: 'al_text_only',
+        text: '[Авто-Обучение | FIL/USDT | PnL -29.9%] Избегать входов при перекупленности RSI > 75 и слабом объеме',
+        impact: -12,
+        successRate: 0.15,
+        isArchived: true // Archived because of low winrate on loss
+      }];
+
+      // Evaluated with RSI 80 (should trigger penalty via dynamic inference even though archived)
+      const res = evaluateKnowledgeBaseForSignal('FIL/USDT', { rsi: 80, volumeSpike: 1.0 }, kb);
+      expect(res.penaltyScore).toBeGreaterThanOrEqual(5);
+      expect(res.matchedRuleIds).toContain('al_text_only');
+    });
+  });
+
+  describe('inferStructuredFilterFromRule & enrichKnowledgeBaseWithStructuredFilters', () => {
+    it('infers RSI triggers correctly from text', () => {
+      const rule = { text: 'Условие: перекупленный RSI > 72 на 15м' };
+      const inferred = inferStructuredFilterFromRule(rule);
+      expect(inferred).not.toBeNull();
+      expect(inferred?.filterIndicator).toBe('rsi');
+      expect(inferred?.filterCondition).toBe('gt');
+      expect(inferred?.filterValue).toBe(72);
+    });
+
+    it('infers volume spike triggers correctly from text', () => {
+      const rule = { text: 'Вход только при кульминационном объеме (объем > 2.0x)' };
+      const inferred = inferStructuredFilterFromRule(rule);
+      expect(inferred).not.toBeNull();
+      expect(inferred?.filterIndicator).toBe('volume');
+      expect(inferred?.filterCondition).toBe('gt');
+      expect(inferred?.filterValue).toBe(2.0);
+    });
+
+    it('enriches a list of text-only rules with structured filters', () => {
+      const kb = [
+        { id: '1', text: '[Авто-Обучение | BTC/USDT | PnL -10%] Падение объема' },
+        { id: '2', text: 'Паттерн Памп: Рост > 8% за 24ч' },
+        { id: '3', text: 'Уже структурировано', filterIndicator: 'rsi', filterCondition: 'gt', filterValue: 70 }
+      ];
+      const count = enrichKnowledgeBaseWithStructuredFilters(kb);
+      expect(count).toBe(2);
+      expect((kb[0] as any).filterIndicator).toBeDefined();
+      expect((kb[1] as any).filterIndicator).toBe('change24h');
+      expect((kb[2] as any).filterValue).toBe(70);
     });
   });
 });

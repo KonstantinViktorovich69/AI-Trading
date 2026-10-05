@@ -42,51 +42,158 @@ export function matchesStructuredFilter(
   }
 
   let currentValue = 0;
-  if (rule.filterIndicator === 'rsi') {
+  const ind = String(rule.filterIndicator).toLowerCase();
+  if (ind === 'rsi') {
     currentValue = trueRsi;
-  } else if (rule.filterIndicator === 'volume') {
+  } else if (ind === 'volume' || ind === 'volume_spike' || ind === 'volumespike') {
     currentValue = volumeSpike;
-  } else if (rule.filterIndicator === 'trend') {
+  } else if (ind === 'trend' || ind === 'bias' || ind === 'bias_score' || ind === 'biasscore') {
     currentValue = marketBias;
-  } else if (rule.filterIndicator === 'volatility') {
+  } else if (ind === 'volatility') {
     currentValue = volatility ?? 0;
-  } else if (rule.filterIndicator === 'ob_imbalance') {
+  } else if (ind === 'ob_imbalance' || ind === 'imbalance' || ind === 'orderbook_imbalance') {
     currentValue = obImbalance ?? 0;
-  } else if (rule.filterIndicator === 'fomo') {
+  } else if (ind === 'fomo' || ind === 'fomoindex' || ind === 'fomo_index') {
     currentValue = fomoIndex ?? 0;
-  } else if (rule.filterIndicator === 'change24h') {
+  } else if (ind === 'change24h' || ind === 'change_24h') {
     currentValue = change24h ?? 0;
   } else {
     return { matched: false, isPenalty: false, isBlock: false, isBonus: false, reason: '' };
   }
 
-  const condition = rule.filterCondition;
-  const targetValue = rule.filterValue;
-  if (typeof targetValue !== 'number') {
+  const condition = String(rule.filterCondition || 'gt').toLowerCase();
+  const targetValue = Number(rule.filterValue);
+  if (isNaN(targetValue)) {
     return { matched: false, isPenalty: false, isBlock: false, isBonus: false, reason: '' };
   }
 
   let isMatched = false;
   if (condition === 'gt') {
     isMatched = currentValue > targetValue;
+  } else if (condition === 'gte') {
+    isMatched = currentValue >= targetValue;
   } else if (condition === 'lt') {
     isMatched = currentValue < targetValue;
+  } else if (condition === 'lte') {
+    isMatched = currentValue <= targetValue;
+  } else if (condition === 'eq') {
+    isMatched = Math.abs(currentValue - targetValue) < 0.1;
   }
 
   if (isMatched) {
-    const isPenalty = rule.filterAction === 'penalty';
+    const isPenalty = rule.filterAction === 'penalty' || (rule.impact !== undefined && rule.impact < 0);
     const isBlock = rule.filterAction === 'block';
-    const isBonus = rule.filterAction === 'bonus';
+    const isBonus = rule.filterAction === 'bonus' || (!isPenalty && !isBlock && (rule.impact !== undefined && rule.impact > 0));
     return {
       matched: true,
       isPenalty,
       isBlock,
       isBonus,
-      reason: `Сработало правило [${rule.text}] для индикатора ${rule.filterIndicator} (${currentValue} ${condition === 'gt' ? '>' : '<'} ${targetValue})`
+      reason: `Сработало правило [${rule.text}] для индикатора ${rule.filterIndicator} (${currentValue} ${condition} ${targetValue})`
     };
   }
 
   return { matched: false, isPenalty: false, isBlock: false, isBonus: false, reason: '' };
+}
+
+/**
+ * Интеллектуальное извлечение числовых триггеров из текста правила базы знаний.
+ */
+export function inferStructuredFilterFromRule(rule: any): {
+  filterIndicator: string;
+  filterCondition: string;
+  filterValue: number;
+  filterAction: string;
+} | null {
+  if (!rule || typeof rule !== 'object') return null;
+
+  if (rule.filterIndicator && rule.filterIndicator !== 'none' && typeof rule.filterValue === 'number') {
+    return {
+      filterIndicator: rule.filterIndicator,
+      filterCondition: rule.filterCondition || 'gt',
+      filterValue: rule.filterValue,
+      filterAction: rule.filterAction || ((rule.impact && rule.impact < 0) ? 'penalty' : 'bonus')
+    };
+  }
+
+  const text = (rule.text || '').toLowerCase();
+  const isLoss = (rule.impact !== undefined && rule.impact < 0) || text.includes('pnl -') || (rule.successRate !== undefined && rule.successRate < 0.4);
+  const action = isLoss ? 'penalty' : 'bonus';
+
+  // 1. RSI
+  const rsiGtMatch = text.match(/rsi\s*(?:>|более|выше|больше|>=)\s*(\d+)/i);
+  if (rsiGtMatch) {
+    return { filterIndicator: 'rsi', filterCondition: 'gt', filterValue: parseFloat(rsiGtMatch[1]), filterAction: action };
+  }
+  const rsiLtMatch = text.match(/rsi\s*(?:<|менее|ниже|меньше|<=)\s*(\d+)/i);
+  if (rsiLtMatch) {
+    return { filterIndicator: 'rsi', filterCondition: 'lt', filterValue: parseFloat(rsiLtMatch[1]), filterAction: action };
+  }
+  if (text.includes('перекуплен')) {
+    return { filterIndicator: 'rsi', filterCondition: 'gt', filterValue: 68, filterAction: action };
+  }
+  if (text.includes('перепродан')) {
+    return { filterIndicator: 'rsi', filterCondition: 'lt', filterValue: 32, filterAction: action };
+  }
+
+  // 2. Change 24h / Pump
+  const changeGtMatch = text.match(/(?:рост|памп|движение|изменение)\s*(?:>|более|выше|больше)?\s*(\d+(?:\.\d+)?)\s*%/i);
+  if (changeGtMatch) {
+    return { filterIndicator: 'change24h', filterCondition: 'gt', filterValue: parseFloat(changeGtMatch[1]), filterAction: action };
+  }
+  if (text.includes('памп') || text.includes('парабол') || text.includes('pump hunt')) {
+    return { filterIndicator: 'change24h', filterCondition: 'gt', filterValue: 6.0, filterAction: action };
+  }
+
+  // 3. Volume
+  const volGtMatch = text.match(/(?:объем|volume|всплеск)\s*(?:>|более|выше|больше|x)?\s*(\d+(?:\.\d+)?)/i);
+  if (volGtMatch) {
+    return { filterIndicator: 'volume', filterCondition: 'gt', filterValue: parseFloat(volGtMatch[1]), filterAction: action };
+  }
+  if (text.includes('кульминац') || text.includes('аномали') || text.includes('всплеск объема') || text.includes('climax')) {
+    return { filterIndicator: 'volume', filterCondition: 'gt', filterValue: 1.5, filterAction: action };
+  }
+  if (text.includes('затухание') || text.includes('без объема') || text.includes('низкий объем') || text.includes('отрицательная динамика объема')) {
+    return { filterIndicator: 'volume', filterCondition: 'lt', filterValue: 1.0, filterAction: 'penalty' };
+  }
+
+  // 4. Order Book Imbalance
+  if (text.includes('стакан') || text.includes('имбаланс') || text.includes('плотност') || text.includes('order book')) {
+    return { filterIndicator: 'ob_imbalance', filterCondition: 'gt', filterValue: 15, filterAction: action };
+  }
+
+  // 5. Default heuristic for trade auto-learning
+  if (text.includes('[авто-обучение') || text.includes('[авто-разбор')) {
+    if (isLoss) {
+      return { filterIndicator: 'change24h', filterCondition: 'gt', filterValue: 3.0, filterAction: 'penalty' };
+    } else {
+      return { filterIndicator: 'volume', filterCondition: 'gt', filterValue: 1.2, filterAction: 'bonus' };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Обогащает правила базы знаний структурированными фильтрами для прямого исполнения.
+ */
+export function enrichKnowledgeBaseWithStructuredFilters(kb: any[]): number {
+  if (!Array.isArray(kb)) return 0;
+  let count = 0;
+  for (const rule of kb) {
+    if (!rule || typeof rule !== 'object') continue;
+    if (!rule.filterIndicator || rule.filterIndicator === 'none') {
+      const inferred = inferStructuredFilterFromRule(rule);
+      if (inferred) {
+        rule.filterIndicator = inferred.filterIndicator;
+        rule.filterCondition = inferred.filterCondition;
+        rule.filterValue = inferred.filterValue;
+        rule.filterAction = inferred.filterAction;
+        count++;
+      }
+    }
+  }
+  return count;
 }
 
 /**
@@ -227,44 +334,68 @@ export function evaluateKnowledgeBaseForSignal(
   const matchedRuleTexts: string[] = [];
 
   for (const rule of aiKnowledgeBase) {
-    if (!rule || rule.isArchived || !rule.filterIndicator || rule.filterIndicator === 'none') continue;
+    if (!rule) continue;
+
+    // Smart retention: Do NOT discard penalty/warning rules just because isArchived=true!
+    const isWarningRule = rule.filterAction === 'penalty' || rule.filterAction === 'block' || (rule.impact !== undefined && rule.impact < 0);
+    if (rule.isArchived && !isWarningRule) continue;
 
     let isAssetSpecific = false;
-    const symbolMatch = rule.text?.toLowerCase()?.match(/\[авто-обучение\s*\|\s*([a-z0-9\/:]+)\s*\|/);
+    let ruleSymbol: string | null = null;
+    const symbolMatch = rule.text?.toLowerCase()?.match(/\[(?:авто-обучение|авто-разбор)\s*\|\s*([a-z0-9\/:]+)\s*\|/);
     if (symbolMatch) {
-      const ruleSymbol = symbolMatch[1].replace(/[\/:]/g, '');
+      ruleSymbol = symbolMatch[1].replace(/[\/:]/g, '');
       if (ruleSymbol === cleanSym) {
         isAssetSpecific = true;
       }
     }
 
-    const structMatch = matchesStructuredFilter(
-      rule,
-      indicators.rsi ?? 50,
-      indicators.volumeSpike ?? 1,
-      indicators.bias ?? 0,
-      indicators.volatility ?? 10,
-      indicators.imbalance ?? 0,
-      indicators.fomoIndex ?? 50,
-      indicators.change24h ?? 0
-    );
+    // Dynamic resolution of structured filter if missing on the rule object
+    let effectiveRule = rule;
+    if (!rule.filterIndicator || rule.filterIndicator === 'none') {
+      const inferred = inferStructuredFilterFromRule(rule);
+      if (inferred) {
+        effectiveRule = {
+          ...rule,
+          ...inferred
+        };
+      }
+    }
 
-    if (structMatch.matched) {
+    if (effectiveRule.filterIndicator && effectiveRule.filterIndicator !== 'none') {
+      const structMatch = matchesStructuredFilter(
+        effectiveRule,
+        indicators.rsi ?? 50,
+        indicators.volumeSpike ?? 1,
+        indicators.bias ?? 0,
+        indicators.volatility ?? 10,
+        indicators.imbalance ?? 0,
+        indicators.fomoIndex ?? 50,
+        indicators.change24h ?? 0
+      );
+
+      if (structMatch.matched) {
+        matchedRuleIds.push(rule.id);
+        matchedRuleTexts.push(rule.text);
+
+        const assetMultiplier = isAssetSpecific ? 1.4 : 1.0;
+        const ruleWeight = (rule.successRate ?? 0.5) * (Math.abs(rule.impact || 10)) / 100 * assetMultiplier;
+
+        if (structMatch.isBlock) {
+          isBlocked = true;
+          blockReason = structMatch.reason || `Сработало блокирующее правило базы знаний: [${rule.text}]`;
+          break; // Hard block triggered
+        } else if (structMatch.isPenalty) {
+          penaltyScore += Math.max(5, Math.round(ruleWeight * 15));
+        } else if (structMatch.isBonus) {
+          bonusScore += Math.max(3, Math.round(ruleWeight * 10));
+        }
+      }
+    } else if (isAssetSpecific && isWarningRule) {
+      // Heuristic fallback: if this rule was learned specifically for this coin on a loss, apply coin-specific penalty
       matchedRuleIds.push(rule.id);
       matchedRuleTexts.push(rule.text);
-
-      const assetMultiplier = isAssetSpecific ? 1.3 : 1.0;
-      const ruleWeight = (rule.successRate ?? 0.5) * (Math.abs(rule.impact || 10)) / 100 * assetMultiplier;
-
-      if (structMatch.isBlock) {
-        isBlocked = true;
-        blockReason = structMatch.reason || `Сработало блокирующее правило базы знаний: [${rule.text}]`;
-        break; // Hard block triggered
-      } else if (structMatch.isPenalty) {
-        penaltyScore += Math.max(5, Math.round(ruleWeight * 15));
-      } else if (structMatch.isBonus) {
-        bonusScore += Math.max(3, Math.round(ruleWeight * 10));
-      }
+      penaltyScore += 8;
     }
   }
 
