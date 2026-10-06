@@ -246,6 +246,11 @@ export function createRetrospectiveEngine(ctx: RetrospectiveEngineContext) {
       ctx.runNewAIPerformanceOptimizationCircuit(false).catch(err => {
         console.warn('[CIRCUIT OPTIMIZER BACKGROUND TRIGGER ERROR]', err);
       });
+
+      // Trigger quant model adaptive retraining
+      retrainModel().catch(err => {
+        console.warn('[QUANT RETRAIN TRIGGER ERROR]', err);
+      });
     } catch (err: any) {
       console.warn(`[RETROSPECTIVE ANALYSIS ERROR]`, err.message || err);
     }
@@ -258,7 +263,15 @@ export function createRetrospectiveEngine(ctx: RetrospectiveEngineContext) {
     
     try {
       const virtualTrades = ctx.getVirtualTrades();
-      const closedTrades = virtualTrades.filter(t => t.status === 'CLOSED' && (t as any).features && (t as any).outcome !== undefined);
+      const closedTrades = virtualTrades.filter(t => {
+        if (t.status !== 'CLOSED') return false;
+        const outcome = (t as any).outcome !== undefined 
+          ? (t as any).outcome 
+          : ((t.pnlPercent !== undefined && t.pnlPercent > 0) || (t.pnl !== undefined && t.pnl > 0) ? 1 : 0);
+        (t as any).outcome = outcome;
+        return true;
+      });
+
       if (closedTrades.length < 30) {
         modelStatus.isTrainingActive = false;
         return;
@@ -270,16 +283,39 @@ export function createRetrospectiveEngine(ctx: RetrospectiveEngineContext) {
         .filter(t => Math.abs((t as any).pnlPercent || 0) >= DEAD_ZONE_PCT)
         .slice(-500)
         .map(t => {
-        const paddedFeatures = [...((t as any).features || [])];
-        while (paddedFeatures.length < 11) {
-          paddedFeatures.push(0);
-        }
-        return {
-          x: [1, ...paddedFeatures],
-          y: (t as any).outcome,
-          w: Math.max(Math.abs((t as any).pnlPercent || 1), 1)
-        };
-      });
+          let features = Array.isArray((t as any).features) && (t as any).features.length > 0
+            ? [...(t as any).features]
+            : null;
+          if (!features) {
+            const isShort = t.side === 'SHORT';
+            const score = Number(t.signalAiScore) || 70;
+            const pnlPct = Number(t.pnlPercent) || 0;
+            const maxPnl = Number(t.maxReachedPnl) || pnlPct;
+            const notes = String(t.notes || t.closeReason || '');
+
+            const x1 = (score > 85 || notes.includes('пробой')) ? 1 : 0;
+            const x2 = isShort ? Math.min(35, Math.max(-35, (score - 60) * 1.5)) : Math.min(35, Math.max(-35, (40 - score) * 1.5));
+            const x3 = isShort ? -0.5 : 0.5;
+            const x4 = isShort ? Math.max(1, (maxPnl * 0.3)) : Math.min(-1, -(maxPnl * 0.3));
+            const x5 = isShort ? Math.max(2, (maxPnl * 0.5)) : Math.min(-2, -(maxPnl * 0.5));
+            const x6 = (score >= 75 || notes.includes('объем')) ? 1 : 0;
+            const x7 = isShort ? 0.65 : 0.35;
+            const x8 = (score > 80 || notes.includes('шпиль') || notes.includes('фитил')) ? 0.35 : 0.15;
+            const x9 = (score > 82 || notes.includes('ликвидн') || notes.includes('sweep')) ? 1 : 0;
+            const x10 = isShort ? 1.2 : -1.2;
+            const x11 = isShort ? 1 : -1;
+            features = [x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11];
+            (t as any).features = features;
+          }
+          while (features.length < 11) {
+            features.push(0);
+          }
+          return {
+            x: [1, ...features],
+            y: (t as any).outcome,
+            w: Math.max(Math.abs((t as any).pnlPercent || 1), 1)
+          };
+        });
       
       // Simple deterministic pseudo-random split
       const trainData: typeof rawDataset = [];

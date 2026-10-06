@@ -337,10 +337,15 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         }
 
         // --- КВАНТОВАЯ ЛОГИСТИЧЕСКАЯ РЕГРЕССИЯ (MODEL WEIGHTS BETA0..BETA11) ---
+        let currentQuantFeatures: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         if (deps.calculateConfidenceProbability) {
             try {
                 const quantProb = deps.calculateConfidenceProbability(symbol, price, currentSig.volume || 0);
                 if (quantProb && typeof quantProb.p === 'number') {
+                    if (Array.isArray(quantProb.features)) {
+                        currentQuantFeatures = quantProb.features;
+                        currentSig.features = currentQuantFeatures;
+                    }
                     const probDiff = quantProb.p - 0.5;
                     const probAdjustment = Math.round(probDiff * 24); // -12 до +12 пунктов
                     if (probAdjustment !== 0) {
@@ -882,7 +887,8 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                 ];
                             })(),
                             targetIsAutoLearning,
-                            virtualBalance
+                            virtualBalance,
+                            features: currentQuantFeatures
                         }, {
                             executionPort: autoEntryPort,
                             hunterDecision: mainVirtualHunterDecision,
@@ -891,9 +897,11 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                         });
 
                         if (autoEntryRes.executed && autoEntryRes.trade) {
+                            autoEntryRes.trade.features = currentQuantFeatures;
                             if (kbEval.matchedRuleIds.length > 0) {
                                 autoEntryRes.trade.matchedRules = kbEval.matchedRuleIds;
                                 autoEntryRes.trade.matchedRuleTexts = kbEval.matchedRuleTexts;
+                                autoEntryRes.trade.matchedRuleIds = kbEval.matchedRuleIds;
                             }
                             deps.pushVirtualTrade(autoEntryRes.trade);
                             if (!virtualTrades.some(t => t.id === autoEntryRes.trade.id)) {
@@ -1424,9 +1432,13 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                     });
 
                                     if (realAutoEntryRes.executed && realAutoEntryRes.trade) {
-                                        if (kbEval.matchedRuleIds.length > 0) {
-                                            realAutoEntryRes.trade.matchedRules = kbEval.matchedRuleIds;
-                                            realAutoEntryRes.trade.matchedRuleTexts = kbEval.matchedRuleTexts;
+                                        realAutoEntryRes.trade.features = currentQuantFeatures;
+                                        const realRules = Array.from(new Set([...(realKbEval?.matchedRuleIds || []), ...(kbEval?.matchedRuleIds || [])]));
+                                        const realTexts = Array.from(new Set([...(realKbEval?.matchedRuleTexts || []), ...(kbEval?.matchedRuleTexts || [])]));
+                                        if (realRules.length > 0) {
+                                            realAutoEntryRes.trade.matchedRules = realRules;
+                                            realAutoEntryRes.trade.matchedRuleTexts = realTexts;
+                                            realAutoEntryRes.trade.matchedRuleIds = realRules;
                                         }
                                         deps.pushVirtualTrade(realAutoEntryRes.trade);
                                         if (!virtualTrades.some(t => t.id === realAutoEntryRes.trade.id)) {

@@ -1001,16 +1001,21 @@ async function retrainModel() {
 }
 
 if (isMainThread) {
-  // Retraining check every 1h
+  // Retrain model on startup using full historical trades dataset
+  setTimeout(() => {
+    retrainModel().catch(err => console.warn('[STARTUP QUANT MODEL RETRAIN ERROR]', err?.message || err));
+  }, 8000);
+
+  // Dynamic retraining check every 3 minutes
   setInterval(() => {
-    const closedTrades = virtualTrades.filter(t => t.status === 'CLOSED' && (t as any).outcome !== undefined);
+    const closedTrades = virtualTrades.filter(t => t.status === 'CLOSED');
     const tradesSinceLast = closedTrades.length - (modelStatus.totalLearnedTrades || 0);
     const timeSinceLast = Date.now() - (modelStatus.lastRetrained || 0);
 
-    if (tradesSinceLast >= 30 || (timeSinceLast >= 86400000 && closedTrades.length >= 30)) {
-       retrainModel();
+    if (tradesSinceLast >= 10 || (timeSinceLast >= 300000 && closedTrades.length >= 30)) {
+       retrainModel().catch(err => console.warn('[SCHEDULED QUANT MODEL RETRAIN ERROR]', err?.message || err));
     }
-  }, 60 * 60 * 1000);
+  }, 3 * 60 * 1000);
 }
 
 async function deleteKnowledgeDB(id: string) {
@@ -1568,7 +1573,9 @@ const paperTradeContext = {
   getChartImageHtml: (symbol: string) => getChartImageHtml(symbol),
   sendTelegramMessage: (msg: string) => sendTelegramMessage(msg),
   streamEmitter: streamEmitter,
-  log400: (route: string, msg: string) => log400(route, msg)
+  log400: (route: string, msg: string) => log400(route, msg),
+  getAiKnowledgeBase: () => aiKnowledgeBase,
+  saveKnowledgeDB: (rule: any) => saveKnowledgeDB(rule)
 };
 
 const knowledgeContext: KnowledgeRouterContext = {

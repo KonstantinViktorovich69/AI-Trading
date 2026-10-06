@@ -65,6 +65,7 @@ export interface CoordinatorRunParams {
   targetIsAutoLearning?: boolean;
   customCorrelationContext?: Partial<DecisionCorrelationContext>;
   sourcePath?: 'MAIN_VIRTUAL' | 'WORKER_VIRTUAL' | 'MAIN_REAL_STUB' | 'WORKER_REAL_STUB';
+  features?: number[];
 }
 
 export interface CoordinatorRunResult {
@@ -476,7 +477,8 @@ export async function runProductionAutoEntryCoordinator(
     decisionCorrelationContext: correlationContext,
     decisionBundle,
     stateRevision: currentRevision,
-    sourcePath: params.sourcePath
+    sourcePath: params.sourcePath,
+    features: params.features || params.currentSig?.features
   };
 
   const autoResult = await runCanonicalAutoEntry(autoEntryParams, executionPort);

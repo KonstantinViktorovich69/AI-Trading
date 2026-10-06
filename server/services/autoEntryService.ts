@@ -66,6 +66,7 @@ export interface AutoEntryParams {
   sameDirectionRealCount?: number;
   maxSameDirectionPositions?: number;
   sourcePath?: 'MAIN_VIRTUAL' | 'WORKER_VIRTUAL' | 'MAIN_REAL_STUB' | 'WORKER_REAL_STUB';
+  features?: number[];
 }
 
 export interface AutoEntryResult {
@@ -622,6 +623,8 @@ export async function runCanonicalAutoEntry(
       strategyId: correlationContext.strategyId,
       strategyVersion: correlationContext.strategyVersion,
       matchedRuleIds: decision.matchedRuleIds || currentSig?.matchedRuleIds || [],
+      matchedRules: decision.matchedRuleIds || currentSig?.matchedRuleIds || [],
+      features: (params as any).features || currentSig?.features || [],
       committeeDecisionId: decision.committeeEnvelope?.decisionId,
       agentDecisionIds,
       stateRevision: currentRevision,

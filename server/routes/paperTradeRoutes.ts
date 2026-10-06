@@ -37,6 +37,8 @@ export interface PaperTradeRouterContext {
   sendTelegramMessage: (msg: string) => Promise<any>;
   streamEmitter: { emit: (event: string, ...args: any[]) => boolean };
   log400: (route: string, msg: string) => void;
+  getAiKnowledgeBase?: () => any[];
+  saveKnowledgeDB?: (rule: any) => Promise<void> | void;
 }
 
 export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
@@ -702,6 +704,25 @@ function handleTradeClose(req: Request, res: Response, ctx: PaperTradeRouterCont
     ctx.saveBalanceDB();
   }
   
+  // Update Knowledge Base Statistics on manual trade closure
+  const ruleList = trade.matchedRules || trade.matchedRuleIds || [];
+  if (ruleList.length > 0 && ctx.getAiKnowledgeBase) {
+    const aiKnowledgeBase = ctx.getAiKnowledgeBase();
+    for (const ruleId of ruleList) {
+      const rule = aiKnowledgeBase.find((r: any) => r.id === ruleId);
+      if (rule) {
+        const count = rule.usageCount || 0;
+        const rate = rule.successRate ?? 0.5;
+        const outcome = trade.pnlPercent > 0 ? 1 : 0;
+        rule.usageCount = count + 1;
+        rule.successRate = ((rate * count) + outcome) / (count + 1);
+        if (outcome === 1) rule.impact = Math.min(100, (rule.impact || 0) + 1);
+        else rule.impact = Math.max(-100, (rule.impact || 0) - 2);
+        if (ctx.saveKnowledgeDB) ctx.saveKnowledgeDB(rule);
+      }
+    }
+  }
+
   ctx.saveTradeDB(trade);
   if (notes && notes.includes('Auto-closed') && trade.isReal) {
     ctx.sendTelegramMessage(`🤖 <b>AI Manager: Closed Trade</b>\n\nSymbol: ${trade.symbol}\nSide: ${trade.side}\nExit: $${closePrice}\nPnL: ${trade.pnl > 0 ? '+' : ''}${trade.pnl?.toFixed(2)} USDT\nReason: ${notes}`);

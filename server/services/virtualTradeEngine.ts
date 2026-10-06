@@ -731,8 +731,9 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
 
       // Update Knowledge Base Statistics
-      if (trade.matchedRules && trade.matchedRules.length > 0) {
-        for (const ruleId of trade.matchedRules) {
+      const ruleList = trade.matchedRules || trade.matchedRuleIds || [];
+      if (ruleList && ruleList.length > 0) {
+        for (const ruleId of ruleList) {
           const rule = aiKnowledgeBase.find(r => r.id === ruleId);
           if (rule) {
             const count = rule.usageCount || 0;
