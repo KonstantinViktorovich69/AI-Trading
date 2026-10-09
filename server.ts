@@ -57,6 +57,8 @@ import { createExpressApp, setupStaticAndViteMiddleware } from './server/express
 import { createAiOptimizationWorker, getJaccardSimilarity } from './server/workers/aiOptimizationWorker.ts';
 import { ScannerWorkerManager, type ScannerWorkerManagerContext } from './server/workers/scannerWorkerManager.ts';
 import { SettingsManager, type GlobalSettings, createDefaultGlobalSettings } from './server/services/settingsManager.ts';
+import { runGuarded } from './server/services/loopGuard.ts';
+import { fetchGapCandles } from './server/services/gapCandleFetcher.ts';
 import { TradeManagerService } from './server/services/tradeManagerService.ts';
 import { AutopilotEngineService } from './server/services/autoPilotEngineService.ts';
 import { DatabasePersistenceManager } from './server/services/databasePersistenceManager.ts';
@@ -691,6 +693,7 @@ const tradeManagerService = new TradeManagerService({
   executeRealOpenOnExchange: (sym, side, amount, lev) => executeRealOpenOnExchange(sym, side, amount, lev),
   setRealTradeSlTpOnExchange: (sym, side, sl, tp) => setRealTradeSlTpOnExchange(sym, side, sl, tp),
   runAiGeneration: (params) => runAiGeneration(params),
+  fetchGapCandles: (exchange, symbol, fromTs, toTs) => fetchGapCandles(exchange, symbol, fromTs, toTs),
   WEEX_HEADERS: WEEX_HEADERS,
   getVirtualBalance: () => virtualBalance,
   setVirtualBalance: (val: number) => { virtualBalance = val; },
@@ -1080,12 +1083,20 @@ function startMainThreadScannerFallback() {
       updateSignalsCache().catch(e => console.error('[STARTUP SIGNALS ERROR]', e));
     }).catch(e => console.error('[STARTUP TICKERS ERROR]', e));
 
-    setInterval(updateTrueOHLCV, 2 * 60 * 1000);
+    setInterval(() => {
+      runGuarded('ohlcv', 300000, updateTrueOHLCV, {
+        loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+      }).catch(() => {});
+    }, 2 * 60 * 1000);
 
     setTimeout(checkOrderBooks, 10000);
     setInterval(checkOrderBooks, 15000);
 
-    setInterval(updateSignalsCache, 10000);
+    setInterval(() => {
+      runGuarded('signals_cache', 60000, updateSignalsCache, {
+        loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+      }).catch(() => {});
+    }, 10000);
   }
 }
 
@@ -1138,13 +1149,21 @@ if (isMainThread) {
     updateGlobalTickers();
     
     setTimeout(updateTrueOHLCV, 10000);
-    setInterval(updateTrueOHLCV, 2 * 60 * 1000);
+    setInterval(() => {
+      runGuarded('ohlcv', 300000, updateTrueOHLCV, {
+        loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+      }).catch(() => {});
+    }, 2 * 60 * 1000);
     
     setTimeout(checkOrderBooks, 15000);
     setInterval(checkOrderBooks, 15000);
     
     // ПЕРИОДИЧЕСКИЙ ПЕРЕСЧЕТ СИГНАЛОВ ПО ЧЕКЛИСТУ AGENTS.md:
-    setInterval(updateSignalsCache, 10000);
+    setInterval(() => {
+      runGuarded('signals_cache', 60000, updateSignalsCache, {
+        loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+      }).catch(() => {});
+    }, 10000);
     
     // Listen for settings and main state updates from main thread:
     parentPort?.on('message', (msg) => {
@@ -1257,16 +1276,22 @@ const autopilotEngineService = new AutopilotEngineService({
 });
 
 async function runAutopilotAndVirtualTradeEntry() {
-  await autopilotEngineService.runAutopilotAndVirtualTradeEntry();
+  await runGuarded('autopilot', 90000, () => autopilotEngineService.runAutopilotAndVirtualTradeEntry(), {
+    loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+  });
 }
 
 // Watchdog and History (Delegated to TradeManagerService)
 async function manageTradesServerSide() {
-  await tradeManagerService.manageTradesServerSide();
+  await runGuarded('watchdog', 30000, () => tradeManagerService.manageTradesServerSide(), {
+    loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+  });
 }
 
 async function runAiExpertTraderLoop() {
-  await autopilotEngineService.runAiExpertTraderLoop();
+  await runGuarded('ai_expert', 180000, () => autopilotEngineService.runAiExpertTraderLoop(), {
+    loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+  });
 }
 
 const backgroundSchedulerCtx: BackgroundSchedulerContext = {

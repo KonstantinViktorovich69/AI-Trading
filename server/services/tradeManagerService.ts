@@ -22,6 +22,7 @@ export interface TradeManagerServiceDependencies {
   executeRealOpenOnExchange: (symbol: string, side: 'LONG' | 'SHORT', amount: number, leverage: number) => Promise<any>;
   setRealTradeSlTpOnExchange: (symbol: string, side: 'LONG' | 'SHORT', stopLoss?: number, takeProfit?: number) => Promise<boolean>;
   runAiGeneration: (params: any) => Promise<{ text?: string }>;
+  fetchGapCandles?: (exchange: any, symbol: string, fromTs: number, toTs: number) => Promise<any>;
   WEEX_HEADERS?: Record<string, string>;
   getVirtualBalance?: () => number;
   setVirtualBalance?: (val: number) => void;
@@ -333,7 +334,8 @@ export class TradeManagerService {
       executeRealPartialCloseOnExchange: this.deps.executeRealPartialCloseOnExchange,
       executeRealOpenOnExchange: this.deps.executeRealOpenOnExchange,
       setRealTradeSlTpOnExchange: this.deps.setRealTradeSlTpOnExchange,
-      runAiGeneration: this.deps.runAiGeneration
+      runAiGeneration: this.deps.runAiGeneration,
+      fetchGapCandles: this.deps.fetchGapCandles
     };
 
     await manageActiveTrades(deps);

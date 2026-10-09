@@ -134,7 +134,7 @@ export async function trainQuantModel(context: QuantModelTrainerContext): Promis
     const virtualTrades = context.getVirtualTrades();
     const deadZone = context.deadZonePct ?? 0.05;
     const closedTrades = virtualTrades.filter(t => {
-      if (t.status !== 'CLOSED') return false;
+      if (t.status !== 'CLOSED' || t.gapAffected) return false;
       const outcome = (t as any).outcome !== undefined 
         ? (t as any).outcome 
         : ((t.pnlPercent !== undefined && t.pnlPercent > 0) || (t.pnl !== undefined && t.pnl > 0) ? 1 : 0);

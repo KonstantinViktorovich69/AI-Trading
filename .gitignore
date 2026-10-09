@@ -18,4 +18,9 @@ key_debug.txt
 *.bak_*
 *.tmp_*
 *.corrupt_*
+data/heartbeat.json
+data/downtime-log.json
+data/funnel.json
+data/learning-cells.json
+data/quant-model-v2.json
 

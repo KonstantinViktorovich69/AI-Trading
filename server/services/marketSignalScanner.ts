@@ -479,6 +479,11 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
         },
         blockLocks,
         blockDetails,
+        metadata: {
+          indicatorsSource: hasRealOhlcv ? 'OHLCV' : 'TICKER_ESTIMATE',
+          hasRealOhlcv,
+          volumeSpike
+        },
         requiredScore: (() => {
           // Dynamic adaptive required score based on market regime and trend alignment:
           const isTrendAligned = (signalSide === 'LONG' && marketRegime === 'TREND_UP') ||

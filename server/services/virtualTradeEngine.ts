@@ -1,9 +1,16 @@
-import { evaluateExitPolicy } from './exitPolicy.ts';
+import { evaluateExitPolicy, type ExitPolicySettings } from './exitPolicy.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
 import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
 import { getOtePendingCandidates, processOtePendingQueue } from './oteVirtualQueue.ts';
 import { updatePatternBlacklistFromStats } from './signalEngine.ts';
+import { advanceGapReplay } from './gapReplayRuntime.ts';
+import { incFunnel } from './funnelCounters.ts';
+import { recordGap } from './heartbeatService.ts';
+import { isEntryPaused } from './entryGate.ts';
+import type { GapCandleResult } from './gapCandleFetcher.ts';
+import { scheduleLearningCellsRecompute } from './learningCellService.ts';
+import { scheduleModelV2RetrainIfNeeded } from './quantModelV2.ts';
 
 export interface VirtualTradeEngineDependencies {
   getVirtualTrades: () => any[];
@@ -33,10 +40,34 @@ export interface VirtualTradeEngineDependencies {
   executeRealOpenOnExchange: (symbol: string, side: 'LONG' | 'SHORT', amount: number, leverage: number) => Promise<any>;
   setRealTradeSlTpOnExchange: (symbol: string, side: 'LONG' | 'SHORT', stopLoss?: number, takeProfit?: number) => Promise<boolean>;
   runAiGeneration: (params: any) => Promise<{ text?: string }>;
+  fetchGapCandles?: (exchange: any, symbol: string, fromTs: number, toTs: number) => Promise<GapCandleResult>;
 }
 
 let lastWeekCheckTime = 0;
 let lastRealDrawdownCheckTime = 0;
+
+export function buildExitPolicyConfig(globalSettings: any, trade: any): ExitPolicySettings {
+  return {
+    minNormalAutoCloseNetPnlPct: 6.0,
+    minPttpActivationNetPnlPct: 12.0,
+    minPttpPeakNetPnlPct: 18.0,
+    pttpTrailingDropPct: 35.0,
+    maxLifetimeHours: (globalSettings as any).maxLifetimeHours ?? 24,
+    allowEmergencyMaxLifetime: (globalSettings as any).allowEmergencyMaxLifetime ?? true,
+    timeoutProfitHours: 18,
+    minTimeoutProfitNetPnlPct: 6.0,
+    enableStagnationTimeout: true,
+    timeoutStagnationHours: (globalSettings as any).timeoutStagnationHours ?? 8.0,
+    maxStagnationPnlPct: 0.5,
+    enableMultiTp: trade.isMultiTp !== false,
+    multiTpTargets: trade.tpStages,
+    bypassProfitFloorForMultiTp: true,
+    bypassProfitFloorForPrimaryTp: true,
+    enableTrailingStop: true,
+    trailingStopTriggerPnlPct: 14.0,
+    trailingStopDistancePct: 3.0
+  };
+}
 
 /**
  * Core Watchdog & Active Trade Lifecycle Manager
@@ -66,6 +97,12 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     const result = processOtePendingQueue(currentPrices);
     for (const candidate of result.filled) {
       try {
+        if (isEntryPaused(undefined, { getGlobalTrueOhlcv: deps.getGlobalTrueOhlcv, getGlobalSettings: deps.getGlobalSettings }).paused) {
+          console.log(`[OTE PAUSED GUARD] Dropping candidate ${candidate.id} execution: entry paused`);
+          try { incFunnel('ote', 'fill_dropped_paused'); } catch {}
+          continue;
+        }
+
         const currentOpenCount = Array.isArray(virtualTrades) ? virtualTrades.filter(t => t && t.status === 'OPEN').length : 0;
         const maxVirtualAllowed = Math.min(6, (globalSettings as any)?.maxActivePositionsVirtual ?? 6);
         if (currentOpenCount >= maxVirtualAllowed) {
@@ -166,14 +203,66 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     }
 
     const symbol = trade.symbol;
+    let gapOutcome: any = undefined;
+
+    // A4 (1). Gap replay advance for virtual trades
+    if (!trade.isReal && trade.gapReplayStatus === 'PENDING' && (globalSettings as any).gapReplayEnabled !== false) {
+      try {
+        const exitCfg = buildExitPolicyConfig(globalSettings, trade);
+        const weexEx = deps.getCcxtClient ? deps.getCcxtClient({ exchange: 'weex' }) : null;
+        const advRes = advanceGapReplay(trade, weexEx, exitCfg, Date.now(), deps.fetchGapCandles);
+        if (advRes.kind === 'WAIT') {
+          continue; // Candles are still fetching in background
+        } else if (advRes.kind === 'READY' && advRes.outcome) {
+          gapOutcome = advRes.outcome;
+          // Apply partial close events
+          if (gapOutcome.events && Array.isArray(gapOutcome.events)) {
+            for (const ev of gapOutcome.events) {
+              if (ev.type === 'PARTIAL_CLOSE') {
+                if (typeof ev.stageIndex === 'number' && trade.tpStages && trade.tpStages[ev.stageIndex]) {
+                  trade.tpStages[ev.stageIndex].executed = true;
+                }
+                if (typeof ev.amountClosed === 'number') {
+                  trade.amount = Number(Math.max(0, trade.amount - ev.amountClosed).toFixed(2));
+                }
+                if (!trade.history) trade.history = [];
+                trade.history.push({ time: ev.time, type: 'CLOSE', price: ev.price, amount: ev.amountClosed || 0 });
+                if (ev.newStopLoss) {
+                  trade.stopLoss = ev.newStopLoss;
+                }
+                trade.isProtected = true;
+                hasChanges = true;
+              } else if (ev.type === 'BREAKEVEN' || ev.type === 'LADDER' || ev.type === 'MOVE_STOP') {
+                if (ev.newStopLoss) {
+                  trade.stopLoss = ev.newStopLoss;
+                  trade.isProtected = true;
+                  hasChanges = true;
+                }
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[WATCHDOG GAP REPLAY ADVANCE ERROR] for ${trade.symbol}:`, err?.message || err);
+      }
+    }
+
     let currentPrice = 0;
+    let staleSeen = false;
+    const nowForStale = Date.now();
+    const stalePriceGuardMs = (globalSettings as any).stalePriceGuardMs ?? 60000;
 
     // 1. WebSocket search
     for (const ex in wsTickers) {
       const t = findTickerInMap(symbol, wsTickers[ex]);
       if (t) {
-        currentPrice = t.last || t.bid || t.close || 0;
-        if (currentPrice > 0) break;
+        if (stalePriceGuardMs > 0 && typeof t.timestamp === 'number' && (nowForStale - t.timestamp > stalePriceGuardMs)) {
+          currentPrice = 0;
+          staleSeen = true;
+        } else {
+          currentPrice = t.last || t.bid || t.close || 0;
+          if (currentPrice > 0) break;
+        }
       }
     }
 
@@ -182,13 +271,33 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       for (const ex in globalCcxtTickers) {
         const t = findTickerInMap(symbol, globalCcxtTickers[ex]);
         if (t) {
-          currentPrice = t.last || t.bid || t.close || 0;
-          if (currentPrice > 0) break;
+          if (stalePriceGuardMs > 0 && typeof t.timestamp === 'number' && (nowForStale - t.timestamp > stalePriceGuardMs)) {
+            currentPrice = 0;
+            staleSeen = true;
+          } else {
+            currentPrice = t.last || t.bid || t.close || 0;
+            if (currentPrice > 0) break;
+          }
         }
       }
     }
 
+    if (staleSeen && currentPrice <= 0) {
+      if (!trade.stalePriceSince) trade.stalePriceSince = nowForStale;
+      try { incFunnel('watchdog', 'stale_price_skip'); } catch {}
+    }
+
     if (currentPrice <= 0) continue;
+
+    if (trade.stalePriceSince) {
+      const staleDurationSec = (nowForStale - trade.stalePriceSince) / 1000;
+      if (staleDurationSec > 30) {
+        try {
+          recordGap('STALE_FEED', trade.stalePriceSince, nowForStale, { symbol: trade.symbol, staleDurationSec });
+        } catch {}
+      }
+      trade.stalePriceSince = undefined;
+    }
 
     // Update trade price in memory
     if (Math.abs(trade.currentPrice - currentPrice) / currentPrice > 0.0001) {
@@ -218,6 +327,20 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     let shouldClose = false;
     let reason = '';
 
+    // A4 (2). If gap replay reached a terminal exit, apply it immediately
+    if (gapOutcome && gapOutcome.terminal) {
+      shouldClose = true;
+      reason = `Gap replay: ${gapOutcome.terminal.reason}`;
+      trade.closeReasonCode = gapOutcome.terminal.kind;
+      trade.closedByGapReplay = true;
+      trade.gapReplayEventTime = gapOutcome.terminal.eventTime;
+      trade.gapReplayTimeframe = (globalSettings as any).gapReplayTimeframe || '1m';
+      trade.gapReplayApprox = true;
+    } else if (gapOutcome && (!gapOutcome.events || gapOutcome.events.length === 0)) {
+      trade.gapReplayStatus = 'DONE';
+      trade.gapReplayNoHit = true;
+    }
+
     // Canonical Deterministic Exit Policy Evaluation
     const canonicalExitDecision = evaluateExitPolicy(
       {
@@ -243,26 +366,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         ask: currentPrice * 1.0005,
         currentTime: Date.now()
       },
-      {
-        minNormalAutoCloseNetPnlPct: 6.0,
-        minPttpActivationNetPnlPct: 12.0,
-        minPttpPeakNetPnlPct: 18.0,
-        pttpTrailingDropPct: 35.0,
-        maxLifetimeHours: (globalSettings as any).maxLifetimeHours ?? 24,
-        allowEmergencyMaxLifetime: (globalSettings as any).allowEmergencyMaxLifetime ?? true,
-        timeoutProfitHours: 18,
-        minTimeoutProfitNetPnlPct: 6.0,
-        enableStagnationTimeout: true,
-        timeoutStagnationHours: (globalSettings as any).timeoutStagnationHours ?? 8.0,
-        maxStagnationPnlPct: 0.5,
-        enableMultiTp: trade.isMultiTp !== false,
-        multiTpTargets: trade.tpStages,
-        bypassProfitFloorForMultiTp: true,
-        bypassProfitFloorForPrimaryTp: true,
-        enableTrailingStop: true,
-        trailingStopTriggerPnlPct: 14.0,
-        trailingStopDistancePct: 3.0
-      }
+      buildExitPolicyConfig(globalSettings, trade)
     );
 
     if ((canonicalExitDecision.kind === 'FULL_CLOSE' || canonicalExitDecision.kind === 'EMERGENCY_FULL_CLOSE') && !shouldClose) {
@@ -678,6 +782,11 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       trade.isClosing = true;
       let finalClosePrice = currentPrice;
 
+      // A4 (3). If closed by gap replay on virtual trade, use replay execution price and event time
+      if (!trade.isReal && gapOutcome && gapOutcome.terminal) {
+        finalClosePrice = gapOutcome.terminal.executionPrice;
+      }
+
       if (trade.isReal) {
         try {
           console.log(`[WATCHDOG REAL CLOSE] Requesting closure on exchange for ${trade.symbol}...`);
@@ -696,7 +805,12 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
 
       trade.status = 'CLOSED';
-      trade.closeTime = Date.now();
+      if (!trade.isReal && gapOutcome && gapOutcome.terminal) {
+        trade.closeTime = gapOutcome.terminal.eventTime;
+        trade.closeDetectedAt = Date.now();
+      } else {
+        trade.closeTime = Date.now();
+      }
       trade.closePrice = finalClosePrice;
       trade.closeReason = reason;
       trade.notes = reason;
@@ -730,9 +844,10 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         deps.saveBalanceDB();
       }
 
-      // Update Knowledge Base Statistics
+      // Update Knowledge Base Statistics (Skipped if trade was affected by downtime gap or perTradeRuleLearning is false)
+      const perTradeRuleLearning = (globalSettings as any).perTradeRuleLearning === true;
       const ruleList = trade.matchedRules || trade.matchedRuleIds || [];
-      if (ruleList && ruleList.length > 0) {
+      if (perTradeRuleLearning && !trade.gapAffected && ruleList && ruleList.length > 0) {
         for (const ruleId of ruleList) {
           const rule = aiKnowledgeBase.find(r => r.id === ruleId);
           if (rule) {
@@ -757,8 +872,9 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         console.warn('[WATCHDOG BLACKLIST REFRESH ERROR]', err?.message || err);
       }
 
-      // Background AI Evaluation
-      (async () => {
+      // Background AI Evaluation (Fully skipped if trade was affected by downtime gap to save quota and prevent corrupt learning)
+      if (!trade.gapAffected) {
+        (async () => {
         try {
           const features = (trade as any).features || [];
           const entryRsi = (features[1] !== undefined) ? (features[1] + 50).toFixed(1) : 'неизвестно';
@@ -857,20 +973,22 @@ PnL %: ${trade.pnlPercent?.toFixed(2)}% (${trade.pnl?.toFixed(2)} USDT)
                 }
               }
 
-              const newRule: any = {
-                id: `al_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-                agent: agentCat,
-                text: `[Авто-Обучение | ${trade.symbol} | PnL ${trade.pnlPercent?.toFixed(1)}%] ${resBody.learnedRule}`,
-                impact: (trade.pnlPercent || 0) > 0 ? 8 : -12,
-                successRate: (trade.pnlPercent || 0) > 0 ? 0.85 : 0.15,
-                usageCount: 1,
-                filterIndicator: filterInd,
-                filterCondition: filterCond,
-                filterValue: filterVal,
-                filterAction: filterAct
-              };
-              aiKnowledgeBase.push(newRule);
-              deps.saveKnowledgeDB(newRule);
+              if (perTradeRuleLearning) {
+                const newRule: any = {
+                  id: `al_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+                  agent: agentCat,
+                  text: `[Авто-Обучение | ${trade.symbol} | PnL ${trade.pnlPercent?.toFixed(1)}%] ${resBody.learnedRule}`,
+                  impact: (trade.pnlPercent || 0) > 0 ? 8 : -12,
+                  successRate: (trade.pnlPercent || 0) > 0 ? 0.85 : 0.15,
+                  usageCount: 1,
+                  filterIndicator: filterInd,
+                  filterCondition: filterCond,
+                  filterValue: filterVal,
+                  filterAction: filterAct
+                };
+                aiKnowledgeBase.push(newRule);
+                deps.saveKnowledgeDB(newRule);
+              }
             }
 
             deps.saveTradeDB(trade);
@@ -898,20 +1016,22 @@ PnL %: ${trade.pnlPercent?.toFixed(2)}% (${trade.pnl?.toFixed(2)} USDT)
             trade.aiEvaluation = trade.aiEvaluation || advice;
             trade.learnedRule = trade.learnedRule || advice;
 
-            const fallbackRule: any = {
-              id: `al_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-              agent: 'SCANNER',
-              text: `[Авто-Обучение | ${trade.symbol} | PnL ${trade.pnlPercent?.toFixed(1)}%] ${advice}`,
-              impact: isLoss ? -12 : 8,
-              successRate: isLoss ? 0.20 : 0.85,
-              usageCount: 1,
-              filterIndicator: filterInd,
-              filterCondition: filterCond,
-              filterValue: filterVal,
-              filterAction: filterAct
-            };
-            aiKnowledgeBase.push(fallbackRule);
-            deps.saveKnowledgeDB(fallbackRule);
+            if (perTradeRuleLearning) {
+              const fallbackRule: any = {
+                id: `al_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+                agent: 'SCANNER',
+                text: `[Авто-Обучение | ${trade.symbol} | PnL ${trade.pnlPercent?.toFixed(1)}%] ${advice}`,
+                impact: isLoss ? -12 : 8,
+                successRate: isLoss ? 0.20 : 0.85,
+                usageCount: 1,
+                filterIndicator: filterInd,
+                filterCondition: filterCond,
+                filterValue: filterVal,
+                filterAction: filterAct
+              };
+              aiKnowledgeBase.push(fallbackRule);
+              deps.saveKnowledgeDB(fallbackRule);
+            }
             deps.saveTradeDB(trade);
             deps.emitSignalsUpdated();
           } catch (fallbackErr) {
@@ -919,9 +1039,30 @@ PnL %: ${trade.pnlPercent?.toFixed(2)}% (${trade.pnl?.toFixed(2)} USDT)
           }
         }
       })();
+      }
 
       deps.saveBalanceDB();
       deps.saveTradeDB(trade);
+
+      // Trigger debounced recomputation of aggregated learning cells
+      try {
+        scheduleLearningCellsRecompute(
+          deps.getVirtualTrades,
+          deps.getGlobalSettings
+        );
+      } catch (cellRecomputeErr) {
+        // non-blocking
+      }
+
+      // Trigger debounced retraining check of Quant Model V2 (after every 25 new clean trades)
+      try {
+        scheduleModelV2RetrainIfNeeded(
+          deps.getVirtualTrades
+        );
+      } catch (quantRetrainErr) {
+        // non-blocking
+      }
+
       if (trade.isReal) {
         deps.sendTelegramMessage(`🛡️ <b>Watchdog: ${reason}</b>\n\nSymbol: ${trade.symbol}\nPnL: ${(trade.pnl ?? 0) > 0 ? '+' : ''}${(trade.pnl ?? 0).toFixed(2)} USDT (${(trade.pnlPercent ?? 0).toFixed(2)}%)`);
       }

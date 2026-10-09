@@ -3,6 +3,7 @@ import path from 'path';
 import { inferDataOrigin, inferDecisionSource, inferCloseReasonCode } from './tradeSchema.ts';
 import { processIncomingStateMessage } from './stateSync.ts';
 import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive.ts';
+import { getConfigVersion, getBuildId, PROCESS_STARTED_AT } from './buildInfo.ts';
 
 export interface DbStorageContext {
   getAtomicStore: () => { loadState: <T>(fallback: T) => T; saveState: (data: any) => Promise<any>; getRevision: () => number };
@@ -335,6 +336,17 @@ export async function saveTradeToDB(trade: any, immediate: boolean = false, ctx:
       trade.stateRevision = trade.stateRevision || ctx.getAtomicStore().getRevision();
 
       const existingIndex = dbData.trades.findIndex((t: any) => t.id === trade.id);
+
+      if (existingIndex === -1 && !trade.configVersion) {
+        try {
+          const currentSettings = ctx.getGlobalSettings ? ctx.getGlobalSettings() : globalSettings;
+          trade.configVersion = getConfigVersion(currentSettings);
+          trade.buildId = getBuildId();
+          trade.processStartedAt = PROCESS_STARTED_AT;
+        } catch {
+          // ignore telemetry failure
+        }
+      }
 
       if (existingIndex !== -1 && dbData.trades[existingIndex].status === 'CLOSED' && trade.status === 'OPEN') {
         console.warn(`[SAVE-TRADE-DB GUARD] Попытка перезаписать уже ЗАКРЫТУЮ сделку ${trade.id} (${trade.symbol}) устаревшей версией со статусом OPEN — запись отклонена, сохранено закрытое состояние.`);

@@ -382,7 +382,7 @@ export function updatePatternBlacklistFromStats(
   if (!Array.isArray(closedTrades) || closedTrades.length === 0) return;
 
   const patternStats: Record<string, { wins: number; total: number; netPnl: number }> = {};
-  const validClosed = closedTrades.filter(t => t && (t.status === 'CLOSED' || t.status === 'closed' || t.closedAt || t.closeTime));
+  const validClosed = closedTrades.filter(t => t && !t.gapAffected && (t.status === 'CLOSED' || t.status === 'closed' || t.closedAt || t.closeTime));
   // Анализируем выборку до 200 последних закрытых сделок, чтобы дать достаточный объем выборки для каждого из 8-9 паттернов
   const recent = validClosed.slice(-200);
   

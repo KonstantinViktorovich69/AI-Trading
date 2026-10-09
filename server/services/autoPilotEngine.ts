@@ -14,6 +14,11 @@ import { isTraditionalEquitySymbol } from './marketSignalScanner.ts';
 import { isPatternBlacklisted } from './signalEngine.ts';
 import { SignalPerformanceAnalyticsService } from './signalPerformanceAnalyticsService.ts';
 import { evaluateKnowledgeBaseForSignal } from './quantRiskEngine.ts';
+import { incFunnel } from './funnelCounters.ts';
+import { isEntryPaused } from './entryGate.ts';
+import { getCellVerdict } from './learningCellService.ts';
+import { computeQuantFeaturesV2 } from './quantFeaturesV2.ts';
+import { calculateProbabilityV2IfAccepted } from './quantModelV2.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -117,6 +122,10 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
   try {
     const globalSettings = deps.getGlobalSettings();
     if (!globalSettings.isAutopilotEnabled) {
+      return;
+    }
+    if (isEntryPaused(undefined, { getGlobalTrueOhlcv: deps.getGlobalTrueOhlcv, getGlobalSettings: deps.getGlobalSettings }).paused) {
+      incFunnel('autopilot', 'entry_paused');
       return;
     }
     const cacheSignals = deps.getCacheSignals();
@@ -299,6 +308,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         if (!currentSig || currentSig.signal === 'NEUTRAL' || (currentSig.aiScore || 0) < 70) continue;
         const symbol = currentSig.rawSymbol || currentSig.symbol;
         if (!symbol || typeof symbol !== 'string') continue;
+        try { incFunnel('seen', 'evaluating_candidate', symbol); } catch {}
         const price = currentSig.price;
         const exName = currentSig.exchange;
         let finalAiScore = currentSig.aiScore;
@@ -307,6 +317,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         // --- КВАНТОВОЕ АВТО-ОБУЧЕНИЕ: ПРОВЕРКА ПРАВИЛ БАЗЫ ЗНАНИЙ ---
         const aiKnowledgeBase = deps.getAiKnowledgeBase ? deps.getAiKnowledgeBase() : [];
         const currentMarketPulse = deps.getGlobalMarketPulse ? deps.getGlobalMarketPulse() : { bias: 0 };
+        const kbDedupeCapEnabled = (globalSettings as any).kbDedupeCap === true;
         const kbEval = evaluateKnowledgeBaseForSignal(
             symbol,
             {
@@ -317,10 +328,12 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                 imbalance: orderBookImbalance[normalizeSymbol(symbol)]?.imbalance,
                 change24h: Number(currentSig.change24h) || undefined
             },
-            aiKnowledgeBase
+            aiKnowledgeBase,
+            { dedupeCap: kbDedupeCapEnabled }
         );
 
         if (kbEval.isBlocked) {
+            try { incFunnel('kb_block', kbEval.blockReason || 'knowledge_rule_blocked', symbol); } catch {}
             console.log(`[AUTOPILOT KNOWLEDGE GUARD] Skipping entry for ${symbol}: ${kbEval.blockReason}`);
             continue;
         }
@@ -330,6 +343,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             console.log(`[AUTOPILOT KNOWLEDGE PENALTY] Candidate ${symbol} penalized: score ${finalAiScore} -> ${penalizedScore} (-${kbEval.penaltyScore} pts from learned rules)`);
             finalAiScore = penalizedScore;
             if (finalAiScore < (requiredAutoScoreVirtual || 70)) {
+                try { incFunnel('kb_penalty_reject', 'score_below_threshold_after_penalty', symbol); } catch {}
                 continue;
             }
         } else if (kbEval.bonusScore > 0) {
@@ -337,11 +351,13 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         }
 
         // --- КВАНТОВАЯ ЛОГИСТИЧЕСКАЯ РЕГРЕССИЯ (MODEL WEIGHTS BETA0..BETA11) ---
+        let entryQuantP: number | undefined;
         let currentQuantFeatures: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         if (deps.calculateConfidenceProbability) {
             try {
                 const quantProb = deps.calculateConfidenceProbability(symbol, price, currentSig.volume || 0);
                 if (quantProb && typeof quantProb.p === 'number') {
+                    entryQuantP = quantProb.p;
                     if (Array.isArray(quantProb.features)) {
                         currentQuantFeatures = quantProb.features;
                         currentSig.features = currentQuantFeatures;
@@ -354,6 +370,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                         console.log(`[QUANT LOGISTIC MODEL] ${symbol}: p=${(quantProb.p * 100).toFixed(1)}% -> AI Score adjusted ${scoreBefore} -> ${finalAiScore} (${probAdjustment > 0 ? '+' : ''}${probAdjustment} pts)`);
                     }
                     if (quantProb.p < 0.32) {
+                        try { incFunnel('quant_guard', 'win_prob_below_32pct', symbol); } catch {}
                         console.log(`[QUANT LOGISTIC GUARD] Skipping entry for ${symbol}: Win probability ${(quantProb.p * 100).toFixed(1)}% is below 32% safety threshold.`);
                         continue;
                     }
@@ -363,12 +380,54 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             }
         }
 
+        const isSellSignal = currentSig.signal && (currentSig.signal.includes('SELL') || currentSig.signal.includes('SHORT'));
+        const isBuySignal = currentSig.signal && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'));
+
         // --- STRICT SIGNAL QUALITY & PATTERN FILTER ---
         const rawPatternName = currentSig.matchedPattern || currentSig.patternName || currentSig.type || currentSig.pattern || '';
         const blCheck = isPatternBlacklisted(rawPatternName);
         if (blCheck.blacklisted) {
+            try { incFunnel('blacklist', blCheck.reason || 'pattern_blacklisted', symbol); } catch {}
             console.log(`[AUTOPILOT BLACKLIST GUARD] Skipping entry for ${symbol}: Pattern "${rawPatternName}" is blacklisted (${blCheck.reason})`);
             continue;
+        }
+
+        // --- БЛОК C: AGGREGATED LEARNING CELLS (SHADOW / ACTIVE / OFF) ---
+        let currentCellVerdict: any = null;
+        try {
+            const aggMode = (globalSettings as any).aggregatedLearningMode ?? 'SHADOW';
+            if (aggMode !== 'OFF') {
+                currentCellVerdict = getCellVerdict({
+                    pattern: rawPatternName,
+                    side: isSellSignal ? 'SHORT' : 'LONG',
+                    regime: marketRegime,
+                    settings: globalSettings
+                });
+
+                if (aggMode === 'SHADOW') {
+                    if (currentCellVerdict.verdict === 'BLOCK' || currentCellVerdict.wouldBlockIfFullPolicy) {
+                        try { incFunnel('cell', 'would_block', symbol); } catch {}
+                    } else if (currentCellVerdict.verdict === 'PENALIZE') {
+                        try { incFunnel('cell', 'would_penalize', symbol); } catch {}
+                    } else if (currentCellVerdict.verdict === 'BOOST') {
+                        try { incFunnel('cell', 'would_boost', symbol); } catch {}
+                    }
+                } else if (aggMode === 'ACTIVE') {
+                    if (currentCellVerdict.verdict === 'BLOCK') {
+                        try { incFunnel('cell', 'blocked', symbol); } catch {}
+                        console.log(`[LEARNING CELL GUARD] Skipping entry for ${symbol}: Blocked by cell "${currentCellVerdict.cellKey}" (${currentCellVerdict.reason})`);
+                        continue;
+                    }
+                    if (typeof currentCellVerdict.adjustment === 'number' && currentCellVerdict.adjustment !== 0) {
+                        const scoreBefore = finalAiScore;
+                        finalAiScore = Math.max(0, Math.min(100, finalAiScore + currentCellVerdict.adjustment));
+                        console.log(`[LEARNING CELL ACTIVE] ${symbol}: cell "${currentCellVerdict.cellKey}" (${currentCellVerdict.verdict}) adjusted AI score ${scoreBefore} -> ${finalAiScore} (${currentCellVerdict.adjustment > 0 ? '+' : ''}${currentCellVerdict.adjustment} pts)`);
+                    }
+                }
+            }
+        } catch (cellErr: any) {
+            // Graceful non-blocking fallback: behavior stays exactly as before
+            console.warn('[LEARNING CELL EVALUATION ERROR]:', cellErr?.message || cellErr);
         }
 
         // Rolling win rate check over the last 20 trades via SignalPerformanceAnalyticsService (< 45% threshold)
@@ -376,6 +435,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         if (!targetIsAutoLearning && globalSettings.tradingMode === 'real') {
             const rollingPerf = SignalPerformanceAnalyticsService.evaluatePatternRollingPerformance(virtualTrades, rawPatternName, 20);
             if (!rollingPerf.allowed) {
+                try { incFunnel('rolling_wr', rollingPerf.reason || 'rolling_winrate_low', symbol); } catch {}
                 console.log(`[AUTOPILOT ROLLING WINRATE GUARD] Skipping real entry for ${symbol}: ${rollingPerf.reason}`);
                 continue;
             }
@@ -391,6 +451,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         const hasVolumeConfirmation = (Number(currentSig.volumeSpike) || 0) >= 1.3 || (Number(currentSig.volume24h) || Number(currentSig.volume) || 0) >= 200000;
         
         if (!hasVerifiedPattern && !hasVolumeConfirmation && finalAiScore < 88) {
+            try { incFunnel('no_verified_pattern', 'unclassified_stagnant_signal', symbol); } catch {}
             continue; // Skip unclassified stagnant signals to protect win-rate
         }
 
@@ -400,6 +461,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             const dt = currentSig.decisionTrace;
             const requiredScore = typeof dt.requiredScore === 'number' ? dt.requiredScore : 75;
             if (dt.passedConsensus === false || (typeof dt.consensusScore === 'number' && dt.consensusScore < requiredScore)) {
+                try { incFunnel('shield_consensus', 'committee_consensus_low', symbol); } catch {}
                 console.log(`[AUTOPILOT CONSENSUS GUARD] Rejected entry for ${symbol}: Consensus score ${dt.consensusScore} < ${requiredScore} or passedConsensus is false`);
                 continue;
             }
@@ -411,6 +473,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             if (globalSettings.isLiquiditySweepFilterEnabled !== false) {
                 const liquidityFactor = dt.factors?.find((f: any) => f.name === 'LIQUIDITY_SWEEP');
                 if (liquidityFactor && liquidityFactor.passed === false) {
+                    try { incFunnel('shield_liquidity_sweep', 'liquidity_sweep_unconfirmed', symbol); } catch {}
                     console.log(`[AUTOPILOT CHECKLIST GUARD] Skipping entry for ${symbol}: LIQUIDITY_SWEEP unconfirmed (waiting for liquidity sweep)`);
                     continue;
                 }
@@ -422,6 +485,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             const wickFactor = dt.factors?.find((f: any) => f.name && f.name.includes('WICK_REJECTION'));
             const isStrictWickPattern = sigType.includes('SPIRE') || sigType.includes('WICK') || sigType.includes('PINBAR') || sigType.includes('ШПИЛЬ') || sigType.includes('ФИТИЛ');
             if (isStrictWickPattern && wickFactor && wickFactor.passed === false) {
+                try { incFunnel('shield_wick', 'wick_rejection_unconfirmed', symbol); } catch {}
                 console.log(`[AUTOPILOT CHECKLIST GUARD] Skipping entry for ${symbol}: WICK_REJECTION unconfirmed for wick pattern`);
                 continue;
             }
@@ -431,29 +495,35 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         // BTC hyper-growth (Защита от открытия шортов при вертикальном росте BTC)
         const isBtcHyperGrowth = btcTrend24h > 5.0;
         if (isBtcHyperGrowth && (currentSig.signal.includes('SELL') || currentSig.signal.includes('SHORT'))) {
+            try { incFunnel('shield_btc_hypergrowth', 'btc_hypergrowth_short_blocked', symbol); } catch {}
             continue;
         }
 
         // BTC Panic / Flash Crash (Защита от открытия лонгов при обвале BTC)
         const isBtcPanic = btcTrend24h < -5.0;
         if (isBtcPanic && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'))) {
+            try { incFunnel('shield_btc_panic', 'btc_panic_long_blocked', symbol); } catch {}
             continue;
         }
 
         // Bullish / Bearish Expansion guards
         const isBullishExpansion = marketRegime === 'BULL_TREND' || marketRegime === 'PUMP';
         if (isBullishExpansion && finalAiScore < 85 && (currentSig.signal.includes('SELL') || currentSig.signal.includes('SHORT'))) {
+            try { incFunnel('shield_bull_expansion', 'bull_expansion_short_low_score', symbol); } catch {}
             continue;
         }
         if (isTraditionalEquitySymbol(symbol)) {
+            try { incFunnel('shield_traditional_equity', 'traditional_equity_symbol', symbol); } catch {}
             continue; // Skip traditional stock equities (DELL, AAL, CRM, etc.) from crypto scalp engine
         }
         if (globalSettings.excludeBinanceCrossListed === true && currentSig.isBinanceCrossListed === true) {
+            try { incFunnel('binance_cross', 'binance_cross_listed', symbol); } catch {}
             continue; // Skip Binance cross-listed coins to protect against market maker manipulation
         }
 
         const isBearishExpansion = marketRegime === 'BEAR_TREND' || marketRegime === 'DUMP';
         if (isBearishExpansion && finalAiScore < 85 && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'))) {
+            try { incFunnel('shield_bear_expansion', 'bear_expansion_long_low_score', symbol); } catch {}
             continue;
         }
 
@@ -463,6 +533,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         const bid = ticker?.bid || ticker?.close || price;
         const currentSpreadPct = bid > 0 ? ((ask - bid) / bid) * 100 : 0;
         if (currentSpreadPct > 0.25 && finalAiScore < 95) {
+            try { incFunnel('shield_spread', 'wide_spread_pair', symbol); } catch {}
             continue; // Skip wide spread pairs to prevent entry slippage loss
         }
 
@@ -472,6 +543,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         const volume24h = Number(currentSig.volume24h) || Number(currentSig.volume) || 0;
         const volumeSpike = Number(currentSig.volumeSpike) || 0;
         if (volume24h > 0 && volume24h < 50000 && volumeSpike < 4.0) {
+            try { incFunnel('shield_volume', 'low_volume_stagnant_coin', symbol); } catch {}
             continue; // Ignore low-volume stagnant coins without volume spike
         }
 
@@ -481,6 +553,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             // 1. Игнорировать лонги при глубоком проливе цены под VWAP (> 0.8% ниже VWAP) без подтвержденного разворота
             const sigVwap = currentSig.indicators?.vwap || currentSig.vwap;
             if (sigVwap && price < sigVwap * 0.992 && !currentSig.volumeSpike && (Number(currentSig.riseFromLow) || 0) < 1.5) {
+                try { incFunnel('shield_long_vwap', 'falling_knife_below_vwap', symbol); } catch {}
                 console.log(`[AUTOPILOT LONG SHIELD] Ignored ${symbol} falling knife LONG: price ${price} is below VWAP ${sigVwap} without reversal confirmation`);
                 continue;
             }
@@ -488,6 +561,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             // 2. В падающем/медвежьем рынке для LONG требуется повышенный балл или подтвержденный разворотный импульс
             const isBearishRegime = marketRegime === 'BEAR_TREND' || marketRegime === 'PANIC_DUMP' || btcTrend24h < -2.5;
             if (isBearishRegime && finalAiScore < 92 && !currentSig.volumeSpike && (Number(currentSig.riseFromLow) || 0) < 2.0) {
+                try { incFunnel('shield_bear_regime_long', 'bearish_market_long_low_score', symbol); } catch {}
                 console.log(`[AUTOPILOT LONG SHIELD] Ignored ${symbol} LONG in Bearish Market: score ${finalAiScore} < 92 without volume spike or reversal rise`);
                 continue;
             }
@@ -523,9 +597,6 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         const dynamicRequiredAutoScoreVirtual = Math.max(sigRequiredOverride, requiredAutoScoreVirtual, choppinessRequiredScore);
         const dynamicRequiredAutoScoreReal = Math.max(sigRequiredOverride, isStreakProtectionActiveForReal ? Math.min(98, requiredAutoScoreReal + streakScoreBufferForReal) : requiredAutoScoreReal, choppinessRequiredScore);
 
-        const isSellSignal = currentSig.signal && (currentSig.signal.includes('SELL') || currentSig.signal.includes('SHORT'));
-        const isBuySignal = currentSig.signal && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'));
-
         // POINT 3: Orderbook Depth Ratio Check
         const obInfo = orderBookImbalance[cleanSymNorm];
         if (obInfo && (obInfo.bidVolume > 0 || obInfo.askVolume > 0)) {
@@ -539,10 +610,12 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             const minBidToAskRatio = isReversalPattern ? 0.40 : 0.85;
 
             if (isSellSignal && (askVol / bidVol) < minAskToBidRatio) {
+                try { incFunnel('shield_orderbook', 'orderbook_imbalance_short_reject', symbol); } catch {}
                 console.log(`[ORDERBOOK SHIELD] Skipping auto SHORT for ${symbol}: Bid density (${bidVol.toFixed(0)}) dominates Ask (${askVol.toFixed(0)}), ratio ${(askVol/bidVol).toFixed(2)} < ${minAskToBidRatio}`);
                 continue;
             }
             if (isBuySignal && (bidVol / askVol) < minBidToAskRatio) {
+                try { incFunnel('shield_orderbook', 'orderbook_imbalance_long_reject', symbol); } catch {}
                 console.log(`[ORDERBOOK SHIELD] Skipping auto LONG for ${symbol}: Ask density (${askVol.toFixed(0)}) dominates Bid (${bidVol.toFixed(0)}), ratio ${(bidVol/askVol).toFixed(2)} < ${minBidToAskRatio}`);
                 continue;
             }
@@ -584,17 +657,20 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             const isSameDirLimitReached = sameDirVirtualCount >= maxSameDir;
 
             if (isVirtualLimitReached) {
+                try { incFunnel('capacity', 'virtual_total_capacity_reached', symbol); } catch {}
                 console.log(`[AUTOPILOT CAPACITY GUARD] Virtual auto-trade for ${symbol} skipped: Total open positions limit reached (${totalOpenTradesCount}/${maxVirtualPositions})`);
                 continue;
             }
 
             if (isSameDirLimitReached && !existingAutoTrade && !recentlyClosedAuto) {
+                try { incFunnel('capacity', 'virtual_same_direction_limit_reached', symbol); } catch {}
                 console.log(`[RISK ACTUATOR] Virtual auto-trade for ${symbol} blocked: Max active positions in the same direction reached (${sameDirVirtualCount}/${maxSameDir})`);
                 continue;
             }
 
             if (!isVirtualLimitReached && !isSameDirLimitReached && !existingAutoTrade && !recentlyClosedAuto) {
                 if (!deps.acquireExecutionLock(symbol)) {
+                    try { incFunnel('exec_lock', 'concurrent_execution_lock_active', symbol); } catch {}
                     console.log(`[VIRTUAL AUTOPILOT] [LOCK] Skip entry for ${symbol}: Concurrent transaction lock is active.`);
                     continue;
                 }
@@ -898,6 +974,42 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
                         if (autoEntryRes.executed && autoEntryRes.trade) {
                             autoEntryRes.trade.features = currentQuantFeatures;
+                            try {
+                                const qfV2 = computeQuantFeaturesV2({
+                                    symbol,
+                                    price,
+                                    volume: Number(currentSig.volume) || 0,
+                                    trueOhlcv: GLOBAL_TRUE_OHLCV,
+                                    tickers: GLOBAL_CCXT_TICKERS,
+                                    orderBookImbalance
+                                });
+                                const quantPV2 = calculateProbabilityV2IfAccepted(qfV2.features, qfV2.hadIndicators);
+
+                                autoEntryRes.trade.entryDiagnostics = {
+                                    indicatorsSource: currentSig.decisionTrace?.metadata?.indicatorsSource ?? null,
+                                    features: currentQuantFeatures,
+                                    featuresHadIndicators: !!GLOBAL_TRUE_OHLCV[symbol],
+                                    featuresV2: qfV2.features,
+                                    featuresV2HadIndicators: qfV2.hadIndicators,
+                                    featuresV2KeyUsed: qfV2.keyUsed,
+                                    quantPV2: quantPV2 ?? null,
+                                    aiScoreRaw: currentSig.aiScore,
+                                    kbPenalty: kbEval.penaltyScore,
+                                    kbPenaltyCapped: kbEval.penaltyScoreCapped ?? kbEval.penaltyScore,
+                                    kbBonus: kbEval.bonusScore,
+                                    quantP: entryQuantP ?? null,
+                                    aiScoreFinal: finalAiScore,
+                                    marketRegime,
+                                    cellVerdict: currentCellVerdict ? {
+                                        cellKey: currentCellVerdict.cellKey,
+                                        level: currentCellVerdict.level,
+                                        n: currentCellVerdict.n,
+                                        verdict: currentCellVerdict.verdict,
+                                        adjustment: currentCellVerdict.adjustment,
+                                        wouldBlockIfFullPolicy: currentCellVerdict.wouldBlockIfFullPolicy
+                                    } : null
+                                };
+                            } catch {}
                             if (kbEval.matchedRuleIds.length > 0) {
                                 autoEntryRes.trade.matchedRules = kbEval.matchedRuleIds;
                                 autoEntryRes.trade.matchedRuleTexts = kbEval.matchedRuleTexts;
@@ -907,6 +1019,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                             if (!virtualTrades.some(t => t.id === autoEntryRes.trade.id)) {
                                 virtualTrades.push(autoEntryRes.trade);
                             }
+                            try { incFunnel('opened', 'auto_entry_virtual_success', symbol); } catch {}
                             if (targetIsAutoLearning) {
                                 console.log(`[AUTO-LEARNING] [MAIN-THREAD] Started tracking ${validatedIntent.side === 'SHORT' ? 'SHORT' : 'LONG'} trade for ${symbol} with dynamic required score ${dynamicRequiredAutoScoreVirtual}% (WinRate: ${(autoWinRate * 100).toFixed(1)}%). CorrelationID: ${autoEntryRes.trade.id}`);
                             } else {
@@ -923,6 +1036,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                             localHigh5m: cachedIndicators.localHigh5m ?? price
                         });
                         if (oteResult.isValid) {
+                            try { incFunnel('ote_queued', 'ote_limit_placed_virtual', symbol); } catch {}
                             addOtePendingCandidate({
                                 id: `ote_virtual_${symbol}_${Date.now()}`,
                                 symbol,

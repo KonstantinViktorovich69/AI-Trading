@@ -302,6 +302,8 @@ export interface KnowledgeBaseEvaluationResult {
   bonusScore: number;
   matchedRuleIds: string[];
   matchedRuleTexts: string[];
+  penaltyScoreCapped?: number;
+  bonusScoreCapped?: number;
 }
 
 /**
@@ -319,10 +321,19 @@ export function evaluateKnowledgeBaseForSignal(
     fomoIndex?: number;
     change24h?: number;
   },
-  aiKnowledgeBase: any[]
+  aiKnowledgeBase: any[],
+  opts?: { dedupeCap?: boolean }
 ): KnowledgeBaseEvaluationResult {
   if (!Array.isArray(aiKnowledgeBase) || aiKnowledgeBase.length === 0) {
-    return { isBlocked: false, penaltyScore: 0, bonusScore: 0, matchedRuleIds: [], matchedRuleTexts: [] };
+    return {
+      isBlocked: false,
+      penaltyScore: 0,
+      bonusScore: 0,
+      matchedRuleIds: [],
+      matchedRuleTexts: [],
+      penaltyScoreCapped: 0,
+      bonusScoreCapped: 0
+    };
   }
 
   const cleanSym = symbol ? symbol.toLowerCase().replace(/[\/:]/g, '') : '';
@@ -332,6 +343,11 @@ export function evaluateKnowledgeBaseForSignal(
   let blockReason: string | undefined;
   const matchedRuleIds: string[] = [];
   const matchedRuleTexts: string[] = [];
+
+  // For dedupe cap calculations: track unique rule signatures
+  const seenRuleSignatures = new Set<string>();
+  let penaltyScoreCappedRaw = 0;
+  let bonusScoreCappedRaw = 0;
 
   for (const rule of aiKnowledgeBase) {
     if (!rule) continue;
@@ -381,14 +397,31 @@ export function evaluateKnowledgeBaseForSignal(
         const assetMultiplier = isAssetSpecific ? 1.4 : 1.0;
         const ruleWeight = (rule.successRate ?? 0.5) * (Math.abs(rule.impact || 10)) / 100 * assetMultiplier;
 
+        const ruleSig = `${effectiveRule.filterIndicator}|${effectiveRule.filterCondition}|${effectiveRule.filterValue}|${effectiveRule.filterAction}`;
+        const isDuplicateForCapped = seenRuleSignatures.has(ruleSig);
+        if (!isDuplicateForCapped) {
+          seenRuleSignatures.add(ruleSig);
+        }
+
+        // For capped evaluation: archived non-blocking rules are skipped
+        const skipForCapped = rule.isArchived && !structMatch.isBlock;
+
         if (structMatch.isBlock) {
           isBlocked = true;
           blockReason = structMatch.reason || `Сработало блокирующее правило базы знаний: [${rule.text}]`;
           break; // Hard block triggered
         } else if (structMatch.isPenalty) {
-          penaltyScore += Math.max(5, Math.round(ruleWeight * 15));
+          const itemPenalty = Math.max(5, Math.round(ruleWeight * 15));
+          penaltyScore += itemPenalty;
+          if (!isDuplicateForCapped && !skipForCapped) {
+            penaltyScoreCappedRaw += itemPenalty;
+          }
         } else if (structMatch.isBonus) {
-          bonusScore += Math.max(3, Math.round(ruleWeight * 10));
+          const itemBonus = Math.max(3, Math.round(ruleWeight * 10));
+          bonusScore += itemBonus;
+          if (!isDuplicateForCapped && !skipForCapped) {
+            bonusScoreCappedRaw += itemBonus;
+          }
         }
       }
     } else if (isAssetSpecific && isWarningRule) {
@@ -396,16 +429,30 @@ export function evaluateKnowledgeBaseForSignal(
       matchedRuleIds.push(rule.id);
       matchedRuleTexts.push(rule.text);
       penaltyScore += 8;
+
+      const fallbackSig = `coin_loss_fallback|${cleanSym}`;
+      if (!seenRuleSignatures.has(fallbackSig) && !rule.isArchived) {
+        seenRuleSignatures.add(fallbackSig);
+        penaltyScoreCappedRaw += 8;
+      }
     }
   }
+
+  const penaltyScoreCapped = Math.min(15, penaltyScoreCappedRaw);
+  const bonusScoreCapped = Math.min(8, bonusScoreCappedRaw);
+
+  const finalPenalty = opts?.dedupeCap ? penaltyScoreCapped : penaltyScore;
+  const finalBonus = opts?.dedupeCap ? bonusScoreCapped : bonusScore;
 
   return {
     isBlocked,
     blockReason,
-    penaltyScore,
-    bonusScore,
+    penaltyScore: finalPenalty,
+    bonusScore: finalBonus,
     matchedRuleIds,
-    matchedRuleTexts
+    matchedRuleTexts,
+    penaltyScoreCapped,
+    bonusScoreCapped
   };
 }
 
