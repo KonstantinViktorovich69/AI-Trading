@@ -1019,6 +1019,13 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                             if (!virtualTrades.some(t => t.id === autoEntryRes.trade.id)) {
                                 virtualTrades.push(autoEntryRes.trade);
                             }
+                            if (deps.saveTradeDB) {
+                                try {
+                                    await deps.saveTradeDB(autoEntryRes.trade);
+                                } catch (saveErr) {
+                                    console.warn('[AUTOPILOT] Failed to save trade after entryDiagnostics:', saveErr);
+                                }
+                            }
                             try { incFunnel('opened', 'auto_entry_virtual_success', symbol); } catch {}
                             if (targetIsAutoLearning) {
                                 console.log(`[AUTO-LEARNING] [MAIN-THREAD] Started tracking ${validatedIntent.side === 'SHORT' ? 'SHORT' : 'LONG'} trade for ${symbol} with dynamic required score ${dynamicRequiredAutoScoreVirtual}% (WinRate: ${(autoWinRate * 100).toFixed(1)}%). CorrelationID: ${autoEntryRes.trade.id}`);

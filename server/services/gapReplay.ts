@@ -99,11 +99,18 @@ export function replayGapOnCandles(
     const close = candle[4];
 
     // Synthetic ticks:
-    // For LONG: adverse extreme is LOW, favorable is HIGH
-    // For SHORT: adverse extreme is HIGH, favorable is LOW
-    const tick1Price = isLong ? low : high;
-    const tick2Price = isLong ? high : low;
-    const ticks = [tick1Price, tick2Price];
+    // A candle opening before gapReplayFrom (partial pre-gap candle) is evaluated with a single tick at close price,
+    // without adverse/favorable High/Low extremes.
+    // Candles opening at or after gapReplayFrom are evaluated with 2 synthetic ticks: adverse extreme first, then favorable.
+    const gapFrom = trade.gapReplayFrom ?? startFilterTs;
+    let ticks: number[];
+    if (candleTime < gapFrom) {
+      ticks = [close];
+    } else {
+      const tick1Price = isLong ? low : high;
+      const tick2Price = isLong ? high : low;
+      ticks = [tick1Price, tick2Price];
+    }
 
     for (const tickPrice of ticks) {
       if (typeof tickPrice !== 'number' || tickPrice <= 0) continue;

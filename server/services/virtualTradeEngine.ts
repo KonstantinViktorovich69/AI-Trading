@@ -6,11 +6,17 @@ import { getOtePendingCandidates, processOtePendingQueue } from './oteVirtualQue
 import { updatePatternBlacklistFromStats } from './signalEngine.ts';
 import { advanceGapReplay } from './gapReplayRuntime.ts';
 import { incFunnel } from './funnelCounters.ts';
-import { recordGap } from './heartbeatService.ts';
+import { recordGap, applyPendingGapsToOpenTrades } from './heartbeatService.ts';
 import { isEntryPaused } from './entryGate.ts';
 import type { GapCandleResult } from './gapCandleFetcher.ts';
 import { scheduleLearningCellsRecompute } from './learningCellService.ts';
 import { scheduleModelV2RetrainIfNeeded } from './quantModelV2.ts';
+
+const lastAlivePersistMap = new Map<string, number>();
+
+export function resetLastAlivePersistMapForTest(): void {
+  lastAlivePersistMap.clear();
+}
 
 export interface VirtualTradeEngineDependencies {
   getVirtualTrades: () => any[];
@@ -133,9 +139,9 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
   // Weekly check for virtual balance reference
   const currentVirtualBalance = deps.getVirtualBalance();
   if (Date.now() - lastWeekCheckTime >= 7 * 24 * 60 * 60 * 1000) {
-    deps.setStartOfWeekBalance(currentVirtualBalance);
+    deps.setStartOfWeekBalance?.(currentVirtualBalance);
     lastWeekCheckTime = Date.now();
-    deps.saveBalanceDB();
+    deps.saveBalanceDB?.();
   }
 
   // Check real exchange daily drawdown if api is active
@@ -174,6 +180,18 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     // External manual exchange positions are never touched
     if (trade.isExternal || trade.isExchangeManual || trade.mode === 'EXTERNAL' || trade.id?.toString().includes('-external')) {
       continue;
+    }
+
+    // 2.1 Update lastAliveAt in memory for open virtual trades (throttled DB write once per 60s)
+    if (!trade.isReal && trade.status === 'OPEN') {
+      const nowAlive = Date.now();
+      trade.lastAliveAt = nowAlive;
+      const lastPersist = lastAlivePersistMap.get(trade.id) || 0;
+      if (nowAlive - lastPersist >= 60000) {
+        lastAlivePersistMap.set(trade.id, nowAlive);
+        hasChanges = true;
+        try { deps.saveTradeDB(trade); } catch {}
+      }
     }
 
     // Grace period: Don't check for closing if trade was opened less than 5s ago
@@ -295,9 +313,19 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       if (staleDurationSec > 30) {
         try {
           recordGap('STALE_FEED', trade.stalePriceSince, nowForStale, { symbol: trade.symbol, staleDurationSec });
+          applyPendingGapsToOpenTrades([trade], deps.saveTradeDB);
         } catch {}
       }
       trade.stalePriceSince = undefined;
+
+      if (!trade.isReal && trade.gapReplayStatus === 'PENDING' && (globalSettings as any).gapReplayEnabled !== false) {
+        try {
+          const exitCfg = buildExitPolicyConfig(globalSettings, trade);
+          const weexEx = (deps.getPublicExchange ? deps.getPublicExchange() : null) || (deps.getCcxtClient ? deps.getCcxtClient({ exchange: 'weex' }) : null);
+          advanceGapReplay(trade, weexEx, exitCfg, Date.now(), deps.fetchGapCandles);
+        } catch {}
+        continue;
+      }
     }
 
     // Update trade price in memory

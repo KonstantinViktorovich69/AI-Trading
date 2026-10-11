@@ -511,6 +511,186 @@ describe('Downtime Resilience & Telemetry Suite (Prompt 2)', () => {
       expect(partialEvent?.price).toBe(3100);
       expect(partialEvent?.stageIndex).toBe(0);
     });
+
+    it('STALE_FEED race: первый проход оставляет сделку OPEN с PENDING, второй закрывает её с closedByGapReplay=true', async () => {
+      const { manageActiveTrades } = await import('./virtualTradeEngine.ts');
+      const now = Date.now();
+
+      const trade: any = {
+        id: 'trade_stale_race',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        status: 'OPEN',
+        isReal: false,
+        entryPrice: 100,
+        stopLoss: 95,
+        takeProfit: 120,
+        currentPrice: 100,
+        amount: 10,
+        leverage: 1,
+        openTime: now - 7200000,
+        stalePriceSince: now - 3600000 // 1 hour ago
+      };
+
+      const virtualTrades = [trade];
+
+      // Fake candles where candle breaches SL (low = 94, SL = 95)
+      const fakeCandles = [
+        [now - 1800000, 99, 101, 94, 96, 100]
+      ];
+
+      const customFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        candles: fakeCandles,
+        timeframe: '1m',
+        complete: true
+      });
+
+      const deps: any = {
+        getVirtualTrades: () => virtualTrades,
+        getGlobalSettings: () => ({ gapReplayEnabled: true }),
+        getGlobalCcxtTickers: () => ({
+          weex: {
+            'BTC/USDT': { last: 90, timestamp: now } // fresh price is 90 (below SL 95)
+          }
+        }),
+        getWsTickers: () => ({}),
+        getGlobalTrueOhlcv: () => ({}),
+        getGlobalMarketPulse: () => ({ sentiment: 'NEUTRAL', bias: 0 }),
+        getAiKnowledgeBase: () => [],
+        getVirtualBalance: () => 1000,
+        setVirtualBalance: vi.fn(),
+        setStartOfWeekBalance: vi.fn(),
+        isCircuitBreakerActive: () => false,
+        saveTradeDB: vi.fn().mockResolvedValue(undefined),
+        saveBalanceDB: vi.fn(),
+        emitSignalsUpdated: vi.fn(),
+        fetchGapCandles: customFetch,
+        getPublicExchange: () => ({ id: 'weex' })
+      };
+
+      // Первый проход сторожа:
+      // Свежая цена (90) переступает SL, но из-за stalePriceSince вызывается recordGap('STALE_FEED')
+      // и applyPendingGapsToOpenTrades, выставляющий gapReplayStatus = 'PENDING'.
+      // Сделка должна остаться OPEN со статусом PENDING на первом проходе!
+      await manageActiveTrades(deps);
+
+      expect(trade.status).toBe('OPEN');
+      expect(trade.gapReplayStatus).toBe('PENDING');
+
+      // Ждем завершения фоновой загрузки свечей advanceGapReplay
+      await new Promise(r => setTimeout(r, 20));
+
+      // Второй проход сторожа:
+      // Реплей воспроизводит свечи из кэша, фиксирует SL и закрывает сделку
+      await manageActiveTrades(deps);
+
+      expect(trade.status).toBe('CLOSED');
+      expect(trade.closedByGapReplay).toBe(true);
+      // Slippage for LONG SL is 95 * (1 - 0.0005) = 94.9525
+      expect(trade.closePrice).toBeCloseTo(94.9525, 3);
+    });
+
+    it('обнаружение рестарта без файлов: открытые сделки с lastAliveAt 2ч назад фиксируют RESTART_GAP_ESTIMATED', async () => {
+      const { TradeManagerService, resetEstimatedRestartGapForTest } = await import('./tradeManagerService.ts');
+      const { resetHeartbeatForTest, getRecordedGaps } = await import('./heartbeatService.ts');
+      resetHeartbeatForTest();
+      resetEstimatedRestartGapForTest();
+
+      const twoHoursAgo = Date.now() - 2 * 3600 * 1000;
+      const openTrade: any = {
+        id: 'trade_old_alive',
+        symbol: 'SOL/USDT',
+        side: 'LONG',
+        status: 'OPEN',
+        isReal: false,
+        entryPrice: 50,
+        amount: 10,
+        openTime: twoHoursAgo - 10000,
+        lastAliveAt: twoHoursAgo
+      };
+
+      const trades = [openTrade];
+
+      const service = new TradeManagerService({
+        getVirtualTrades: () => trades,
+        getGlobalSettings: () => ({}),
+        getGlobalCcxtTickers: () => ({}),
+        getWsTickers: () => ({}),
+        getGlobalTrueOhlcv: () => ({}),
+        getGlobalMarketPulse: () => ({ sentiment: 'NEUTRAL', bias: 0 }),
+        getAiKnowledgeBase: () => [],
+        getCcxtClient: vi.fn(),
+        executeWithRetry: vi.fn(),
+        saveTradeDB: vi.fn().mockResolvedValue(undefined),
+        saveBalanceDB: vi.fn(),
+        saveKnowledgeDB: vi.fn(),
+        sendTelegramMessage: vi.fn(),
+        emitSignalsUpdated: vi.fn(),
+        executeRealCloseOnExchange: vi.fn(),
+        executeRealPartialCloseOnExchange: vi.fn(),
+        executeRealOpenOnExchange: vi.fn(),
+        setRealTradeSlTpOnExchange: vi.fn(),
+        runAiGeneration: vi.fn()
+      });
+
+      await service.manageTradesServerSide();
+
+      const gaps = getRecordedGaps();
+      const estimatedGap = gaps.find(g => g.kind === 'RESTART_GAP_ESTIMATED');
+      expect(estimatedGap).toBeDefined();
+      expect(estimatedGap?.from).toBe(twoHoursAgo);
+      expect(estimatedGap?.details?.source).toBe('trade_lastAliveAt');
+
+      expect(openTrade.gapAffected).toBe(true);
+      expect(openTrade.gapReplayStatus).toBe('PENDING');
+
+      resetHeartbeatForTest();
+      resetEstimatedRestartGapForTest();
+    });
+
+    it('точность реплея: простой 20 часов использует 1m, первая частичная свеча не вызывает SL по экстремуму', async () => {
+      const { fetchGapCandles } = await import('./gapCandleFetcher.ts');
+
+      // 1. Простой 20 часов использует 1m
+      const from20h = 1000;
+      const to20h = from20h + 20 * 3600 * 1000;
+      const fakeExchange: any = {
+        fetchOHLCV: vi.fn().mockResolvedValue([
+          [from20h, 100, 101, 99, 100, 10]
+        ]),
+        loadMarkets: vi.fn().mockResolvedValue({}),
+        markets: { 'BTC/USDT': { id: 'BTCUSDT', symbol: 'BTC/USDT:USDT', linear: true } }
+      };
+
+      const fetchRes = await fetchGapCandles(fakeExchange, 'BTC/USDT', from20h, to20h);
+      expect(fetchRes.ok).toBe(true);
+      expect(fetchRes.timeframe).toBe('1m');
+
+      // 2. Первая частичная свеча (ts < gapReplayFrom) с экстремумом до простоя не вызывает SL
+      const trade: any = {
+        id: 'trade_partial_candle',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        entryPrice: 100,
+        stopLoss: 95,
+        takeProfit: 120,
+        amount: 10,
+        leverage: 1,
+        gapReplayFrom: 2000 // Simple gap starts at 2000
+      };
+
+      // Candle 1: ts = 1000 < gapReplayFrom (2000). Low = 90 (breaches SL 95), but Close = 98 (safe)
+      const partialCandle = [1000, 100, 101, 90, 98, 50];
+      const res1 = replayGapOnCandles(trade, [partialCandle], 60000, exitCfg, 3000);
+      expect(res1.terminal).toBeUndefined(); // НЕ вызывает SL!
+
+      // Candle 2: ts = 2000 >= gapReplayFrom (2000). Low = 90, Close = 98
+      const postGapCandle = [2000, 98, 99, 90, 97, 50];
+      const res2 = replayGapOnCandles(trade, [partialCandle, postGapCandle], 60000, exitCfg, 3000);
+      expect(res2.terminal).toBeDefined();
+      expect(res2.terminal?.kind).toBe('STOP_LOSS'); // Свеча после начала простоя по-прежнему вызывает SL!
+    });
   });
 });
 

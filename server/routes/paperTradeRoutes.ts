@@ -115,8 +115,8 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
       const originParam = typeof rawOrigin === 'string' ? rawOrigin : 'OUT_OF_SAMPLE';
       const validOrigins = ['OUT_OF_SAMPLE', 'ALL', 'HISTORICAL_SEED', 'LIVE_WEEX', 'PAPER_SIM'];
       const originFilter = validOrigins.includes(originParam) ? originParam as any : 'OUT_OF_SAMPLE';
-
-      const report = SignalPerformanceAnalyticsService.generatePerformanceReport(trades, activeSignals, originFilter);
+      const settings = ctx.getGlobalSettings ? ctx.getGlobalSettings() : undefined;
+      const report = SignalPerformanceAnalyticsService.generatePerformanceReport(trades, activeSignals, originFilter, settings);
       return res.json({
         success: true,
         report

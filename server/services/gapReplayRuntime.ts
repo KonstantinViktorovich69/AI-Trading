@@ -12,8 +12,13 @@ export interface AdvanceResult {
   outcome?: GapReplayResult;
 }
 
+interface CachedCandleEntry {
+  candles: any[][];
+  timeframe?: string;
+}
+
 // In-memory runtime state: keyed by pair `${trade.id}_${gapReplayFrom}`
-const candlesCache = new Map<string, any[][]>();
+const candlesCache = new Map<string, CachedCandleEntry>();
 const inFlightFetches = new Set<string>();
 const fetchStartTime = new Map<string, number>();
 const lastFetchAttemptTime = new Map<string, number>();
@@ -87,9 +92,9 @@ export function advanceGapReplay(
 
   // Check if candles are already loaded
   if (candlesCache.has(pairKey)) {
-    const candles = candlesCache.get(pairKey)!;
-    const gapMs = Math.max(0, now - fromTs);
-    const tfMs = gapMs <= 6 * 60 * 60 * 1000 ? 60 * 1000 : 5 * 60 * 1000;
+    const cached = candlesCache.get(pairKey)!;
+    const candles = cached.candles;
+    const tfMs = cached.timeframe === '5m' ? 5 * 60 * 1000 : 60 * 1000;
     const outcome = replayGapOnCandles(trade, candles, tfMs, exitCfg, now);
     trade.gapReplayStatus = 'DONE';
     inFlightFetches.delete(pairKey);
@@ -122,7 +127,7 @@ export function advanceGapReplay(
     .then((res: GapCandleResult) => {
       inFlightFetches.delete(pairKey);
       if (res.ok && Array.isArray(res.candles) && res.candles.length > 0) {
-        candlesCache.set(pairKey, res.candles);
+        candlesCache.set(pairKey, { candles: res.candles, timeframe: res.timeframe });
       } else if (res.reason === 'GAP_TOO_LONG' || res.reason === 'NO_CANDLES_FETCHED') {
         trade.gapReplayStatus = res.reason === 'NO_CANDLES_FETCHED' ? 'NO_CANDLES' : 'FAILED';
       }

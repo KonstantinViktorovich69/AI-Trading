@@ -1,7 +1,14 @@
 import ccxt, { Exchange } from 'ccxt';
 import { manageActiveTrades, VirtualTradeEngineDependencies } from './virtualTradeEngine.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
-import { applyPendingGapsToOpenTrades } from './heartbeatService.ts';
+import { applyPendingGapsToOpenTrades, recordGap, getRecordedGaps } from './heartbeatService.ts';
+import { PROCESS_STARTED_AT } from './buildInfo.ts';
+
+let hasCheckedEstimatedRestartGap = false;
+
+export function resetEstimatedRestartGapForTest(): void {
+  hasCheckedEstimatedRestartGap = false;
+}
 
 export interface TradeManagerServiceDependencies {
   getVirtualTrades: () => any[];
@@ -312,6 +319,29 @@ export class TradeManagerService {
     try {
       const virtualTrades = this.deps.getVirtualTrades();
       if (Array.isArray(virtualTrades)) {
+        if (!hasCheckedEstimatedRestartGap) {
+          const openTrades = virtualTrades.filter(t => t && t.status === 'OPEN');
+          if (openTrades.length > 0) {
+            hasCheckedEstimatedRestartGap = true;
+            let lastAlive = 0;
+            for (const t of openTrades) {
+              const val = Number(t.lastAliveAt || 0);
+              if (val > lastAlive) lastAlive = val;
+            }
+            const now = Date.now();
+            if (lastAlive > 0 && now - lastAlive > 45000) {
+              const gaps = getRecordedGaps();
+              const hasRecentRestartGap = gaps.some(
+                g => (g.kind === 'RESTART_GAP' || g.kind === 'RESTART_GAP_ESTIMATED') &&
+                     (g.to >= PROCESS_STARTED_AT - 5000 || g.from >= PROCESS_STARTED_AT - 5000)
+              );
+              if (!hasRecentRestartGap) {
+                recordGap('RESTART_GAP_ESTIMATED', lastAlive, now, { source: 'trade_lastAliveAt' });
+              }
+            }
+          }
+        }
+
         applyPendingGapsToOpenTrades(virtualTrades, this.deps.saveTradeDB);
       }
     } catch (gapErr) {

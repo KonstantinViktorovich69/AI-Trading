@@ -2,6 +2,7 @@ import { isOperationalTrade } from './tradeMetrics.ts';
 import { inferDataOrigin, inferCloseReasonCode } from './tradeSchema.ts';
 import type { MarketRegime, DecisionTrace, TradePosition } from '../types/trading.ts';
 import { MIN_TRADES_FOR_PATTERN_STATISTICS, isPatternProtected } from './signalEngine.ts';
+import { getConfigVersion } from './buildInfo.ts';
 
 export interface GranularBreakdownMetric {
   category: string;
@@ -316,7 +317,8 @@ export class SignalPerformanceAnalyticsService {
   public static generatePerformanceReport(
     trades: any[], 
     activeSignals: any[] = [],
-    originFilter: 'OUT_OF_SAMPLE' | 'ALL' | 'HISTORICAL_SEED' | 'LIVE_WEEX' | 'PAPER_SIM' = 'OUT_OF_SAMPLE'
+    originFilter: 'OUT_OF_SAMPLE' | 'ALL' | 'HISTORICAL_SEED' | 'LIVE_WEEX' | 'PAPER_SIM' = 'OUT_OF_SAMPLE',
+    settings?: any
   ): SignalPerformanceReport {
     // 1. Audit and enrich every trade with strict dataOrigin classification
     const allAuditedTrades = trades.map(t => {
@@ -387,7 +389,7 @@ export class SignalPerformanceAnalyticsService {
         gapAffected: t.gapAffected,
         gapSec: t.gapSec,
         closeReasonCode: t.closeReasonCode || ((t.status === 'CLOSED' || t.closedAt || t.pnl !== undefined) ? inferCloseReasonCode(t) : undefined),
-        indicatorsSource: t.indicatorsSource,
+        indicatorsSource: t.entryDiagnostics?.indicatorsSource ?? t.indicatorsSource,
         entryDiagnostics: t.entryDiagnostics
       };
     });
@@ -749,7 +751,7 @@ export class SignalPerformanceAnalyticsService {
 
     return {
       generatedAt: Date.now(),
-      configVersion: trades[0]?.configVersion,
+      configVersion: getConfigVersion(settings),
       activeOriginFilter: originFilter,
       strictForwardTestAudit,
       totalAuditedTrades: auditedList.length,

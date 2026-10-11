@@ -56,14 +56,14 @@ export async function fetchGapCandles(
   }
 
   const gapMs = Math.max(0, toTs - fromTs);
-  const sixHoursMs = 6 * 60 * 60 * 1000;
+  const thirtyThreeHoursMs = 33 * 60 * 60 * 1000;
   const fortyEightHoursMs = 48 * 60 * 60 * 1000;
 
   if (gapMs > fortyEightHoursMs) {
     return { ok: false, reason: 'GAP_TOO_LONG' };
   }
 
-  const timeframe = gapMs <= sixHoursMs ? '1m' : '5m';
+  const timeframe = gapMs <= thirtyThreeHoursMs ? '1m' : '5m';
   const tfMs = timeframe === '1m' ? 60 * 1000 : 5 * 60 * 1000;
 
   // If instance needs loadMarkets, invoke it in try/catch

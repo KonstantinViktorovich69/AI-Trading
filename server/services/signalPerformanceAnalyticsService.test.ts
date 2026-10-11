@@ -156,7 +156,7 @@ describe('SignalPerformanceAnalyticsService', () => {
     expect(byAgent.risk_sentinel.profitContributionUsd).toBe(0);
   });
 
-  it('includes configVersion, gapAffected, gapSec, closeReasonCode, indicatorsSource, and entryDiagnostics', () => {
+  it('includes configVersion, gapAffected, gapSec, closeReasonCode, indicatorsSource, and entryDiagnostics', async () => {
     const mockTrades = [
       {
         id: 't-enriched',
@@ -175,8 +175,9 @@ describe('SignalPerformanceAnalyticsService', () => {
       }
     ];
 
+    const { getConfigVersion } = await import('./buildInfo.ts');
     const report = SignalPerformanceAnalyticsService.generatePerformanceReport(mockTrades);
-    expect(report.configVersion).toBe('b8e9f1a2');
+    expect(report.configVersion).toBe(getConfigVersion(undefined));
     const trade = report.rawAuditedTrades[0];
     expect(trade.configVersion).toBe('b8e9f1a2');
     expect(trade.gapAffected).toBe(true);
@@ -184,5 +185,19 @@ describe('SignalPerformanceAnalyticsService', () => {
     expect(trade.closeReasonCode).toBe('TAKE_PROFIT');
     expect(trade.indicatorsSource).toBe('WEEX_WS');
     expect(trade.entryDiagnostics).toEqual({ rsi: 45, confidence: 0.88 });
+
+    // Also verify indicatorsSource prefers entryDiagnostics.indicatorsSource over trade.indicatorsSource
+    const tradeWithDiagnosticsSource = [
+      {
+        id: 't-diag-source',
+        symbol: 'ETH/USDT',
+        side: 'SHORT',
+        status: 'CLOSED',
+        indicatorsSource: 'OLD_FALLBACK',
+        entryDiagnostics: { indicatorsSource: 'PRIORITY_DIAGNOSTICS' }
+      }
+    ];
+    const reportDiag = SignalPerformanceAnalyticsService.generatePerformanceReport(tradeWithDiagnosticsSource);
+    expect(reportDiag.rawAuditedTrades[0].indicatorsSource).toBe('PRIORITY_DIAGNOSTICS');
   });
 });

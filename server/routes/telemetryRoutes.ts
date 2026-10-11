@@ -122,7 +122,8 @@ export function createTelemetryRouter(ctx: TelemetryRouterContext): Router {
   router.get('/learning/walk-forward', (req: Request, res: Response) => {
     try {
       const maxTradesParam = req.query.maxTrades ? parseInt(String(req.query.maxTrades), 10) : 300;
-      const maxTrades = isNaN(maxTradesParam) || maxTradesParam <= 0 ? 300 : maxTradesParam;
+      const rawMaxTrades = isNaN(maxTradesParam) || maxTradesParam <= 0 ? 300 : maxTradesParam;
+      const maxTrades = Math.min(500, rawMaxTrades);
 
       const now = Date.now();
       const cached = walkForwardCache.get(maxTrades);

@@ -102,6 +102,10 @@ export function registerTradeGapHook(fn: TradeGapHook): void {
   tradeGapHooks.push(fn);
 }
 
+export function getRecordedGaps(): DowntimeGap[] {
+  return downtimeGaps;
+}
+
 export function recordGap(
   kind: GapKind,
   from: number,
