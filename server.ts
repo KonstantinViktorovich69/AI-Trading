@@ -58,6 +58,7 @@ import { createAiOptimizationWorker, getJaccardSimilarity } from './server/worke
 import { ScannerWorkerManager, type ScannerWorkerManagerContext } from './server/workers/scannerWorkerManager.ts';
 import { SettingsManager, type GlobalSettings, createDefaultGlobalSettings } from './server/services/settingsManager.ts';
 import { runGuarded } from './server/services/loopGuard.ts';
+import { startHeartbeat, observeLoopTick } from './server/services/heartbeatService.ts';
 import { fetchGapCandles } from './server/services/gapCandleFetcher.ts';
 import { TradeManagerService } from './server/services/tradeManagerService.ts';
 import { AutopilotEngineService } from './server/services/autoPilotEngineService.ts';
@@ -682,6 +683,7 @@ const tradeManagerService = new TradeManagerService({
   getGlobalMarketPulse: () => GLOBAL_MARKET_PULSE,
   getAiKnowledgeBase: () => aiKnowledgeBase,
   getCcxtClient: (config: any) => getCcxtClient(config),
+  getPublicExchange: () => marketDataHubService.getExchangeInstance('weex'),
   executeWithRetry: (fn, desc, retries, delay) => executeWithRetry(fn, desc, retries, delay),
   saveTradeDB: (trade, immediate) => saveTradeDB(trade, immediate),
   saveBalanceDB: () => saveBalanceDB(),
@@ -1276,14 +1278,20 @@ const autopilotEngineService = new AutopilotEngineService({
 });
 
 async function runAutopilotAndVirtualTradeEntry() {
-  await runGuarded('autopilot', 90000, () => autopilotEngineService.runAutopilotAndVirtualTradeEntry(), {
+  await runGuarded('autopilot', 90000, () => {
+    try { observeLoopTick('autopilot'); } catch {}
+    return autopilotEngineService.runAutopilotAndVirtualTradeEntry();
+  }, {
     loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
   });
 }
 
 // Watchdog and History (Delegated to TradeManagerService)
 async function manageTradesServerSide() {
-  await runGuarded('watchdog', 30000, () => tradeManagerService.manageTradesServerSide(), {
+  await runGuarded('watchdog', 30000, () => {
+    try { observeLoopTick('watchdog'); } catch {}
+    return tradeManagerService.manageTradesServerSide();
+  }, {
     loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
   });
 }
@@ -1735,6 +1743,17 @@ async function startServer() {
     } catch (e) {
       console.error('[SERVER] Failed during startupLoadPromise (continuing offline-first):', e);
     }
+
+    try {
+      startHeartbeat({
+        getVirtualTrades: () => virtualTrades,
+        getLoadedStateUpdatedAt: () => (getCachedDB()?.updatedAt),
+        saveTradeDB: (trade: any) => saveTradeDB(trade)
+      });
+    } catch (hbErr) {
+      console.warn('[SERVER] Error starting heartbeat detector:', hbErr);
+    }
+
     backgroundSchedulerService.start();
 
     const gracefulShutdown = async (signal: string) => {

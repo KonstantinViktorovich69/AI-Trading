@@ -90,4 +90,35 @@ describe('backgroundScheduler service', () => {
     scheduler.start();
     expect(() => scheduler.stop()).not.toThrow();
   });
+
+  it('records funnel ticks for scheduled tasks', async () => {
+    const { getFunnelData, resetFunnelForTest } = await import('./funnelCounters.ts');
+    resetFunnelForTest();
+
+    vi.useFakeTimers();
+    try {
+      const manageTradesSpy = vi.fn().mockResolvedValue(undefined);
+      const ctx: BackgroundSchedulerContext = {
+        isMainThread: true,
+        getGlobalCcxtTickers: () => ({}),
+        getFundingRates: () => ({}),
+        getHistoryData: () => ({}),
+        getGlobalFundingHistory: () => ({}),
+        manageTradesServerSide: manageTradesSpy
+      };
+
+      const scheduler = new BackgroundSchedulerService(ctx);
+      scheduler.start();
+
+      // Advance by 1000ms to trigger manageTradesServerSide_tick
+      await vi.advanceTimersByTimeAsync(1050);
+
+      const funnel = getFunnelData(1);
+      expect(funnel.aggregated['scheduler|manageTradesServerSide_tick']).toBeGreaterThanOrEqual(1);
+
+      scheduler.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

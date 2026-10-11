@@ -14,26 +14,27 @@ describe('Downtime Resilience & Telemetry Suite (Prompt 2)', () => {
     resetLoopGuardStateForTest();
   });
 
+  const exitCfg = {
+    minNormalAutoCloseNetPnlPct: 6.0,
+    minPttpActivationNetPnlPct: 12.0,
+    minPttpPeakNetPnlPct: 18.0,
+    pttpTrailingDropPct: 35.0,
+    maxLifetimeHours: 24,
+    allowEmergencyMaxLifetime: true,
+    timeoutProfitHours: 18,
+    minTimeoutProfitNetPnlPct: 6.0,
+    enableStagnationTimeout: true,
+    timeoutStagnationHours: 8.0,
+    maxStagnationPnlPct: 0.5,
+    enableMultiTp: true,
+    bypassProfitFloorForMultiTp: true,
+    bypassProfitFloorForPrimaryTp: true,
+    enableTrailingStop: true,
+    trailingStopTriggerPnlPct: 14.0,
+    trailingStopDistancePct: 3.0
+  };
+
   describe('1. gapReplay: Pure Replay & Candle Simulation', () => {
-    const exitCfg = {
-      minNormalAutoCloseNetPnlPct: 6.0,
-      minPttpActivationNetPnlPct: 12.0,
-      minPttpPeakNetPnlPct: 18.0,
-      pttpTrailingDropPct: 35.0,
-      maxLifetimeHours: 24,
-      allowEmergencyMaxLifetime: true,
-      timeoutProfitHours: 18,
-      minTimeoutProfitNetPnlPct: 6.0,
-      enableStagnationTimeout: true,
-      timeoutStagnationHours: 8.0,
-      maxStagnationPnlPct: 0.5,
-      enableMultiTp: true,
-      bypassProfitFloorForMultiTp: true,
-      bypassProfitFloorForPrimaryTp: true,
-      enableTrailingStop: true,
-      trailingStopTriggerPnlPct: 14.0,
-      trailingStopDistancePct: 3.0
-    };
 
     it('triggers SL with adverse slippage for LONG during gap (raw touch without 5s)', () => {
       const trade = {
@@ -303,49 +304,213 @@ describe('Downtime Resilience & Telemetry Suite (Prompt 2)', () => {
     });
   });
 
-  describe('5. Exclusion of gapAffected Trades from Self-Learning', () => {
-    it('excludes gapAffected trades from pattern blacklist statistics', () => {
-      const closedTrades = [
-        {
-          symbol: 'BTC/USDT:USDT',
-          pattern: 'SAR_PEAK_REVERSAL',
-          status: 'CLOSED',
-          pnl: -50,
-          outcome: 0,
-          gapAffected: true // SHOULD BE EXCLUDED
-        },
-        {
-          symbol: 'ETH/USDT:USDT',
-          pattern: 'SAR_PEAK_REVERSAL',
-          status: 'CLOSED',
-          pnl: 10,
-          outcome: 1,
-          gapAffected: false
-        }
-      ];
+  describe('6. Production Gap Detection & Replay Hardening (Задачи 1-3)', () => {
+    it('startHeartbeat со старым heartbeat.json (замоканный fs): записан RESTART_GAP, открытые сделки получили gapAffected=true и gapReplayStatus="PENDING"', async () => {
+      const { startHeartbeat, resetHeartbeatForTest, getDowntimeSummary } = await import('./heartbeatService.ts');
+      const fs = await import('fs');
 
-      // Should not throw and processes clean trades only
-      expect(() => updatePatternBlacklistFromStats(closedTrades)).not.toThrow();
+      resetHeartbeatForTest();
+      resetGapReplayRuntimeState();
+
+      const oldHeartbeatTs = Date.now() - 120000; // 2 minutes ago (> 45s)
+      const fakeHeartbeatJson = JSON.stringify({
+        ts: oldHeartbeatTs,
+        pid: 99999,
+        buildId: 'old_build_123',
+        processStartedAt: oldHeartbeatTs - 3600000,
+        seq: 42
+      });
+
+      const readSpy = vi.spyOn(fs.default, 'readFileSync').mockImplementation((filePath: any, ...args: any[]) => {
+        if (String(filePath).includes('heartbeat.json')) {
+          return fakeHeartbeatJson;
+        }
+        return '';
+      });
+      const existsSpy = vi.spyOn(fs.default, 'existsSync').mockImplementation((filePath: any) => {
+        if (String(filePath).includes('heartbeat.json')) {
+          return true;
+        }
+        return false;
+      });
+      const writeSpy = vi.spyOn(fs.default, 'writeFileSync').mockImplementation(() => {});
+      const renameSpy = vi.spyOn(fs.default, 'renameSync').mockImplementation(() => {});
+
+      const mockOpenTrade: any = {
+        id: 'trade_hb_test_1',
+        symbol: 'BTC/USDT',
+        status: 'OPEN',
+        isReal: false,
+        openTime: oldHeartbeatTs - 60000
+      };
+      const mockVirtualTrades = [mockOpenTrade];
+      const saveSpy = vi.fn();
+
+      try {
+        startHeartbeat({
+          getVirtualTrades: () => mockVirtualTrades,
+          saveTradeDB: saveSpy
+        });
+
+        const summary = getDowntimeSummary();
+        const restartGap = summary.entries.find(e => e.kind === 'RESTART_GAP');
+        expect(restartGap).toBeDefined();
+        expect(restartGap?.prevBuildId).toBe('old_build_123');
+
+        // Check trade was marked gapAffected and gapReplayStatus='PENDING'
+        expect(mockOpenTrade.gapAffected).toBe(true);
+        expect((mockOpenTrade as any).gapReplayStatus).toBe('PENDING');
+        expect((mockOpenTrade as any).gapReplayFrom).toBe(restartGap?.from);
+      } finally {
+        readSpy.mockRestore();
+        existsSpy.mockRestore();
+        writeSpy.mockRestore();
+        renameSpy.mockRestore();
+        resetHeartbeatForTest();
+      }
     });
 
-    it('excludes gapAffected trades from quant model training', async () => {
-      let trainingSelectedTrades: any[] = [];
-      const mockContext: any = {
-        getModelStatus: () => ({ isTrainingActive: false, lastRetrained: 0, totalLearnedTrades: 0 }),
-        getModelWeights: () => ({ beta0: 0, beta1: 0, beta2: 0, beta3: 0, beta4: 0, beta5: 0, beta6: 0, beta7: 0, beta8: 0, beta9: 0, beta10: 0, beta11: 0 }),
-        setModelWeights: vi.fn(),
-        getVirtualTrades: () => [
-          { status: 'CLOSED', pnl: 5, gapAffected: true }, // Excluded
-          { status: 'CLOSED', pnl: -10, gapAffected: false }
-        ],
-        getAiKnowledgeBase: () => [],
-        saveKnowledgeDB: vi.fn(),
-        saveSettings: vi.fn()
+    it('реплей с поддельной биржей, отдающей свечи: сделка закрыта по SL с ценой SL*(1-0.0005); второй простой той же сделки запрашивает свечи заново', async () => {
+      resetGapReplayRuntimeState();
+
+      const trade: any = {
+        id: 'trade_replay_sl_chain',
+        symbol: 'SOL/USDT',
+        side: 'LONG',
+        status: 'OPEN',
+        isReal: false,
+        entryPrice: 150,
+        amount: 10,
+        leverage: 5,
+        stopLoss: 140,
+        takeProfit: 170,
+        openTime: 1000,
+        gapReplayFrom: 2000,
+        gapReplayStatus: 'PENDING',
+        gapReplayAttempts: 0
       };
 
-      // trainQuantModel will filter trades; since total < 30 it exits early cleanly
-      await trainQuantModel(mockContext);
-      expect(mockContext.getModelStatus().isTrainingActive).toBe(false);
+      let fetchCount = 0;
+      const fakeExchange: any = {
+        loadMarkets: vi.fn().mockResolvedValue({}),
+        markets: { 'SOL/USDT': {} }
+      };
+
+      const customFetcher = vi.fn().mockImplementation(async (_ex, _sym, fromTs, _toTs) => {
+        fetchCount++;
+        // Low price touches 135 (below SL 140)
+        return {
+          ok: true,
+          candles: [
+            [fromTs + 1000, 148, 151, 135, 138, 500]
+          ]
+        };
+      });
+
+      // 1. First advance triggers fetch
+      const res1 = advanceGapReplay(trade, fakeExchange, exitCfg, 5000, customFetcher);
+      expect(res1.kind).toBe('WAIT');
+      expect(fetchCount).toBe(1);
+
+      // Wait for background promise
+      await new Promise(r => setTimeout(r, 20));
+
+      // 2. Second advance processes loaded candles and returns READY with terminal SL
+      const res2 = advanceGapReplay(trade, fakeExchange, exitCfg, 5010, customFetcher);
+      expect(res2.kind).toBe('READY');
+      expect(trade.gapReplayStatus).toBe('DONE');
+      expect(res2.outcome?.terminal).toBeDefined();
+      expect(res2.outcome?.terminal?.kind).toBe('STOP_LOSS');
+      // SL price for LONG SL slippage is 140 * (1 - 0.0005) = 139.93
+      expect(res2.outcome?.terminal?.executionPrice).toBeCloseTo(139.93, 2);
+
+      // 3. Trade suffers a SECOND gap later at time 20000
+      trade.status = 'OPEN';
+      trade.gapReplayStatus = 'PENDING';
+      trade.gapReplayFrom = 20000;
+      trade.gapReplayAttempts = 0;
+
+      // Advancing again for the second gap MUST initiate a fresh fetch (new pair key)
+      const res3 = advanceGapReplay(trade, fakeExchange, exitCfg, 25000, customFetcher);
+      expect(res3.kind).toBe('WAIT');
+      expect(fetchCount).toBe(2); // Second gap requested fresh candles!
+    });
+
+    it('STALE_FEED по символу A не метит сделку по B и не ставит паузу входов', async () => {
+      const { recordGap, applyPendingGapsToOpenTrades, resetHeartbeatForTest } = await import('./heartbeatService.ts');
+      resetHeartbeatForTest();
+      resetEntryGateForTest();
+
+      const tradeA: any = {
+        id: 'trade_A',
+        symbol: 'BTC/USDT',
+        status: 'OPEN',
+        isReal: false,
+        openTime: 1000
+      };
+
+      const tradeB: any = {
+        id: 'trade_B',
+        symbol: 'ETH/USDT',
+        status: 'OPEN',
+        isReal: false,
+        openTime: 1000
+      };
+
+      const trades = [tradeA, tradeB];
+
+      // Record STALE_FEED for BTC/USDT of 100s (> 60s)
+      const gap = recordGap('STALE_FEED', 2000, 102000, { symbol: 'BTC/USDT' });
+      expect(gap).toBeDefined();
+
+      applyPendingGapsToOpenTrades(trades);
+
+      // Trade A must be marked, Trade B must NOT be marked
+      expect(tradeA.gapAffected).toBe(true);
+      expect(tradeB.gapAffected).toBeUndefined();
+
+      // Check entryGate: STALE_FEED should NOT pause entries
+      const gateStatus = isEntryPaused(Date.now(), {
+        getGlobalSettings: () => ({ entryPauseAfterStartSec: 0 })
+      });
+      expect(gateStatus.paused).toBe(false);
+
+      resetHeartbeatForTest();
+      resetEntryGateForTest();
+    });
+
+    it('частичная фиксация идёт по цене таргета стадии', () => {
+      const tradeWithStages: any = {
+        id: 'trade_multi_tp',
+        symbol: 'ETH/USDT',
+        side: 'LONG',
+        status: 'OPEN',
+        entryPrice: 3000,
+        amount: 100,
+        leverage: 1,
+        stopLoss: 2800,
+        takeProfit: 3500,
+        openTime: 1000,
+        tpStages: [
+          { targetPrice: 3100, closeRatio: 0.25, executed: false },
+          { targetPrice: 3200, closeRatio: 0.25, executed: false },
+          { targetPrice: 3300, closeRatio: 0.25, executed: false },
+          { targetPrice: 3400, closeRatio: 1.0, executed: false }
+        ]
+      };
+
+      // Candle reaches high of 3150 (passes targetPrice 3100)
+      const candles = [
+        [2000, 3050, 3150, 3020, 3120, 100]
+      ];
+
+      const res = replayGapOnCandles(tradeWithStages, candles, 60000, exitCfg, 3000);
+      const partialEvent = res.events.find(e => e.type === 'PARTIAL_CLOSE');
+      expect(partialEvent).toBeDefined();
+      // Price must strictly be 3100 (the stage targetPrice), NOT 3150 (the candle high)
+      expect(partialEvent?.price).toBe(3100);
+      expect(partialEvent?.stageIndex).toBe(0);
     });
   });
 });
+

@@ -27,10 +27,14 @@ export function pauseEntries(sec: number, reason: string, fromTs?: number): void
   }
 }
 
-// Subscribe to downtime gap listener: any gap >= 60s pauses entries for 120s
+// Subscribe to downtime gap listener: RESTART_GAP, RESTART_GAP_ESTIMATED, FREEZE_GAP >= 60s pauses entries for 120s (STALE_FEED does not pause entries)
 try {
-  registerGapListener((gap: { from: number; to: number; durationSec: number }) => {
-    if (gap && gap.durationSec >= 60) {
+  registerGapListener((gap: { kind?: string; from: number; to: number; durationSec: number }) => {
+    if (
+      gap &&
+      gap.durationSec >= 60 &&
+      (gap.kind === 'RESTART_GAP' || gap.kind === 'RESTART_GAP_ESTIMATED' || gap.kind === 'FREEZE_GAP')
+    ) {
       pauseEntries(120, 'gap');
     }
   });

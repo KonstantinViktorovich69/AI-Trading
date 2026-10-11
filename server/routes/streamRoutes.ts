@@ -1,5 +1,6 @@
 import express from 'express';
 import type { Request, Response, Router } from 'express';
+import { cleanSymbol } from '../utils/symbolUtils.ts';
 
 export interface StreamRouterContext {
   getSignalsCache: () => any;
@@ -280,14 +281,14 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
       const signals = signalsCache?.data || [];
 
       for (const [symbolKey, rate] of Object.entries(fundingRates)) {
-        const cleanSymbol = symbolKey.replace(/[\/:]/g, '').toUpperCase();
+        const cleanSym = cleanSymbol(symbolKey);
         const fundingRateDecimal = Number(rate);
         const fundingRatePercent = fundingRateDecimal * 100;
         const fundingRateApy = fundingRateDecimal * 3 * 365 * 100;
         const dailyYieldPct = fundingRateDecimal * 3 * 100;
         const dailyYieldUsd10k = (10000 * dailyYieldPct) / 100;
 
-        const sig = signals.find((s: any) => s.symbol === cleanSymbol);
+        const sig = signals.find((s: any) => cleanSymbol(s.symbol || '') === cleanSym);
         const price = sig?.price || 1.0;
         const volume24h = sig?.volume || 500000;
 
@@ -309,7 +310,7 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
         }
 
         opportunities.push({
-          symbol: cleanSymbol,
+          symbol: cleanSym,
           exchange: sig?.exchange || 'weex',
           fundingRate: fundingRateDecimal,
           fundingRateApy,
@@ -346,19 +347,23 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
         return res.status(400).json({ success: false, error: 'Symbol is required' });
       }
 
-      const cleanSymbol = symbol.replace(/[\/:]/g, '').toUpperCase();
+      const cleanSym = cleanSymbol(symbol);
       const fundingRates = ctx.getFundingRates();
-      const rate = fundingRates[cleanSymbol] || 0.0015;
+      const rate = fundingRates[cleanSym] || fundingRates[symbol] || 0.0015;
       const signalsCache = ctx.getSignalsCache();
       const signals = signalsCache?.data || [];
-      const sig = signals.find((s: any) => s.symbol === cleanSymbol);
-      const entryPrice = sig?.price || 100.0;
+      const sig = signals.find((s: any) => cleanSymbol(s.symbol || '') === cleanSym);
+      const entryPrice = sig?.price;
+
+      if (typeof entryPrice !== 'number' || !isFinite(entryPrice) || entryPrice <= 0) {
+        return res.status(400).json({ success: false, error: 'Valid entry price not found for signal' });
+      }
 
       const side = strategyType === 'FUNDING_SQUEEZE_LONG' ? 'LONG' : 'SHORT';
       const virtualBalance = ctx.getVirtualBalance();
       const newTrade = {
         id: `FT-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-        symbol: cleanSymbol,
+        symbol: cleanSym,
         exchange: sig?.exchange || 'weex',
         entryPrice,
         amount: Math.min(capital, virtualBalance),
@@ -381,7 +386,7 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
 
       res.json({
         success: true,
-        message: `Фарминг фандинга по ${cleanSymbol} успешно запущен`,
+        message: `Фарминг фандинга по ${cleanSym} успешно запущен`,
         trade: newTrade
       });
     } catch (err: any) {

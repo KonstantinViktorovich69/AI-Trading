@@ -41,6 +41,7 @@ export interface VirtualTradeEngineDependencies {
   setRealTradeSlTpOnExchange: (symbol: string, side: 'LONG' | 'SHORT', stopLoss?: number, takeProfit?: number) => Promise<boolean>;
   runAiGeneration: (params: any) => Promise<{ text?: string }>;
   fetchGapCandles?: (exchange: any, symbol: string, fromTs: number, toTs: number) => Promise<GapCandleResult>;
+  getPublicExchange?: () => any;
 }
 
 let lastWeekCheckTime = 0;
@@ -209,7 +210,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     if (!trade.isReal && trade.gapReplayStatus === 'PENDING' && (globalSettings as any).gapReplayEnabled !== false) {
       try {
         const exitCfg = buildExitPolicyConfig(globalSettings, trade);
-        const weexEx = deps.getCcxtClient ? deps.getCcxtClient({ exchange: 'weex' }) : null;
+        const weexEx = (deps.getPublicExchange ? deps.getPublicExchange() : null) || (deps.getCcxtClient ? deps.getCcxtClient({ exchange: 'weex' }) : null);
         const advRes = advanceGapReplay(trade, weexEx, exitCfg, Date.now(), deps.fetchGapCandles);
         if (advRes.kind === 'WAIT') {
           continue; // Candles are still fetching in background
@@ -331,7 +332,8 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     if (gapOutcome && gapOutcome.terminal) {
       shouldClose = true;
       reason = `Gap replay: ${gapOutcome.terminal.reason}`;
-      trade.closeReasonCode = gapOutcome.terminal.kind;
+      const terminalCode = gapOutcome.terminal.closeReasonCode || gapOutcome.terminal.kind;
+      trade.closeReasonCode = (terminalCode === 'FULL_CLOSE' ? 'TAKE_PROFIT' : (terminalCode === 'EMERGENCY_FULL_CLOSE' ? 'EMERGENCY_HARD_STOP' : terminalCode));
       trade.closedByGapReplay = true;
       trade.gapReplayEventTime = gapOutcome.terminal.eventTime;
       trade.gapReplayTimeframe = (globalSettings as any).gapReplayTimeframe || '1m';

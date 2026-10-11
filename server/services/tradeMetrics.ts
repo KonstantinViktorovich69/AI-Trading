@@ -13,6 +13,10 @@ export interface IsOperationalTradeOptions {
 export function isOperationalTrade(trade: any, options: IsOperationalTradeOptions = {}): boolean {
   if (!trade) return false;
 
+  if (trade.mode === 'FUNDING_FARM' || trade.isFundingFarm === true) {
+    return false;
+  }
+
   const origin = trade.dataOrigin || inferDataOrigin(trade);
 
   if (origin === 'SEED' || origin === 'HISTORICAL_SEED' || origin === 'FORCED_RESET') {

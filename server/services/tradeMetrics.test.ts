@@ -17,11 +17,15 @@ describe('tradeSchema & tradeMetrics', () => {
     const resetTrade = { id: 'trade_2', closeReason: 'FORCED_RESET', pnl: -10, status: 'CLOSED' };
     const paperTrade = { id: 'trade_3', isPaper: true, pnl: 100, status: 'CLOSED' };
     const liveTrade = { id: 'trade_4', isReal: true, pnl: -20, status: 'CLOSED' };
+    const fundingFarmTrade1 = { id: 'trade_5', isReal: true, mode: 'FUNDING_FARM', pnl: 30, status: 'CLOSED' };
+    const fundingFarmTrade2 = { id: 'trade_6', isPaper: true, isFundingFarm: true, pnl: 40, status: 'CLOSED' };
 
     expect(isOperationalTrade(seedTrade)).toBe(false);
     expect(isOperationalTrade(resetTrade)).toBe(false);
     expect(isOperationalTrade(paperTrade)).toBe(true);
     expect(isOperationalTrade(liveTrade)).toBe(true);
+    expect(isOperationalTrade(fundingFarmTrade1)).toBe(false);
+    expect(isOperationalTrade(fundingFarmTrade2)).toBe(false);
 
     const trades = [seedTrade, resetTrade, paperTrade, liveTrade];
     const stats = calculateOperationalWinRate(trades);

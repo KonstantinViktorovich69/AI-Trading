@@ -155,4 +155,34 @@ describe('SignalPerformanceAnalyticsService', () => {
     expect(byAgent.risk_sentinel.totalVotes).toBe(0);
     expect(byAgent.risk_sentinel.profitContributionUsd).toBe(0);
   });
+
+  it('includes configVersion, gapAffected, gapSec, closeReasonCode, indicatorsSource, and entryDiagnostics', () => {
+    const mockTrades = [
+      {
+        id: 't-enriched',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        status: 'CLOSED',
+        entryPrice: 50000,
+        closePrice: 51000,
+        pnl: 100,
+        configVersion: 'b8e9f1a2',
+        gapAffected: true,
+        gapSec: 120,
+        closeReasonCode: 'TAKE_PROFIT',
+        indicatorsSource: 'WEEX_WS',
+        entryDiagnostics: { rsi: 45, confidence: 0.88 }
+      }
+    ];
+
+    const report = SignalPerformanceAnalyticsService.generatePerformanceReport(mockTrades);
+    expect(report.configVersion).toBe('b8e9f1a2');
+    const trade = report.rawAuditedTrades[0];
+    expect(trade.configVersion).toBe('b8e9f1a2');
+    expect(trade.gapAffected).toBe(true);
+    expect(trade.gapSec).toBe(120);
+    expect(trade.closeReasonCode).toBe('TAKE_PROFIT');
+    expect(trade.indicatorsSource).toBe('WEEX_WS');
+    expect(trade.entryDiagnostics).toEqual({ rsi: 45, confidence: 0.88 });
+  });
 });

@@ -1,6 +1,6 @@
 {
-  "virtualBalance": 107.68,
-  "startOfDayBalance": 148.51,
+  "virtualBalance": 111.11,
+  "startOfDayBalance": 137.36,
   "telegramBots": [
     {
       "muteWatchdog": true,
@@ -22,18 +22,18 @@
   "btcShockThreshold": 2,
   "failedAutopilotSymbols": [],
   "modelWeights": {
-    "beta0": -0.5,
-    "beta1": 1.2,
-    "beta2": -0.04,
-    "beta3": 0.8,
-    "beta4": 0.6,
-    "beta5": 0.3,
-    "beta6": 0.5,
-    "beta7": 0.2,
-    "beta8": 1,
-    "beta9": 1.5,
-    "beta10": 0.8,
-    "beta11": 1.2
+    "beta0": -1.3088646685557717,
+    "beta1": 0.4029443125185406,
+    "beta2": -0.06959977811578895,
+    "beta3": 0.8254818945346812,
+    "beta4": 0.35921500910349774,
+    "beta5": -0.16254496217053727,
+    "beta6": -0.268933323373614,
+    "beta7": -0.37154361172830325,
+    "beta8": 0.6461893714080149,
+    "beta9": 0.6908918707580369,
+    "beta10": 0.6295679811548563,
+    "beta11": 1.0365467544992597
   },
   "autopilotAggressiveness": "aggressive",
   "isAiExpertTraderEnabled": true,
@@ -68,11 +68,11 @@
   "excludeBinanceCrossListed": false,
   "maxSpotAllocationPct": 10,
   "modelStatusMetadata": {
-    "totalLearnedTrades": 0,
-    "lastRetrained": 0
+    "totalLearnedTrades": 524,
+    "lastRetrained": 1791620440598
   },
-  "stateRevision": 134,
-  "updatedAt": 1791486139997,
-  "virtualEquity": 148.51,
+  "stateRevision": 136,
+  "updatedAt": 1791703950867,
+  "virtualEquity": 137.36,
   "uiStatsResetTimestamp": 1791122286530
 }

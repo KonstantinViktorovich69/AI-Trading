@@ -71,9 +71,28 @@ function pruneOldBuckets(now = Date.now()): void {
   }
 }
 
+let shutdownHooksRegistered = false;
+
+function registerShutdownHooks(): void {
+  if (shutdownHooksRegistered || !isMainThread) return;
+  shutdownHooksRegistered = true;
+  try {
+    process.on('beforeExit', () => {
+      try { flushFunnelCounters(); } catch {}
+    });
+    process.on('SIGINT', () => {
+      try { flushFunnelCounters(); } catch {}
+    });
+    process.on('SIGTERM', () => {
+      try { flushFunnelCounters(); } catch {}
+    });
+  } catch {}
+}
+
 export function initFunnelCounters(): void {
   if (!isMainThread) return;
   loadFunnelState();
+  registerShutdownHooks();
   if (!autoFlushTimer) {
     autoFlushTimer = setInterval(() => {
       flushFunnelCounters();
@@ -100,15 +119,18 @@ export function incFunnel(stage: string, reason: string, symbol?: string): void 
     const key = `${stage}|${reason}`;
     funnelState.buckets[hourISO][key] = (funnelState.buckets[hourISO][key] || 0) + 1;
 
-    funnelState.recentEvents.push({
-      ts: now,
-      symbol,
-      stage,
-      reason
-    });
+    // Do not add 'seen' stage to recentEvents (bucket aggregation only)
+    if (stage !== 'seen') {
+      funnelState.recentEvents.push({
+        ts: now,
+        symbol,
+        stage,
+        reason
+      });
 
-    if (funnelState.recentEvents.length > MAX_RECENT_EVENTS) {
-      funnelState.recentEvents.splice(0, funnelState.recentEvents.length - MAX_RECENT_EVENTS);
+      if (funnelState.recentEvents.length > MAX_RECENT_EVENTS) {
+        funnelState.recentEvents.splice(0, funnelState.recentEvents.length - MAX_RECENT_EVENTS);
+      }
     }
   } catch {
     // Non-blocking telemetry

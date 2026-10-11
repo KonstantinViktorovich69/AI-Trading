@@ -86,16 +86,8 @@ export function computeQuantFeaturesV2(params: ComputeQuantFeaturesV2Params): Co
   // x5: Distance from EMA200 (%)
   const x5 = indicators.ema200 ? ((currentPrice - indicators.ema200) / indicators.ema200) * 100 : 0;
 
-  // x6: Hourly volume spike relative to 24h average from WEEX ticker
-  // Resolves ticker from WEEX map via findTickerInMap
-  let weexTicker: any = null;
-  if (tickers) {
-    const weexMap = tickers.weex || tickers['weex'] || tickers;
-    weexTicker = findTickerInMap(symbol, weexMap);
-  }
-  const quoteVol = weexTicker?.quoteVolume || weexTicker?.volume24h || weexTicker?.quoteVolume24h || 0;
-  const avgHourlyVol = quoteVol > 0 ? quoteVol / 24 : 0;
-  const x6 = (avgHourlyVol > 0 && volume > avgHourlyVol * 1.5) ? 1 : 0;
+  // x6: Volume spike from real OHLCV candles (volumeSpike >= 1.5 ? 1 : 0)
+  const x6 = (indicators.volumeSpike !== undefined && indicators.volumeSpike >= 1.5) ? 1 : 0;
 
   // x7: Order book imbalance normalized (-1 to 1)
   let ob: any = null;

@@ -1,4 +1,5 @@
 import { cleanSymbol } from '../utils/symbolUtils.ts';
+import { incFunnel } from './funnelCounters.ts';
 
 export interface BackgroundSchedulerContext {
   isMainThread: boolean;
@@ -86,6 +87,7 @@ export class BackgroundSchedulerService {
     // History record interval (runs every 10s)
     const histTimer = setInterval(() => {
       try {
+        incFunnel('scheduler', 'recordHistory_tick');
         this.recordHistory();
       } catch (err) {
         console.error('[SCHEDULER] Error in recordHistory:', err);
@@ -97,6 +99,7 @@ export class BackgroundSchedulerService {
       if (this.ctx.manageTradesServerSide) {
         const tradeTimer = setInterval(async () => {
           try {
+            incFunnel('scheduler', 'manageTradesServerSide_tick');
             await this.ctx.manageTradesServerSide?.();
           } catch (err) {
             console.error('[SCHEDULER] Error in manageTradesServerSide:', err);
@@ -108,6 +111,7 @@ export class BackgroundSchedulerService {
       if (this.ctx.runAiExpertTraderLoop) {
         const aiExpertTimer = setInterval(async () => {
           try {
+            incFunnel('scheduler', 'runAiExpertTraderLoop_tick');
             await this.ctx.runAiExpertTraderLoop?.();
           } catch (err) {
             console.error('[SCHEDULER] Error in runAiExpertTraderLoop:', err);
@@ -119,6 +123,7 @@ export class BackgroundSchedulerService {
       if (this.ctx.runAutopilotAndVirtualTradeEntry) {
         const autopilotTimer = setInterval(async () => {
           try {
+            incFunnel('scheduler', 'runAutopilotAndVirtualTradeEntry_tick');
             await this.ctx.runAutopilotAndVirtualTradeEntry?.();
           } catch (err) {
             console.error('[SCHEDULER] Error in runAutopilotAndVirtualTradeEntry:', err);
@@ -130,6 +135,7 @@ export class BackgroundSchedulerService {
       if (this.ctx.sendSettingsToWorker) {
         const settingsSyncTimer = setInterval(() => {
           try {
+            incFunnel('scheduler', 'sendSettingsToWorker_tick');
             this.ctx.sendSettingsToWorker?.();
           } catch (err) {
             console.error('[SCHEDULER] Error in sendSettingsToWorker:', err);

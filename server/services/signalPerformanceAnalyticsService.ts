@@ -1,5 +1,5 @@
 import { isOperationalTrade } from './tradeMetrics.ts';
-import { inferDataOrigin } from './tradeSchema.ts';
+import { inferDataOrigin, inferCloseReasonCode } from './tradeSchema.ts';
 import type { MarketRegime, DecisionTrace, TradePosition } from '../types/trading.ts';
 import { MIN_TRADES_FOR_PATTERN_STATISTICS, isPatternProtected } from './signalEngine.ts';
 
@@ -112,6 +112,7 @@ export interface StrictForwardTestAudit {
 
 export interface SignalPerformanceReport {
   generatedAt: number;
+  configVersion?: string;
   activeOriginFilter: 'OUT_OF_SAMPLE' | 'ALL' | 'HISTORICAL_SEED' | 'LIVE_WEEX' | 'PAPER_SIM';
   strictForwardTestAudit: StrictForwardTestAudit;
   totalAuditedTrades: number;
@@ -150,6 +151,12 @@ export interface SignalPerformanceReport {
     decisionTrace?: DecisionTrace;
     openTime: number;
     closeTime?: number;
+    configVersion?: string;
+    gapAffected?: boolean;
+    gapSec?: number;
+    closeReasonCode?: string;
+    indicatorsSource?: string;
+    entryDiagnostics?: any;
   }>;
 }
 
@@ -375,7 +382,13 @@ export class SignalPerformanceAnalyticsService {
         riskSentinelDecision,
         decisionTrace: t.decisionTrace,
         openTime: t.openTime || Date.now(),
-        closeTime: t.closeTime
+        closeTime: t.closeTime,
+        configVersion: t.configVersion,
+        gapAffected: t.gapAffected,
+        gapSec: t.gapSec,
+        closeReasonCode: t.closeReasonCode || ((t.status === 'CLOSED' || t.closedAt || t.pnl !== undefined) ? inferCloseReasonCode(t) : undefined),
+        indicatorsSource: t.indicatorsSource,
+        entryDiagnostics: t.entryDiagnostics
       };
     });
 
@@ -736,6 +749,7 @@ export class SignalPerformanceAnalyticsService {
 
     return {
       generatedAt: Date.now(),
+      configVersion: trades[0]?.configVersion,
       activeOriginFilter: originFilter,
       strictForwardTestAudit,
       totalAuditedTrades: auditedList.length,

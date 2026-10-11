@@ -13,6 +13,18 @@ export interface TelemetryRouterContext {
   getVirtualTrades?: () => any[];
 }
 
+// Walk-forward evaluation cache (10 minutes TTL, keyed by maxTrades)
+interface WalkForwardCacheEntry {
+  timestamp: number;
+  data: any;
+}
+const walkForwardCache = new Map<number, WalkForwardCacheEntry>();
+const WALK_FORWARD_CACHE_TTL_MS = 10 * 60 * 1000;
+
+export function resetWalkForwardCacheForTest(): void {
+  walkForwardCache.clear();
+}
+
 export function createTelemetryRouter(ctx: TelemetryRouterContext): Router {
   const router = express.Router();
 
@@ -109,10 +121,21 @@ export function createTelemetryRouter(ctx: TelemetryRouterContext): Router {
   // GET /api/learning/walk-forward
   router.get('/learning/walk-forward', (req: Request, res: Response) => {
     try {
+      const maxTradesParam = req.query.maxTrades ? parseInt(String(req.query.maxTrades), 10) : 300;
+      const maxTrades = isNaN(maxTradesParam) || maxTradesParam <= 0 ? 300 : maxTradesParam;
+
+      const now = Date.now();
+      const cached = walkForwardCache.get(maxTrades);
+      if (cached && (now - cached.timestamp < WALK_FORWARD_CACHE_TTL_MS)) {
+        return res.status(200).json({
+          success: true,
+          cached: true,
+          ...cached.data
+        });
+      }
+
       const trades = ctx.getVirtualTrades ? ctx.getVirtualTrades() : [];
       const settings = ctx.getGlobalSettings ? ctx.getGlobalSettings() : {};
-      const maxTradesParam = req.query.maxTrades ? parseInt(String(req.query.maxTrades), 10) : 1500;
-      const maxTrades = isNaN(maxTradesParam) || maxTradesParam <= 0 ? 1500 : maxTradesParam;
 
       const result = walkForwardEvaluate(trades, {
         policy: (settings as any).learningProtectedPatternsPolicy ?? 'PENALIZE_ONLY',
@@ -120,8 +143,14 @@ export function createTelemetryRouter(ctx: TelemetryRouterContext): Router {
         maxTrades
       });
 
-      res.json({
+      walkForwardCache.set(maxTrades, {
+        timestamp: now,
+        data: result
+      });
+
+      res.status(200).json({
         success: true,
+        cached: false,
         ...result
       });
     } catch (err: any) {

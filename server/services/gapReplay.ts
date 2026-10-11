@@ -1,4 +1,5 @@
 import { evaluateExitPolicy, type ExitPolicySettings } from './exitPolicy.ts';
+import type { CloseReasonCode } from './tradeSchema.ts';
 
 export const GAP_REPLAY_SL_SLIPPAGE_PCT = 0.05; // 0.05% slippage on Stop Loss during replay
 
@@ -14,7 +15,8 @@ export interface GapReplayEvent {
 }
 
 export interface GapReplayTerminal {
-  kind: 'STOP_LOSS' | 'TAKE_PROFIT' | 'FULL_CLOSE' | 'EMERGENCY_FULL_CLOSE' | 'TIMEOUT_SAFETY';
+  kind: CloseReasonCode | 'STOP_LOSS' | 'TAKE_PROFIT' | 'FULL_CLOSE' | 'EMERGENCY_FULL_CLOSE' | 'TIMEOUT_SAFETY';
+  closeReasonCode?: CloseReasonCode;
   executionPrice: number;
   eventTime: number;
   reason: string;
@@ -246,8 +248,10 @@ export function replayGapOnCandles(
       const exitDecision = evaluateExitPolicy(tradeSnapshot, exitMarket, exitCfg);
 
       if (exitDecision.kind === 'FULL_CLOSE' || exitDecision.kind === 'EMERGENCY_FULL_CLOSE') {
+        const canonicalCode: CloseReasonCode = exitDecision.reasonCode || (exitDecision.kind === 'EMERGENCY_FULL_CLOSE' ? 'EMERGENCY_HARD_STOP' : 'TAKE_PROFIT');
         terminal = {
-          kind: exitDecision.kind,
+          kind: canonicalCode,
+          closeReasonCode: canonicalCode,
           executionPrice: tickPrice,
           eventTime: candleTime,
           reason: exitDecision.reasonText
@@ -263,6 +267,9 @@ export function replayGapOnCandles(
         const stageIdx = exitDecision.stageIndex ?? 0;
         const ratioToClose = exitDecision.closeRatio ?? 0.25;
         const closedAmount = Number((currentAmount * ratioToClose).toFixed(2));
+        const stageTargetPrice = (stageIdx >= 0 && stageIdx < tpStages.length && tpStages[stageIdx].targetPrice)
+          ? tpStages[stageIdx].targetPrice
+          : tickPrice;
 
         if (stageIdx >= 0 && stageIdx < tpStages.length && !tpStages[stageIdx].executed) {
           tpStages[stageIdx].executed = true;
@@ -284,7 +291,7 @@ export function replayGapOnCandles(
         events.push({
           type: 'PARTIAL_CLOSE',
           time: candleTime,
-          price: tickPrice,
+          price: stageTargetPrice,
           stageIndex: stageIdx,
           closeRatio: ratioToClose,
           amountClosed: closedAmount,

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { isMainThread } from 'worker_threads';
 import { getBuildId, PROCESS_STARTED_AT } from './buildInfo.ts';
+import { cleanSymbol } from '../utils/symbolUtils.ts';
 
 export interface HeartbeatPayload {
   ts: number;
@@ -112,10 +113,14 @@ export function recordGap(
     const durationSec = Math.max(1, Math.round((to - from) / 1000));
     const now = Date.now();
 
-    // Check if overlaps or connects with the latest gap recorded in last 60 seconds
+    // Check if overlaps or connects with the latest gap recorded in last 60 seconds (must have same kind and symbol)
     const lastGap = downtimeGaps[downtimeGaps.length - 1];
+    const sameKind = lastGap && lastGap.kind === kind;
+    const sameSymbol = lastGap && (lastGap.symbol || undefined) === (meta?.symbol || undefined);
     if (
       lastGap &&
+      sameKind &&
+      sameSymbol &&
       (from <= lastGap.to + 60000) &&
       (now - lastGap.to <= 60000 || from <= lastGap.to)
     ) {
@@ -289,6 +294,15 @@ export function applyPendingGapsToOpenTrades(
 
     for (const gap of downtimeGaps) {
       for (const trade of openTrades) {
+        // If gap is STALE_FEED with a specific symbol, only mark trades matching that symbol
+        if (gap.kind === 'STALE_FEED' && gap.symbol) {
+          const tradeCleanSym = cleanSymbol(trade.symbol || '');
+          const gapCleanSym = cleanSymbol(gap.symbol);
+          if (tradeCleanSym !== gapCleanSym) {
+            continue;
+          }
+        }
+
         const tradeOpenTime = trade.openTime || trade.createdAt || 0;
         if (tradeOpenTime <= gap.from) {
           trade.gapEvents = trade.gapEvents || [];
@@ -308,6 +322,16 @@ export function applyPendingGapsToOpenTrades(
 
             if (trade.gapEvents.length > 10) {
               trade.gapEvents = trade.gapEvents.slice(-10);
+            }
+
+            if (!trade.isReal && trade.gapReplayStatus !== 'DONE' && trade.gapReplayStatus !== 'FALLBACK_LIVE') {
+              if (trade.gapReplayStatus === 'PENDING') {
+                trade.gapReplayFrom = Math.min(trade.gapReplayFrom || gap.from, gap.from);
+              } else {
+                trade.gapReplayFrom = gap.from;
+                trade.gapReplayStatus = 'PENDING';
+                trade.gapReplayAttempts = 0;
+              }
             }
 
             for (const hook of tradeGapHooks) {

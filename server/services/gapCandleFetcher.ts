@@ -66,6 +66,15 @@ export async function fetchGapCandles(
   const timeframe = gapMs <= sixHoursMs ? '1m' : '5m';
   const tfMs = timeframe === '1m' ? 60 * 1000 : 5 * 60 * 1000;
 
+  // If instance needs loadMarkets, invoke it in try/catch
+  if (exchange && typeof exchange.loadMarkets === 'function' && (!exchange.markets || Object.keys(exchange.markets).length === 0)) {
+    try {
+      await exchange.loadMarkets();
+    } catch (loadErr) {
+      // non-blocking fallback
+    }
+  }
+
   const realSymbol = resolveFetchSymbol(exchange, symbol);
 
   const overallTimeoutMs = 25000;

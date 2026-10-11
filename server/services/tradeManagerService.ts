@@ -1,6 +1,7 @@
 import ccxt, { Exchange } from 'ccxt';
 import { manageActiveTrades, VirtualTradeEngineDependencies } from './virtualTradeEngine.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
+import { applyPendingGapsToOpenTrades } from './heartbeatService.ts';
 
 export interface TradeManagerServiceDependencies {
   getVirtualTrades: () => any[];
@@ -11,6 +12,7 @@ export interface TradeManagerServiceDependencies {
   getGlobalMarketPulse: () => { sentiment: string; bias: number };
   getAiKnowledgeBase: () => any[];
   getCcxtClient: (config: any) => any;
+  getPublicExchange?: () => any;
   executeWithRetry: (fn: () => Promise<any>, desc: string, retries?: number, initialDelay?: number) => Promise<any>;
   saveTradeDB: (trade: any, immediate?: boolean) => Promise<void>;
   saveBalanceDB: () => void;
@@ -307,6 +309,15 @@ export class TradeManagerService {
   }
 
   public async manageTradesServerSide(): Promise<void> {
+    try {
+      const virtualTrades = this.deps.getVirtualTrades();
+      if (Array.isArray(virtualTrades)) {
+        applyPendingGapsToOpenTrades(virtualTrades, this.deps.saveTradeDB);
+      }
+    } catch (gapErr) {
+      console.warn('[WATCHDOG] Failed to apply pending gaps to open trades:', gapErr);
+    }
+
     const deps: VirtualTradeEngineDependencies = {
       getVirtualTrades: this.deps.getVirtualTrades,
       getGlobalSettings: this.deps.getGlobalSettings,
@@ -335,7 +346,8 @@ export class TradeManagerService {
       executeRealOpenOnExchange: this.deps.executeRealOpenOnExchange,
       setRealTradeSlTpOnExchange: this.deps.setRealTradeSlTpOnExchange,
       runAiGeneration: this.deps.runAiGeneration,
-      fetchGapCandles: this.deps.fetchGapCandles
+      fetchGapCandles: this.deps.fetchGapCandles,
+      getPublicExchange: this.deps.getPublicExchange
     };
 
     await manageActiveTrades(deps);

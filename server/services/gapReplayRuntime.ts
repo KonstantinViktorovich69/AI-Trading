@@ -12,10 +12,15 @@ export interface AdvanceResult {
   outcome?: GapReplayResult;
 }
 
-// In-memory runtime state (does not store heavy candles in trade objects)
+// In-memory runtime state: keyed by pair `${trade.id}_${gapReplayFrom}`
 const candlesCache = new Map<string, any[][]>();
 const inFlightFetches = new Set<string>();
 const fetchStartTime = new Map<string, number>();
+const lastFetchAttemptTime = new Map<string, number>();
+
+function getReplayPairKey(tradeId: string, fromTs: number): string {
+  return `${tradeId}_${fromTs}`;
+}
 
 /**
  * Initializes the hook on trade gap detection.
@@ -59,55 +64,71 @@ export function advanceGapReplay(
 ): AdvanceResult {
   const tradeId = String(trade.id);
   const now = nowTs || Date.now();
+  const fromTs = trade.gapReplayFrom || trade.openTime || (now - 60000);
+  const pairKey = getReplayPairKey(tradeId, fromTs);
 
-  if (!fetchStartTime.has(tradeId)) {
-    fetchStartTime.set(tradeId, now);
+  if (!fetchStartTime.has(pairKey)) {
+    fetchStartTime.set(pairKey, now);
   }
 
-  const elapsedFromFirst = now - (fetchStartTime.get(tradeId) || now);
+  const elapsedFromFirst = now - (fetchStartTime.get(pairKey) || now);
   const attempts = trade.gapReplayAttempts || 0;
 
   // Check 120s timeout or > 3 attempts -> FALLBACK_LIVE
   if (elapsedFromFirst >= 120000 || attempts >= 3) {
     trade.gapReplayStatus = 'FALLBACK_LIVE';
-    inFlightFetches.delete(tradeId);
+    inFlightFetches.delete(pairKey);
+    candlesCache.delete(pairKey);
+    fetchStartTime.delete(pairKey);
+    lastFetchAttemptTime.delete(pairKey);
+    trade.gapReplayAttempts = 0;
     return { kind: 'FALLBACK_LIVE' };
   }
 
   // Check if candles are already loaded
-  if (candlesCache.has(tradeId)) {
-    const candles = candlesCache.get(tradeId)!;
-    const gapMs = Math.max(0, now - (trade.gapReplayFrom || trade.openTime || now));
+  if (candlesCache.has(pairKey)) {
+    const candles = candlesCache.get(pairKey)!;
+    const gapMs = Math.max(0, now - fromTs);
     const tfMs = gapMs <= 6 * 60 * 60 * 1000 ? 60 * 1000 : 5 * 60 * 1000;
     const outcome = replayGapOnCandles(trade, candles, tfMs, exitCfg, now);
     trade.gapReplayStatus = 'DONE';
-    inFlightFetches.delete(tradeId);
+    inFlightFetches.delete(pairKey);
+    candlesCache.delete(pairKey);
+    fetchStartTime.delete(pairKey);
+    lastFetchAttemptTime.delete(pairKey);
+    trade.gapReplayAttempts = 0;
     return { kind: 'READY', outcome };
   }
 
   // If already in flight, wait
-  if (inFlightFetches.has(tradeId)) {
+  if (inFlightFetches.has(pairKey)) {
+    return { kind: 'WAIT' };
+  }
+
+  // Retry cooldown check: do not retry failed fetch sooner than 15s
+  const lastAttempt = lastFetchAttemptTime.get(pairKey) || 0;
+  if (lastAttempt > 0 && (now - lastAttempt < 15000)) {
     return { kind: 'WAIT' };
   }
 
   // Start background fetch WITHOUT await
-  inFlightFetches.add(tradeId);
+  inFlightFetches.add(pairKey);
+  lastFetchAttemptTime.set(pairKey, now);
   trade.gapReplayAttempts = attempts + 1;
 
   const fetcher = customFetchGapCandles || fetchGapCandles;
-  const fromTs = trade.gapReplayFrom || trade.openTime || (now - 60000);
 
   fetcher(exchange, trade.symbol, fromTs, now)
     .then((res: GapCandleResult) => {
-      inFlightFetches.delete(tradeId);
+      inFlightFetches.delete(pairKey);
       if (res.ok && Array.isArray(res.candles) && res.candles.length > 0) {
-        candlesCache.set(tradeId, res.candles);
+        candlesCache.set(pairKey, res.candles);
       } else if (res.reason === 'GAP_TOO_LONG' || res.reason === 'NO_CANDLES_FETCHED') {
         trade.gapReplayStatus = res.reason === 'NO_CANDLES_FETCHED' ? 'NO_CANDLES' : 'FAILED';
       }
     })
     .catch(() => {
-      inFlightFetches.delete(tradeId);
+      inFlightFetches.delete(pairKey);
     });
 
   return { kind: 'WAIT' };
@@ -120,4 +141,5 @@ export function resetGapReplayRuntimeState(): void {
   candlesCache.clear();
   inFlightFetches.clear();
   fetchStartTime.clear();
+  lastFetchAttemptTime.clear();
 }

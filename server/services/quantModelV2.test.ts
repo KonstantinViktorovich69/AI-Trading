@@ -67,35 +67,26 @@ describe('Quant Model V2 (Промт 4/4)', () => {
       expect(res3.keyUsed).toBe('TREEUSDT');
     });
 
-    it('считает x6 по тикеру WEEX (quoteVolume / 24)', () => {
-      const trueOhlcv = {
-        TREEUSDT: { rsi1h: 50 }
-      };
-
-      // WEEX ticker has 24h quote volume = 24000 USDT -> avg hourly = 1000 USDT
-      const tickers = {
-        weex: {
-          'TREE/USDT': { quoteVolume: 24000 }
-        }
-      };
-
-      // volume = 1200 <= 1000 * 1.5 -> x6 = 0
+    it('считает x6 по indicators.volumeSpike (volumeSpike >= 1.5 ? 1 : 0)', () => {
+      // volumeSpike = 1.2 < 1.5 -> x6 = 0
       const resBelow = computeQuantFeaturesV2({
         symbol: 'TREE/USDT:USDT',
         price: 100,
         volume: 1200,
-        trueOhlcv,
-        tickers
+        trueOhlcv: {
+          TREEUSDT: { rsi1h: 50, volumeSpike: 1.2 }
+        }
       });
       expect(resBelow.features[5]).toBe(0);
 
-      // volume = 1800 > 1000 * 1.5 -> x6 = 1
+      // volumeSpike = 1.8 >= 1.5 -> x6 = 1
       const resAbove = computeQuantFeaturesV2({
         symbol: 'TREE/USDT:USDT',
         price: 100,
         volume: 1800,
-        trueOhlcv,
-        tickers
+        trueOhlcv: {
+          TREEUSDT: { rsi1h: 50, volumeSpike: 1.8 }
+        }
       });
       expect(resAbove.features[5]).toBe(1);
     });

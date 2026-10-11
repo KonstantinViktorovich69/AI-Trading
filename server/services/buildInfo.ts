@@ -18,6 +18,7 @@ export const BUILD_FILES: readonly string[] = [
 
 export const TRADING_SETTINGS_WHITELIST: readonly string[] = [
   'activeStrategy',
+  'aggregatedLearningMode',
   'aiExpertTraderInterval',
   'aiMinConfidenceThreshold',
   'allowedTradingDirections',
@@ -41,6 +42,8 @@ export const TRADING_SETTINGS_WHITELIST: readonly string[] = [
   'isParallelAutoLearningEnabled',
   'isSymmetricConfidenceFilterEnabled',
   'isVolatilityBrakeEnabled',
+  'kbDedupeCap',
+  'learningProtectedPatternsPolicy',
   'liquiditySweepWickThreshold',
   'maxActivePositionsReal',
   'maxActivePositionsVirtual',
@@ -48,6 +51,7 @@ export const TRADING_SETTINGS_WHITELIST: readonly string[] = [
   'maxSameDirectionPositions',
   'maxSpotAllocationPct',
   'maxVolatilityLimit',
+  'perTradeRuleLearning',
   'timeoutProfitHours',
   'timeoutStagnationHours',
   'tradingExecutionMode',
