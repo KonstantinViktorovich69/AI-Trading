@@ -649,10 +649,10 @@ describe('Downtime Resilience & Telemetry Suite (Prompt 2)', () => {
       resetEstimatedRestartGapForTest();
     });
 
-    it('точность реплея: простой 20 часов использует 1m, первая частичная свеча не вызывает SL по экстремуму', async () => {
+    it('точность реплея: простой 20 часов использует 5m, первая частичная свеча не вызывает SL по экстремуму', async () => {
       const { fetchGapCandles } = await import('./gapCandleFetcher.ts');
 
-      // 1. Простой 20 часов использует 1m
+      // 1. Простой 20 часов использует 5m
       const from20h = 1000;
       const to20h = from20h + 20 * 3600 * 1000;
       const fakeExchange: any = {
@@ -665,7 +665,7 @@ describe('Downtime Resilience & Telemetry Suite (Prompt 2)', () => {
 
       const fetchRes = await fetchGapCandles(fakeExchange, 'BTC/USDT', from20h, to20h);
       expect(fetchRes.ok).toBe(true);
-      expect(fetchRes.timeframe).toBe('1m');
+      expect(fetchRes.timeframe).toBe('5m');
 
       // 2. Первая частичная свеча (ts < gapReplayFrom) с экстремумом до простоя не вызывает SL
       const trade: any = {
@@ -690,6 +690,337 @@ describe('Downtime Resilience & Telemetry Suite (Prompt 2)', () => {
       const res2 = replayGapOnCandles(trade, [partialCandle, postGapCandle], 60000, exitCfg, 3000);
       expect(res2.terminal).toBeDefined();
       expect(res2.terminal?.kind).toBe('STOP_LOSS'); // Свеча после начала простоя по-прежнему вызывает SL!
+    });
+  });
+
+  describe('7. WEEX Gap Replay Coverage & Retry Tests', () => {
+    function makeWeexExchange(candleHistories: Record<string, any[][]>) {
+      return {
+        fetchOHLCV: vi.fn(async (_symbol: string, timeframe: string, since?: number, limit?: number) => {
+          const history = candleHistories[timeframe] || [];
+          const effectiveLimit = Math.min(typeof limit === 'number' ? limit : 1000, 1000);
+          // WEEX behavior: takes only the last min(limit, 1000) candles from history, then filters >= since
+          const lastCandles = history.slice(-effectiveLimit);
+          const filtered = typeof since === 'number' ? lastCandles.filter(c => c[0] >= since) : lastCandles;
+          return filtered;
+        }),
+        loadMarkets: vi.fn().mockResolvedValue({}),
+        markets: { 'BTC/USDT': { id: 'BTCUSDT', symbol: 'BTC/USDT:USDT', linear: true } }
+      };
+    }
+
+    it('простой 12 часов, SL затронут 11 часов назад: терминальный STOP_LOSS', async () => {
+      const { fetchGapCandles } = await import('./gapCandleFetcher.ts');
+      const now = 20_000_000_000;
+      const gapMs = 12 * 3600 * 1000;
+      const fromTs = now - gapMs;
+      const slTs = now - 11 * 3600 * 1000;
+
+      // Generate 800 1m candles (covers > 12h = 720m)
+      const candles1m: any[][] = [];
+      for (let t = now - 800 * 60000; t <= now; t += 60000) {
+        if (Math.abs(t - slTs) < 30000) {
+          candles1m.push([t, 100, 101, 90, 96, 50]); // Breaches SL 95
+        } else {
+          candles1m.push([t, 100, 102, 98, 100, 50]);
+        }
+      }
+
+      const fakeExchange = makeWeexExchange({ '1m': candles1m });
+      const fetchRes = await fetchGapCandles(fakeExchange, 'BTC/USDT', fromTs, now);
+
+      expect(fetchRes.ok).toBe(true);
+      expect(fetchRes.timeframe).toBe('1m');
+      expect(fetchRes.complete).toBe(true);
+
+      const trade: any = {
+        id: 'trade_12h_sl',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        entryPrice: 100,
+        stopLoss: 95,
+        takeProfit: 120,
+        amount: 10,
+        leverage: 1,
+        openTime: fromTs - 60000,
+        gapReplayFrom: fromTs
+      };
+
+      const outcome = replayGapOnCandles(trade, fetchRes.candles!, 60000, exitCfg, now);
+      expect(outcome.terminal).toBeDefined();
+      expect(outcome.terminal?.kind).toBe('STOP_LOSS');
+    });
+
+    it('простой 23 часа, SL затронут 20 часов назад: STOP_LOSS', async () => {
+      const { fetchGapCandles } = await import('./gapCandleFetcher.ts');
+      const now = 20_000_000_000;
+      const gapMs = 23 * 3600 * 1000;
+      const fromTs = now - gapMs;
+      const slTs = now - 20 * 3600 * 1000;
+
+      // 23h uses 5m timeframe
+      const candles5m: any[][] = [];
+      for (let t = now - 300 * 5 * 60000; t <= now; t += 5 * 60000) {
+        if (Math.abs(t - slTs) < 150000) {
+          candles5m.push([t, 100, 101, 90, 96, 50]); // Breaches SL 95
+        } else {
+          candles5m.push([t, 100, 102, 98, 100, 50]);
+        }
+      }
+
+      const fakeExchange = makeWeexExchange({ '5m': candles5m });
+      const fetchRes = await fetchGapCandles(fakeExchange, 'BTC/USDT', fromTs, now);
+
+      expect(fetchRes.ok).toBe(true);
+      expect(fetchRes.timeframe).toBe('5m');
+      expect(fetchRes.complete).toBe(true);
+
+      const trade: any = {
+        id: 'trade_23h_sl',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        entryPrice: 100,
+        stopLoss: 95,
+        takeProfit: 120,
+        amount: 10,
+        leverage: 1,
+        openTime: fromTs - 60000,
+        gapReplayFrom: fromTs
+      };
+
+      const outcome = replayGapOnCandles(trade, fetchRes.candles!, 5 * 60000, exitCfg, now);
+      expect(outcome.terminal).toBeDefined();
+      expect(outcome.terminal?.kind).toBe('STOP_LOSS');
+    });
+
+    it('простой 30 часов (5m): STOP_LOSS. Простой 4 часа (1m): STOP_LOSS', async () => {
+      const { fetchGapCandles } = await import('./gapCandleFetcher.ts');
+      const now = 20_000_000_000;
+
+      // Part A: 30 hours -> 5m
+      const gap30h = 30 * 3600 * 1000;
+      const from30h = now - gap30h;
+      const sl30h = now - 15 * 3600 * 1000;
+      const candles5m: any[][] = [];
+      for (let t = now - 400 * 5 * 60000; t <= now; t += 5 * 60000) {
+        if (Math.abs(t - sl30h) < 150000) {
+          candles5m.push([t, 100, 101, 90, 96, 50]);
+        } else {
+          candles5m.push([t, 100, 102, 98, 100, 50]);
+        }
+      }
+      const ex30h = makeWeexExchange({ '5m': candles5m });
+      const res30h = await fetchGapCandles(ex30h, 'BTC/USDT', from30h, now);
+      expect(res30h.ok).toBe(true);
+      expect(res30h.timeframe).toBe('5m');
+      const trade30h: any = {
+        id: 'trade_30h',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        entryPrice: 100,
+        stopLoss: 95,
+        takeProfit: 120,
+        amount: 10,
+        leverage: 1,
+        gapReplayFrom: from30h
+      };
+      const outcome30h = replayGapOnCandles(trade30h, res30h.candles!, 5 * 60000, exitCfg, now);
+      expect(outcome30h.terminal?.kind).toBe('STOP_LOSS');
+
+      // Part B: 4 hours -> 1m
+      const gap4h = 4 * 3600 * 1000;
+      const from4h = now - gap4h;
+      const sl4h = now - 2 * 3600 * 1000;
+      const candles1m: any[][] = [];
+      for (let t = now - 300 * 60000; t <= now; t += 60000) {
+        if (Math.abs(t - sl4h) < 30000) {
+          candles1m.push([t, 100, 101, 90, 96, 50]);
+        } else {
+          candles1m.push([t, 100, 102, 98, 100, 50]);
+        }
+      }
+      const ex4h = makeWeexExchange({ '1m': candles1m });
+      const res4h = await fetchGapCandles(ex4h, 'BTC/USDT', from4h, now);
+      expect(res4h.ok).toBe(true);
+      expect(res4h.timeframe).toBe('1m');
+      const trade4h: any = {
+        id: 'trade_4h',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        entryPrice: 100,
+        stopLoss: 95,
+        takeProfit: 120,
+        amount: 10,
+        leverage: 1,
+        gapReplayFrom: from4h
+      };
+      const outcome4h = replayGapOnCandles(trade4h, res4h.candles!, 60000, exitCfg, now);
+      expect(outcome4h.terminal?.kind).toBe('STOP_LOSS');
+    });
+
+    it('история короче простоя: complete=false и gapReplayIncomplete=true', async () => {
+      const { fetchGapCandles } = await import('./gapCandleFetcher.ts');
+      const now = 20_000_000_000;
+      const gap12h = 12 * 3600 * 1000; // 12 hours
+      const from12h = now - gap12h;
+
+      // Only 60 minutes of 1m candles (< 12h)
+      const candles1m: any[][] = [];
+      for (let t = now - 60 * 60000; t <= now; t += 60000) {
+        candles1m.push([t, 100, 101, 99, 100, 10]);
+      }
+      // Only 10 5m candles (< 12h)
+      const candles5m: any[][] = [];
+      for (let t = now - 10 * 5 * 60000; t <= now; t += 5 * 60000) {
+        candles5m.push([t, 100, 101, 99, 100, 10]);
+      }
+      // Only 4 15m candles (< 12h)
+      const candles15m: any[][] = [];
+      for (let t = now - 4 * 15 * 60000; t <= now; t += 15 * 60000) {
+        candles15m.push([t, 100, 101, 99, 100, 10]);
+      }
+
+      const fakeExchange = makeWeexExchange({ '1m': candles1m, '5m': candles5m, '15m': candles15m });
+      const fetchRes = await fetchGapCandles(fakeExchange, 'BTC/USDT', from12h, now);
+
+      expect(fetchRes.ok).toBe(true);
+      expect(fetchRes.complete).toBe(false);
+
+      // Verify advanceGapReplay sets gapReplayIncomplete = true
+      resetGapReplayRuntimeState();
+      const trade: any = {
+        id: 'trade_incomplete_history',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        isReal: false,
+        status: 'OPEN',
+        entryPrice: 100,
+        stopLoss: 90,
+        takeProfit: 120,
+        amount: 10,
+        leverage: 1,
+        gapReplayFrom: from12h,
+        gapReplayStatus: 'PENDING',
+        gapReplayAttempts: 0
+      };
+
+      const customFetcher = vi.fn().mockResolvedValue(fetchRes);
+
+      const r1 = advanceGapReplay(trade, fakeExchange, exitCfg, now, customFetcher);
+      expect(r1.kind).toBe('WAIT');
+
+      await new Promise(r => setTimeout(r, 20));
+
+      const r2 = advanceGapReplay(trade, fakeExchange, exitCfg, now + 10, customFetcher);
+      expect(r2.kind).toBe('READY');
+      expect(trade.gapReplayIncomplete).toBe(true);
+      expect(trade.gapReplayStatus).toBe('DONE');
+    });
+
+    it('первая выдача бросает ошибку, вторая успешна: после первой попытки сделка остаётся PENDING, после второй закрывается реплеем', async () => {
+      resetGapReplayRuntimeState();
+      const now = 10000;
+      const trade: any = {
+        id: 'trade_first_err_second_ok',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        isReal: false,
+        status: 'OPEN',
+        entryPrice: 100,
+        stopLoss: 95,
+        takeProfit: 120,
+        amount: 10,
+        leverage: 1,
+        gapReplayFrom: 2000,
+        gapReplayStatus: 'PENDING',
+        gapReplayAttempts: 0
+      };
+
+      let callCount = 0;
+      const customFetcher = vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return { ok: false, reason: 'FETCH_ERROR', error: 'WEEX timeout error' };
+        }
+        return {
+          ok: true,
+          timeframe: '1m',
+          complete: true,
+          candles: [
+            [2500, 100, 101, 90, 96, 50] // Breaches SL 95
+          ]
+        };
+      });
+
+      // Attempt 1: fails
+      const r1 = advanceGapReplay(trade, {}, exitCfg, now, customFetcher);
+      expect(r1.kind).toBe('WAIT');
+      await new Promise(r => setTimeout(r, 20));
+
+      expect(trade.gapReplayStatus).toBe('PENDING');
+      expect(trade.gapReplayAttempts).toBe(1);
+      expect(trade.gapReplayLastError).toBe('WEEX timeout error');
+
+      // Attempt 2 after 16s cooldown: succeeds
+      const tAttempt2 = now + 16000;
+      const r2 = advanceGapReplay(trade, {}, exitCfg, tAttempt2, customFetcher);
+      expect(r2.kind).toBe('WAIT');
+      await new Promise(r => setTimeout(r, 20));
+
+      // Processing loaded candles
+      const r3 = advanceGapReplay(trade, {}, exitCfg, tAttempt2 + 10, customFetcher);
+      expect(r3.kind).toBe('READY');
+      expect(r3.outcome?.terminal?.kind).toBe('STOP_LOSS');
+      expect(trade.gapReplayStatus).toBe('DONE');
+    });
+
+    it('три ошибки подряд: FALLBACK_LIVE', async () => {
+      resetGapReplayRuntimeState();
+      const now = 10000;
+      const trade: any = {
+        id: 'trade_three_errors_fallback',
+        symbol: 'BTC/USDT',
+        side: 'LONG',
+        isReal: false,
+        status: 'OPEN',
+        entryPrice: 100,
+        stopLoss: 95,
+        takeProfit: 120,
+        amount: 10,
+        leverage: 1,
+        gapReplayFrom: 2000,
+        gapReplayStatus: 'PENDING',
+        gapReplayAttempts: 0
+      };
+
+      const failingFetcher = vi.fn().mockResolvedValue({
+        ok: false,
+        reason: 'FETCH_ERROR',
+        error: 'Persistent exchange downtime'
+      });
+
+      // Attempt 1 at t = 10000
+      advanceGapReplay(trade, {}, exitCfg, now, failingFetcher);
+      await new Promise(r => setTimeout(r, 20));
+      expect(trade.gapReplayStatus).toBe('PENDING');
+      expect(trade.gapReplayAttempts).toBe(1);
+
+      // Attempt 2 at t = 26000 (after 16s)
+      advanceGapReplay(trade, {}, exitCfg, now + 16000, failingFetcher);
+      await new Promise(r => setTimeout(r, 20));
+      expect(trade.gapReplayStatus).toBe('PENDING');
+      expect(trade.gapReplayAttempts).toBe(2);
+
+      // Attempt 3 at t = 42000 (after 16s)
+      advanceGapReplay(trade, {}, exitCfg, now + 32000, failingFetcher);
+      await new Promise(r => setTimeout(r, 20));
+      expect(trade.gapReplayStatus).toBe('PENDING');
+      expect(trade.gapReplayAttempts).toBe(3);
+
+      // Next advance call at t = 58000: attempts >= 3 triggers FALLBACK_LIVE
+      const rFinal = advanceGapReplay(trade, {}, exitCfg, now + 48000, failingFetcher);
+      expect(rFinal.kind).toBe('FALLBACK_LIVE');
+      expect(trade.gapReplayStatus).toBe('FALLBACK_LIVE');
     });
   });
 });

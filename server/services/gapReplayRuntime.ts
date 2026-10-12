@@ -2,6 +2,7 @@ import { fetchGapCandles, type GapCandleResult } from './gapCandleFetcher.ts';
 import { replayGapOnCandles, type GapReplayResult } from './gapReplay.ts';
 import { registerTradeGapHook } from './heartbeatService.ts';
 import type { ExitPolicySettings } from './exitPolicy.ts';
+import { incFunnel } from './funnelCounters.ts';
 
 export type GapReplayStatus = 'PENDING' | 'DONE' | 'FAILED' | 'NO_CANDLES' | 'FALLBACK_LIVE';
 
@@ -15,6 +16,7 @@ export interface AdvanceResult {
 interface CachedCandleEntry {
   candles: any[][];
   timeframe?: string;
+  complete?: boolean;
 }
 
 // In-memory runtime state: keyed by pair `${trade.id}_${gapReplayFrom}`
@@ -87,6 +89,9 @@ export function advanceGapReplay(
     fetchStartTime.delete(pairKey);
     lastFetchAttemptTime.delete(pairKey);
     trade.gapReplayAttempts = 0;
+    try {
+      incFunnel('gap_replay', 'fallback_live', trade.symbol);
+    } catch {}
     return { kind: 'FALLBACK_LIVE' };
   }
 
@@ -94,7 +99,17 @@ export function advanceGapReplay(
   if (candlesCache.has(pairKey)) {
     const cached = candlesCache.get(pairKey)!;
     const candles = cached.candles;
-    const tfMs = cached.timeframe === '5m' ? 5 * 60 * 1000 : 60 * 1000;
+    const tfMs = cached.timeframe === '15m' ? 15 * 60 * 1000 : cached.timeframe === '5m' ? 5 * 60 * 1000 : 60 * 1000;
+    if (cached.complete === false) {
+      trade.gapReplayIncomplete = true;
+      try {
+        incFunnel('gap_replay', 'incomplete', trade.symbol);
+      } catch {}
+    } else {
+      try {
+        incFunnel('gap_replay', 'done', trade.symbol);
+      } catch {}
+    }
     const outcome = replayGapOnCandles(trade, candles, tfMs, exitCfg, now);
     trade.gapReplayStatus = 'DONE';
     inFlightFetches.delete(pairKey);
@@ -127,13 +142,42 @@ export function advanceGapReplay(
     .then((res: GapCandleResult) => {
       inFlightFetches.delete(pairKey);
       if (res.ok && Array.isArray(res.candles) && res.candles.length > 0) {
-        candlesCache.set(pairKey, { candles: res.candles, timeframe: res.timeframe });
-      } else if (res.reason === 'GAP_TOO_LONG' || res.reason === 'NO_CANDLES_FETCHED') {
-        trade.gapReplayStatus = res.reason === 'NO_CANDLES_FETCHED' ? 'NO_CANDLES' : 'FAILED';
+        candlesCache.set(pairKey, {
+          candles: res.candles,
+          timeframe: res.timeframe,
+          complete: res.complete
+        });
+      } else if (res.reason === 'GAP_TOO_LONG') {
+        trade.gapReplayStatus = 'FAILED';
+        trade.gapReplayLastError = 'GAP_TOO_LONG';
+        candlesCache.delete(pairKey);
+        fetchStartTime.delete(pairKey);
+        lastFetchAttemptTime.delete(pairKey);
+      } else if (res.reason === 'FETCH_ERROR') {
+        // Trade stays PENDING for retry!
+        const errText = (res.error || 'FETCH_ERROR').slice(0, 200);
+        trade.gapReplayLastError = errText;
+        try {
+          incFunnel('gap_replay', 'fetch_error', trade.symbol);
+        } catch {}
+      } else if (res.reason === 'NO_CANDLES_FETCHED' || (res.ok && (!res.candles || res.candles.length === 0))) {
+        // Trade stays PENDING for retry!
+        const errText = 'NO_CANDLES_FETCHED'.slice(0, 200);
+        trade.gapReplayLastError = errText;
+        try {
+          incFunnel('gap_replay', 'no_candles', trade.symbol);
+        } catch {}
+      } else if (res.reason) {
+        trade.gapReplayLastError = String(res.reason).slice(0, 200);
       }
     })
-    .catch(() => {
+    .catch((err: any) => {
       inFlightFetches.delete(pairKey);
+      const errMsg = (err?.message || String(err) || 'FETCH_ERROR').slice(0, 200);
+      trade.gapReplayLastError = errMsg;
+      try {
+        incFunnel('gap_replay', 'fetch_error', trade.symbol);
+      } catch {}
     });
 
   return { kind: 'WAIT' };
