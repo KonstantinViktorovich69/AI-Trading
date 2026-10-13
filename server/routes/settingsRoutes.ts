@@ -243,6 +243,18 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     if (req.body.excludeBinanceCrossListed !== undefined) {
       globalSettings.excludeBinanceCrossListed = !!req.body.excludeBinanceCrossListed;
     }
+    if (req.body.isSessionFilterEnabled !== undefined) {
+      globalSettings.isSessionFilterEnabled = !!req.body.isSessionFilterEnabled;
+    }
+    if (Array.isArray(req.body.allowedSessions)) {
+      globalSettings.allowedSessions = req.body.allowedSessions;
+    }
+    if (Array.isArray(req.body.blockedHoursUtc)) {
+      globalSettings.blockedHoursUtc = req.body.blockedHoursUtc.map(Number);
+    }
+    if (req.body.sessionAdaptiveScoreBoost !== undefined) {
+      globalSettings.sessionAdaptiveScoreBoost = !!req.body.sessionAdaptiveScoreBoost;
+    }
 
     ctx.saveSettings();
     const status = ctx.getLastSanitizationStatus();

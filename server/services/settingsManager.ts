@@ -71,6 +71,10 @@ export interface GlobalSettings {
   excludeBinanceCrossListed: boolean;
   maxSpotAllocationPct: number;
   uiStatsResetTimestamp?: number;
+  isSessionFilterEnabled?: boolean;
+  allowedSessions?: string[];
+  blockedHoursUtc?: number[];
+  sessionAdaptiveScoreBoost?: boolean;
 }
 
 export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPERT_INSTRUCTIONS): GlobalSettings {
@@ -114,7 +118,11 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     tradingExecutionMode: 'auto',
     tradingMarketMode: 'HYBRID',
     excludeBinanceCrossListed: true,
-    maxSpotAllocationPct: 10
+    maxSpotAllocationPct: 10,
+    isSessionFilterEnabled: false,
+    allowedSessions: ['ASIAN', 'LONDON', 'OVERLAP_LONDON_NY', 'NEW_YORK', 'PACIFIC_OFF_HOURS'],
+    blockedHoursUtc: [],
+    sessionAdaptiveScoreBoost: false
   };
 }
 

@@ -1,8 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { RefreshCw, Database, Settings, CheckCircle2, XCircle, TrendingUp, Filter, Info } from 'lucide-react';
+import { RefreshCw, Database, Settings, CheckCircle2, XCircle, TrendingUp, Filter, Info, Clock, ShieldAlert, Globe, Zap, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format, subDays, startOfDay, isAfter } from 'date-fns';
+import { 
+  calculateSessionStats, 
+  calculateHourlyStats, 
+  getCurrentSessionInfo, 
+  TRADING_SESSIONS, 
+  type TradingSessionId 
+} from '../lib/sessionTrading';
 
 interface Trade {
   id: string;
@@ -53,6 +60,63 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading, uiStatsRe
   const [filterMode, setFilterMode] = useState<'all' | 'virtual' | 'learning' | 'real'>('all');
   const [period, setPeriod] = useState<'today' | 'week' | 'month' | 'all'>('all');
   const [respectUiStatsReset, setRespectUiStatsReset] = useState<boolean>(true);
+
+  // Session settings state
+  const [sessionConfig, setSessionConfig] = useState<{
+    isSessionFilterEnabled: boolean;
+    allowedSessions: string[];
+    blockedHoursUtc: number[];
+    sessionAdaptiveScoreBoost: boolean;
+  }>({
+    isSessionFilterEnabled: false,
+    allowedSessions: ['ASIAN', 'LONDON', 'OVERLAP_LONDON_NY', 'NEW_YORK', 'PACIFIC_OFF_HOURS'],
+    blockedHoursUtc: [],
+    sessionAdaptiveScoreBoost: false
+  });
+  const [isSavingSessionConfig, setIsSavingSessionConfig] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // Load session settings from API
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(data => {
+        if (!isMounted || !data?.data) return;
+        const s = data.data;
+        setSessionConfig({
+          isSessionFilterEnabled: !!s.isSessionFilterEnabled,
+          allowedSessions: Array.isArray(s.allowedSessions) ? s.allowedSessions : ['ASIAN', 'LONDON', 'OVERLAP_LONDON_NY', 'NEW_YORK', 'PACIFIC_OFF_HOURS'],
+          blockedHoursUtc: Array.isArray(s.blockedHoursUtc) ? s.blockedHoursUtc : [],
+          sessionAdaptiveScoreBoost: !!s.sessionAdaptiveScoreBoost
+        });
+      })
+      .catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleSaveSessionConfig = async () => {
+    setIsSavingSessionConfig(true);
+    setSaveSuccessMsg(null);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionConfig)
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSaveSuccessMsg('Настройки сессий успешно сохранены!');
+        setTimeout(() => setSaveSuccessMsg(null), 3500);
+      }
+    } catch (e) {
+      console.error('Failed to save session settings', e);
+    } finally {
+      setIsSavingSessionConfig(false);
+    }
+  };
+
+  const currentSessionInfo = useMemo(() => getCurrentSessionInfo(), []);
 
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
@@ -174,6 +238,9 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading, uiStatsRe
       grossProfit, grossLoss, netProfit, shortTotal, shortWins, shortWinrate, longTotal, longWins, longWinrate
     };
   }, [filteredTrades]);
+
+  const sessionBreakdown = useMemo(() => calculateSessionStats(filteredTrades), [filteredTrades]);
+  const hourlyBreakdown = useMemo(() => calculateHourlyStats(filteredTrades), [filteredTrades]);
 
   return (
     <div className="space-y-6">
@@ -423,6 +490,282 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading, uiStatsRe
                <div className="text-xs text-zinc-500 italic">В этом периоде ИИ не добавил новых правил.</div>
             )}
          </div>
+      </div>
+
+      {/* Сессионная аналитика & Временные паттерны */}
+      <div className="bg-zinc-950 border border-zinc-800/60 rounded-xl p-6 space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-zinc-800/60 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-indigo-400" />
+              <h3 className="text-base font-bold text-zinc-100">Временные сессии & Анализ крипто-бирж (Sessions & Timing)</h3>
+            </div>
+            <p className="text-xs text-zinc-400 mt-1">
+              Анализ эффективности сделок по торговым сессиям мира и почасовому UTC времени
+            </p>
+          </div>
+
+          {/* Текущая активная сессия badge */}
+          <div className="flex items-center gap-3 bg-zinc-900/80 border border-zinc-800 px-3.5 py-2 rounded-lg">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">Сейчас на рынке</span>
+              <span className="text-xs font-bold text-zinc-200">{currentSessionInfo.session.nameRu}</span>
+            </div>
+            <div className="h-6 w-px bg-zinc-800 mx-1"></div>
+            <div className="flex flex-col text-right">
+              <span className="text-[10px] text-zinc-500 font-mono">{currentSessionInfo.utcTimeFormatted}</span>
+              <span className="text-[10px] text-zinc-400 font-mono">{currentSessionInfo.localTimeFormatted}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Информационный баннер рекомендации */}
+        <div className={cn(
+          "p-3.5 rounded-lg border text-xs flex items-start gap-3 leading-relaxed",
+          currentSessionInfo.session.recommendedBias === 'FAVORABLE' 
+            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
+            : currentSessionInfo.session.recommendedBias === 'HIGH_RISK'
+            ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+            : "bg-indigo-500/10 border-indigo-500/30 text-indigo-300"
+        )}>
+          <ShieldAlert className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>
+            <span className="font-bold">Рекомендация квантового риск-менеджера: </span>
+            {currentSessionInfo.recommendation}
+          </div>
+        </div>
+
+        {/* Таблица / Карточки по 5 сессиям */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          {(Object.keys(TRADING_SESSIONS) as TradingSessionId[]).map((sid) => {
+            const meta = TRADING_SESSIONS[sid];
+            const sm = sessionBreakdown[sid];
+            const isCurrent = currentSessionInfo.session.id === sid;
+            const isAllowed = sessionConfig.allowedSessions.includes(sid);
+
+            return (
+              <div 
+                key={sid}
+                className={cn(
+                  "p-4 rounded-xl border flex flex-col justify-between transition-all relative overflow-hidden",
+                  isCurrent 
+                    ? "bg-zinc-900 border-indigo-500/60 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-500/40" 
+                    : "bg-zinc-900/40 border-zinc-800/60 hover:border-zinc-700/60"
+                )}
+              >
+                {isCurrent && (
+                  <div className="absolute top-0 right-0 bg-indigo-500 text-[9px] font-black uppercase tracking-wider text-white px-2 py-0.5 rounded-bl">
+                    LIVE
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider font-mono">
+                      {meta.startHourUtc}:00–{meta.endHourUtc}:00 UTC
+                    </span>
+                    <span className={cn(
+                      "text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase",
+                      meta.liquidityRating === 'HIGH' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                      meta.liquidityRating === 'MEDIUM' ? "bg-zinc-800 text-zinc-300" :
+                      "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                    )}>
+                      {meta.liquidityRating === 'HIGH' ? 'High Liq' : meta.liquidityRating === 'MEDIUM' ? 'Med Liq' : 'Thin Liq'}
+                    </span>
+                  </div>
+
+                  <h4 className="text-xs font-bold text-zinc-100 mb-3">{meta.nameRu}</h4>
+
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between items-center text-zinc-400">
+                      <span>Сделок:</span>
+                      <span className="font-bold text-zinc-200 font-mono">{sm.totalTrades}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-400">
+                      <span>Винрейт:</span>
+                      <span className={cn("font-bold font-mono", sm.winRate >= 45 ? "text-emerald-400" : sm.winRate > 0 ? "text-amber-400" : "text-zinc-500")}>
+                        {sm.winRate}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-400">
+                      <span>Чистый PnL:</span>
+                      <span className={cn("font-bold font-mono", sm.totalPnl > 0 ? "text-emerald-400" : sm.totalPnl < 0 ? "text-red-400" : "text-zinc-500")}>
+                        {sm.totalPnl > 0 ? '+' : ''}${sm.totalPnl.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/60">
+                      <span>S / L Winrate:</span>
+                      <span className="font-mono text-zinc-400">{sm.shortWinRate}% / {sm.longWinRate}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-zinc-800/40 flex items-center justify-between text-[11px]">
+                  <span className="text-zinc-500">Автопилот:</span>
+                  <span className={cn("font-bold", isAllowed ? "text-emerald-400" : "text-zinc-500 line-through")}>
+                    {isAllowed ? 'Включен' : 'Отключен'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Почасовое распределение 24h (UTC) */}
+        <div>
+          <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            24-часовая тепловая шкала результативности (Часы UTC)
+          </h4>
+          <div className="grid grid-cols-6 sm:grid-cols-12 lg:grid-cols-24 gap-1.5">
+            {hourlyBreakdown.map((hm) => {
+              const isCurrentHour = currentSessionInfo.utcHour === hm.hourUtc;
+              const hasTrades = hm.totalTrades > 0;
+              const isBlocked = sessionConfig.blockedHoursUtc.includes(hm.hourUtc);
+
+              let bgColor = "bg-zinc-900/40 text-zinc-600 border-zinc-800/40";
+              if (hasTrades) {
+                if (hm.totalPnl > 0 && hm.winRate >= 50) {
+                  bgColor = "bg-emerald-500/10 text-emerald-400 border-emerald-500/30";
+                } else if (hm.totalPnl > 0) {
+                  bgColor = "bg-emerald-500/5 text-emerald-300 border-emerald-500/20";
+                } else if (hm.totalPnl < 0) {
+                  bgColor = "bg-red-500/10 text-red-400 border-red-500/30";
+                } else {
+                  bgColor = "bg-zinc-800/50 text-zinc-400 border-zinc-700/40";
+                }
+              }
+
+              return (
+                <div 
+                  key={hm.hourUtc}
+                  className={cn(
+                    "p-2 rounded-lg border flex flex-col items-center justify-center text-center transition-all relative",
+                    bgColor,
+                    isCurrentHour && "ring-2 ring-indigo-500 font-bold",
+                    isBlocked && "opacity-40"
+                  )}
+                  title={`UTC ${hm.hourUtc}:00 | Сделок: ${hm.totalTrades} | Winrate: ${hm.winRate}% | PnL: $${hm.totalPnl}`}
+                >
+                  <span className="text-[10px] font-mono font-bold text-zinc-400">{String(hm.hourUtc).padStart(2, '0')}:00</span>
+                  <span className="text-[9px] font-mono mt-0.5">
+                    {hasTrades ? `${hm.winRate}%` : '—'}
+                  </span>
+                  <span className="text-[8px] font-mono opacity-80">
+                    {hasTrades ? `${hm.totalPnl > 0 ? '+' : ''}${hm.totalPnl.toFixed(0)}$` : ''}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Управление сессионным фильтром автопилота */}
+        <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4 space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div>
+              <h4 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                <Settings className="w-4 h-4 text-indigo-400" />
+                Настройки Сессионного Фильтра Автопилота
+              </h4>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Автоматически защищает депозит, блокируя или адаптируя входы в токсичные периоды
+              </p>
+            </div>
+
+            <button
+              onClick={handleSaveSessionConfig}
+              disabled={isSavingSessionConfig}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-md"
+            >
+              {isSavingSessionConfig ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              <span>Сохранить настройки</span>
+            </button>
+          </div>
+
+          {saveSuccessMsg && (
+            <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{saveSuccessMsg}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-zinc-800/60">
+            {/* Toggles */}
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={sessionConfig.isSessionFilterEnabled}
+                  onChange={(e) => setSessionConfig(prev => ({ ...prev, isSessionFilterEnabled: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                />
+                <div className="text-xs">
+                  <div className="font-bold text-zinc-200">Включить сессионный фильтр автопилота</div>
+                  <div className="text-zinc-500">Автопилот будет открывать позиции только в разрешённые сессии.</div>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={sessionConfig.sessionAdaptiveScoreBoost}
+                  onChange={(e) => setSessionConfig(prev => ({ ...prev, sessionAdaptiveScoreBoost: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                />
+                <div className="text-xs">
+                  <div className="font-bold text-zinc-200">Адаптивный скоринг волатильности (+3 в Прайм-тайм / штраф в Азии)</div>
+                  <div className="text-zinc-500">+3 pts к AI score в Лондон-NY overlap; штраф -4 в Азии и -3 для Short в NY.</div>
+                </div>
+              </label>
+            </div>
+
+            {/* Session Checkboxes */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1">Разрешённые сессии для торговли:</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(Object.keys(TRADING_SESSIONS) as TradingSessionId[]).map((sid) => {
+                  const meta = TRADING_SESSIONS[sid];
+                  const isChecked = sessionConfig.allowedSessions.includes(sid);
+
+                  return (
+                    <label 
+                      key={sid}
+                      className={cn(
+                        "flex items-center gap-2.5 p-2 rounded-lg border text-xs cursor-pointer select-none transition-colors",
+                        isChecked ? "bg-zinc-800/60 border-zinc-700 text-zinc-200" : "bg-zinc-900/30 border-zinc-800/40 text-zinc-500"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSessionConfig(prev => {
+                            const next = checked 
+                              ? [...prev.allowedSessions, sid]
+                              : prev.allowedSessions.filter(s => s !== sid);
+                            return { ...prev, allowedSessions: next };
+                          });
+                        }}
+                        className="w-3.5 h-3.5 rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                      />
+                      <span className="font-semibold truncate">{meta.nameRu}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -17,6 +17,10 @@ export function isOperationalTrade(trade: any, options: IsOperationalTradeOption
     return false;
   }
 
+  if (trade.isForcedReset === true || trade.isSystemCleanup === true || trade.closeReasonCode === 'FORCED_RESET') {
+    return false;
+  }
+
   const origin = trade.dataOrigin || inferDataOrigin(trade);
 
   if (origin === 'SEED' || origin === 'HISTORICAL_SEED' || origin === 'FORCED_RESET') {

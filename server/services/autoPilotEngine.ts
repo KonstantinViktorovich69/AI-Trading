@@ -19,6 +19,7 @@ import { isEntryPaused } from './entryGate.ts';
 import { getCellVerdict } from './learningCellService.ts';
 import { computeQuantFeaturesV2 } from './quantFeaturesV2.ts';
 import { calculateProbabilityV2IfAccepted } from './quantModelV2.ts';
+import { evaluateSessionFilter } from './sessionTradingService.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -390,6 +391,21 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             try { incFunnel('blacklist', blCheck.reason || 'pattern_blacklisted', symbol); } catch {}
             console.log(`[AUTOPILOT BLACKLIST GUARD] Skipping entry for ${symbol}: Pattern "${rawPatternName}" is blacklisted (${blCheck.reason})`);
             continue;
+        }
+
+        // --- СЕССИОННЫЙ ФИЛЬТР И ВРЕМЕННЫЕ ОКНА ЛИКВИДНОСТИ ---
+        if (globalSettings.isSessionFilterEnabled) {
+            const sessionVerdict = evaluateSessionFilter(Date.now(), globalSettings, isSellSignal ? 'SHORT' : 'LONG');
+            if (!sessionVerdict.allowed) {
+                try { incFunnel('session_filter', sessionVerdict.reason || 'session_blocked', symbol); } catch {}
+                console.log(`[AUTOPILOT SESSION GUARD] Skipping entry for ${symbol}: ${sessionVerdict.reason}`);
+                continue;
+            }
+            if (sessionVerdict.scoreAdjustment && sessionVerdict.scoreAdjustment !== 0) {
+                const scoreBefore = finalAiScore;
+                finalAiScore = Math.max(0, Math.min(100, finalAiScore + sessionVerdict.scoreAdjustment));
+                console.log(`[AUTOPILOT SESSION ADAPTIVE] ${symbol}: Session ${sessionVerdict.session} (${sessionVerdict.hourUtc}:00 UTC) adjusted AI score ${scoreBefore} -> ${finalAiScore} (${sessionVerdict.scoreAdjustment > 0 ? '+' : ''}${sessionVerdict.scoreAdjustment} pts)`);
+            }
         }
 
         // --- БЛОК C: AGGREGATED LEARNING CELLS (SHADOW / ACTIVE / OFF) ---

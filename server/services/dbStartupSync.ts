@@ -360,6 +360,9 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
       if (t.status === 'OPEN' && (now - t.openTime > 48 * 60 * 60 * 1000)) {
          t.status = 'CLOSED';
          t.closeReason = 'System Cleanup (Stale/Ghost)';
+         t.isSystemCleanup = true;
+         t.isForcedReset = true;
+         t.closeReasonCode = 'FORCED_RESET';
          t.closeTime = now;
          
          const fallbackClosePrice = t.currentPrice || t.entryPrice;
@@ -381,6 +384,12 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
     let healedTradesCount = 0;
     virtualTrades.forEach(t => {
       if (t.status === 'CLOSED') {
+        if (t.closeReason === 'System Cleanup (Stale/Ghost)' && !t.isSystemCleanup) {
+          t.isSystemCleanup = true;
+          t.isForcedReset = true;
+          t.closeReasonCode = 'FORCED_RESET';
+        }
+
         const hasValidPnl = typeof t.pnl === 'number' && !isNaN(t.pnl);
         const hasValidPnlPercent = typeof t.pnlPercent === 'number' && !isNaN(t.pnlPercent);
         const hasValidClosePrice = typeof t.closePrice === 'number' && !isNaN(t.closePrice) && t.closePrice > 0;

@@ -3,6 +3,7 @@ import type { Request, Response, Router } from 'express';
 import { getAuthMode, validateApiKey } from '../middleware/auth.ts';
 import { DirectionalMemoryAnalyticsService } from '../services/directionalMemoryAnalyticsService.ts';
 import { sanitizeSettingsForClient } from '../utils/settingsSanitizer.ts';
+import { getCurrentSessionInfo, calculateSessionStats, calculateHourlyStats, TRADING_SESSIONS } from '../services/sessionTradingService.ts';
 
 export interface SystemRouterContext {
   getVirtualTrades: () => any[];
@@ -396,6 +397,32 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
       }
       ctx.streamEmitter.emit('signals_updated');
       res.json({ success: true, message: `Test signal injected for ${signal.symbol}` });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET /api/analytics/sessions
+  router.get('/analytics/sessions', (req: Request, res: Response) => {
+    try {
+      const virtualTrades = ctx.getVirtualTrades() || [];
+      const currentSession = getCurrentSessionInfo();
+      const sessions = calculateSessionStats(virtualTrades);
+      const hourly = calculateHourlyStats(virtualTrades);
+      const globalSettings = ctx.getGlobalSettings() || {};
+
+      res.json({
+        success: true,
+        currentSession,
+        sessions,
+        hourly,
+        sessionConfig: {
+          isSessionFilterEnabled: !!globalSettings.isSessionFilterEnabled,
+          allowedSessions: globalSettings.allowedSessions || ['ASIAN', 'LONDON', 'OVERLAP_LONDON_NY', 'NEW_YORK', 'PACIFIC_OFF_HOURS'],
+          blockedHoursUtc: globalSettings.blockedHoursUtc || [],
+          sessionAdaptiveScoreBoost: !!globalSettings.sessionAdaptiveScoreBoost
+        }
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

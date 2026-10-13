@@ -180,18 +180,24 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
       const virtualTrades = ctx.getVirtualTrades();
       const tradesToClose = virtualTrades.filter(t => t.status === 'OPEN' && !t.isReal);
       console.log(`[BALANCE UPDATE] Found ${tradesToClose.length} active virtual trades to close.`);
-      const globalCcxt = ctx.getGlobalCcxtTickers();
-      const binanceTickers = globalCcxt.binance || {};
-      const mexcTickers = globalCcxt.mexc || {};
+      const globalCcxt = ctx.getGlobalCcxtTickers() || {};
+      const weexTickers = (globalCcxt as any)?.['weex'] || {};
 
       for (const trade of tradesToClose) {
-        const ticker = ctx.findTickerInMap(trade.symbol, binanceTickers) || ctx.findTickerInMap(trade.symbol, mexcTickers);
-        let actualClosePrice = ticker?.last || ticker?.price || ticker?.close || 0;
+        const ticker = ctx.findTickerInMap(trade.symbol, weexTickers);
+        const tickerPrice = ticker?.last || ticker?.price || ticker?.close || 0;
+        let actualClosePrice = tickerPrice;
         
-        if (actualClosePrice <= 0) {
+        if (actualClosePrice > 0) {
+          trade.closePriceSource = 'TICKER';
+        } else {
           actualClosePrice = trade.entryPrice;
+          trade.closePriceSource = 'ENTRY_FALLBACK';
         }
         
+        trade.isForcedReset = true;
+        trade.closeReasonCode = 'FORCED_RESET';
+        trade.closeReason = 'FORCED_RESET: Сделка принудительно закрыта при смене виртуального баланса';
         trade.status = 'CLOSED'; 
         trade.closeTime = Date.now(); 
         trade.closePrice = actualClosePrice; 
@@ -669,9 +675,10 @@ function handleTradeClose(req: Request, res: Response, ctx: PaperTradeRouterCont
   let actualClosePrice = finalClosePrice;
 
   if (actualClosePrice <= 0) {
-    const symbolClean = ctx.normalizeSymbol(trade.symbol);
-    const globalCcxt = ctx.getGlobalCcxtTickers();
-    const fallbackPrice = globalCcxt.binance?.[symbolClean]?.last || 0;
+    const globalCcxt = ctx.getGlobalCcxtTickers() || {};
+    const weexTickers = (globalCcxt as any)?.['weex'] || {};
+    const ticker = ctx.findTickerInMap(trade.symbol, weexTickers);
+    const fallbackPrice = ticker?.last || ticker?.price || ticker?.close || 0;
     if (fallbackPrice > 0) {
        actualClosePrice = fallbackPrice;
        ctx.log400('/api/paper-trade/close', `Close price missing for ${trade.symbol}, using fallback: ${fallbackPrice}`);
