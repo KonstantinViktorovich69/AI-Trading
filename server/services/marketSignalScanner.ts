@@ -16,7 +16,6 @@ export interface MarketSignalScannerContext {
     isLateShortFilterEnabled?: boolean;
     [key: string]: any;
   };
-  isBinanceCrossListed: (symbol: string) => boolean;
   setCachedSignals: (cacheObj: {
     data: any[];
     lastUpdated: number;
@@ -418,8 +417,6 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
         baseScore = Math.max(50, baseScore - blockLocks.length * 8);
       }
 
-      const isBinanceCrossed = ctx.isBinanceCrossListed(cleanSymbol);
-
       // Генерация DecisionTrace для полного логирования факторов принятия решения
       const trace = DecisionTraceService.buildTrace({
         symbol: symbolWithSlash,
@@ -555,7 +552,6 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
         },
         smartLimitTarget: signalSide === 'SHORT' ? tickerPrice * 1.002 : (signalSide === 'LONG' ? tickerPrice * 0.998 : tickerPrice),
         isLiquiditySweep: isLiquiditySweepConfirmed,
-        isBinanceCrossListed: isBinanceCrossed,
         timestamp: Date.now()
       });
     }

@@ -1,3 +1,6 @@
+import { findTickerInMap } from '../utils/symbolUtils.ts';
+import { DEFAULT_EXCHANGE } from './activeExchange.ts';
+
 export interface StructuredFilterMatchResult {
   matched: boolean;
   isPenalty: boolean;
@@ -216,10 +219,8 @@ export function calculateConfidenceProbability(
   const x5 = indicators.ema200 ? ((currentPrice - indicators.ema200) / indicators.ema200) * 100 : 0;
 
   const globalCcxtTickers = ctx.getGlobalCcxtTickers();
-  const ticker = globalCcxtTickers['mexc']?.[symbol + '/USDT:USDT'] ||
-                 globalCcxtTickers['mexc']?.[symbol + '/USDT'] ||
-                 globalCcxtTickers['binance']?.[symbol.replace('USDT', '') + '/USDT'] ||
-                 {};
+  const activeEx = DEFAULT_EXCHANGE;
+  const ticker = (globalCcxtTickers && findTickerInMap(symbol, globalCcxtTickers[activeEx])) || {};
   const avgHourlyVol = (ticker.quoteVolume || 0) / 24;
   const x6 = (volume > avgHourlyVol * 1.5) ? 1 : 0;
 
@@ -521,11 +522,17 @@ export async function executeScrapeSocialSentiment(
     return cache[cleanSymbol];
   }
 
-  const wsTickers = ctx.getWsTickers();
-  try {
-    const change = (wsTickers.Binance?.[`${cleanSymbol}/USDT`] as any)?.change ?? 0;
-    const vol = (wsTickers.Binance?.[`${cleanSymbol}/USDT`] as any)?.quoteVolume ?? 0;
+  const globalCcxtTickers = ctx.getGlobalCcxtTickers ? ctx.getGlobalCcxtTickers() : undefined;
+  const activeEx = DEFAULT_EXCHANGE;
+  const t = globalCcxtTickers ? findTickerInMap(cleanSymbol + 'USDT', globalCcxtTickers[activeEx]) : undefined;
+  const change = (t && typeof t.percentage === 'number')
+    ? t.percentage
+    : ((t && typeof t.open === 'number' && t.open > 0 && typeof t.last === 'number')
+        ? ((t.last / t.open) - 1) * 100
+        : 0);
+  const vol = (t && typeof t.quoteVolume === 'number') ? t.quoteVolume : 0;
 
+  try {
     if (ctx.runAiGeneration && ctx.getSocialScraperPrompt) {
       const prompt = ctx.getSocialScraperPrompt(cleanSymbol, change, vol);
       const result = await ctx.runAiGeneration({
@@ -553,7 +560,7 @@ export async function executeScrapeSocialSentiment(
     console.warn(`[SOCIAL SCRAPER ERR] Failed scraping sentiment for ${cleanSymbol}:`, err.message);
   }
 
-  const fallbackHype = ((wsTickers.Binance?.[`${cleanSymbol}/USDT`] as any)?.change ?? 0) > 15 ? 'PUMP_HYPE' : 'NEUTRAL';
+  const fallbackHype = change > 15 ? 'PUMP_HYPE' : 'NEUTRAL';
   const score = fallbackHype === 'PUMP_HYPE' ? 82 : 45;
   cache[cleanSymbol] = {
     score,

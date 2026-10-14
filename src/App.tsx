@@ -143,7 +143,6 @@ export default function App() {
   const [modelWeights, setModelWeights] = useState<Record<string, number> | null>(null);
   const [settingsTab, setSettingsTab] = useState<'system' | 'ai_settings' | 'integrations'>('system');
   
-  const [excludeBinanceCrossListed, setExcludeBinanceCrossListed] = useState<boolean>(false);
   const [maxSpotAllocationPct, setMaxSpotAllocationPct] = useState<number>(10);
   const [tradingMarketMode, setTradingMarketMode] = useState<'FUTURES' | 'SPOT' | 'HYBRID'>('HYBRID');
   const [virtualBalanceApp, setVirtualBalanceApp] = useState<number>(0);
@@ -296,9 +295,6 @@ export default function App() {
             if (data.data.tradingMarketMode !== undefined) {
                setTradingMarketMode(data.data.tradingMarketMode);
                if (data.data.maxSpotAllocationPct !== undefined) setMaxSpotAllocationPct(data.data.maxSpotAllocationPct);
-            }
-            if (data.data.excludeBinanceCrossListed !== undefined) {
-               setExcludeBinanceCrossListed(data.data.excludeBinanceCrossListed);
             }
             if (data.data.allowedTradingDirections !== undefined) {
                setAllowedTradingDirections(data.data.allowedTradingDirections);
@@ -457,8 +453,7 @@ export default function App() {
           isLateShortFilterEnabled,
           isSymmetricConfidenceFilterEnabled,
           isCommitteeConsensusCheckEnabled,
-          tradingMarketMode,
-          excludeBinanceCrossListed
+          tradingMarketMode
         })
       });
       if (res.ok) {
@@ -1353,39 +1348,6 @@ export default function App() {
                           <div className="text-[10px] text-zinc-500 mt-0.5">Спот + Фьючерсы</div>
                         </button>
                       </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-zinc-900 flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
-                          <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                          Исключать монеты Binance (Защита от Маркет-Мейкеров)
-                        </div>
-                        <div className="text-[11px] text-zinc-400 max-w-md mt-0.5">
-                          Автоматически убирает из торговли токены, торгуемые на Binance, для защиты от манипуляций и спуфинга крупных игроков.
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const val = !excludeBinanceCrossListed;
-                          setExcludeBinanceCrossListed(val);
-                          fetch('/api/settings', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ excludeBinanceCrossListed: val })
-                          });
-                        }}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          excludeBinanceCrossListed ? 'bg-amber-500' : 'bg-zinc-800'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            excludeBinanceCrossListed ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
                     </div>
 
                     <div className="pt-3 border-t border-zinc-900 flex items-center justify-between">

@@ -6,6 +6,10 @@ import {
   calculateSessionStats,
   calculateHourlyStats,
   evaluateSessionFilter,
+  isSessionStatsTrade,
+  sanitizeAllowedSessions,
+  sanitizeBlockedHours,
+  PROFIT_FACTOR_CAP,
   TRADING_SESSIONS,
   type TradingSessionId
 } from './sessionTradingService.ts';
@@ -57,7 +61,7 @@ describe('sessionTradingService', () => {
       const info = getCurrentSessionInfo(d);
       expect(info.session.id).toBe('OVERLAP_LONDON_NY');
       expect(info.isPeakLiquidity).toBe(true);
-      expect(info.recommendation).toContain('Оптимальное окно');
+      expect(info.recommendation).toContain('Справочная информация о сессии');
       expect(info.utcTimeFormatted).toBe('14:30 UTC');
     });
   });
@@ -225,6 +229,102 @@ describe('sessionTradingService', () => {
       }, 'LONG');
       expect(vNyLong.allowed).toBe(true);
       expect(vNyLong.scoreAdjustment).toBe(0);
+    });
+  });
+
+  describe('isSessionStatsTrade Data Filtering', () => {
+    const baseValidTrade = {
+      id: 'trade-clean-1',
+      status: 'CLOSED',
+      entryPrice: 100,
+      closePrice: 101,
+      pnl: 5,
+      pnlPercent: 5
+    };
+
+    it('accepts clean operational closed trades', () => {
+      expect(isSessionStatsTrade(baseValidTrade)).toBe(true);
+    });
+
+    it('rejects null or non-closed trades', () => {
+      expect(isSessionStatsTrade(null)).toBe(false);
+      expect(isSessionStatsTrade(undefined)).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, status: 'OPEN' })).toBe(false);
+    });
+
+    it('rejects forced resets, cleanups, gap-affected and auto-learning trades', () => {
+      expect(isSessionStatsTrade({ ...baseValidTrade, isForcedReset: true })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, isSystemCleanup: true })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, gapAffected: true })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, isAutoLearning: true })).toBe(false);
+    });
+
+    it('rejects FORCED_RESET and MANUAL closeReasonCodes', () => {
+      expect(isSessionStatsTrade({ ...baseValidTrade, closeReasonCode: 'FORCED_RESET' })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, closeReasonCode: 'forced_reset' })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, closeReasonCode: 'MANUAL' })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, closeReasonCode: ' manual ' })).toBe(false);
+    });
+
+    it('rejects seed and legacy data origins', () => {
+      expect(isSessionStatsTrade({ ...baseValidTrade, dataOrigin: 'SEED' })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, dataOrigin: 'historical_seed' })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, dataOrigin: 'FORCED_RESET' })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, dataOrigin: 'legacy_unknown' })).toBe(false);
+    });
+
+    it('rejects IDs starting with hist_trade_ or seed_', () => {
+      expect(isSessionStatsTrade({ ...baseValidTrade, id: 'hist_trade_123' })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, id: 'seed_456' })).toBe(false);
+    });
+
+    it('rejects funding farm trades', () => {
+      expect(isSessionStatsTrade({ ...baseValidTrade, mode: 'FUNDING_FARM' })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, isFundingFarm: true })).toBe(false);
+    });
+
+    it('rejects price and pnl percent outliers', () => {
+      // price ratio difference > 0.25
+      expect(isSessionStatsTrade({ ...baseValidTrade, entryPrice: 100, closePrice: 130 })).toBe(false);
+      // pnlPercent > 100
+      expect(isSessionStatsTrade({ ...baseValidTrade, pnlPercent: 120 })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, pnlPercent: -150 })).toBe(false);
+    });
+
+    it('rejects trades without finite pnl', () => {
+      expect(isSessionStatsTrade({ ...baseValidTrade, pnl: NaN, realizedPnl: undefined, pnlPercent: undefined })).toBe(false);
+      expect(isSessionStatsTrade({ ...baseValidTrade, pnl: undefined, realizedPnl: null, pnlPercent: Infinity })).toBe(false);
+    });
+  });
+
+  describe('Sanitizers and Profit Factor', () => {
+    it('sanitizeAllowedSessions returns valid sessions or defaults', () => {
+      expect(sanitizeAllowedSessions(['ASIAN', 'LONDON'])).toEqual(['ASIAN', 'LONDON']);
+      expect(sanitizeAllowedSessions([])).toEqual(expect.arrayContaining(['ASIAN', 'LONDON', 'OVERLAP_LONDON_NY', 'NEW_YORK', 'PACIFIC_OFF_HOURS']));
+      expect(sanitizeAllowedSessions(['INVALID_SESSION'])).toEqual(expect.arrayContaining(['ASIAN']));
+      expect(sanitizeAllowedSessions(null, ['LONDON'])).toEqual(['LONDON']);
+    });
+
+    it('sanitizeBlockedHours cleans, dedupes and sorts hours [0..23]', () => {
+      expect(sanitizeBlockedHours([5, 3, 5, 23, 0, -1, 24, '12', 'invalid'])).toEqual([0, 3, 5, 12, 23]);
+      expect(sanitizeBlockedHours(null)).toEqual([]);
+    });
+
+    it('calculates profitFactor and caps at PROFIT_FACTOR_CAP when no losses', () => {
+      const winningOnly = [
+        {
+          id: 'clean-w1',
+          status: 'CLOSED',
+          openTime: new Date('2026-10-12T14:00:00Z').getTime(),
+          entryPrice: 100,
+          closePrice: 102,
+          pnl: 20,
+          pnlPercent: 2
+        }
+      ];
+      const stats = calculateSessionStats(winningOnly);
+      expect(stats.OVERLAP_LONDON_NY.profitFactor).toBe(PROFIT_FACTOR_CAP);
+      expect(stats.OVERLAP_LONDON_NY.winningTrades).toBe(1);
     });
   });
 });

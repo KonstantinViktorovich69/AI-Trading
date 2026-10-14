@@ -16,35 +16,6 @@ export interface PatternAnalysisResult {
   }>;
 }
 
-// Реестр тикеров Binance для исключения пересечений
-let binanceSymbolsSet = new Set<string>();
-
-export function setBinanceSymbols(symbols: string[]): void {
-  binanceSymbolsSet = new Set(symbols.map(s => s.toUpperCase().replace(/[\/:]/g, '')));
-}
-
-export function isBinanceCrossListed(symbol: string): boolean {
-  const clean = symbol.toUpperCase().replace(/[\/:]/g, '');
-  return binanceSymbolsSet.has(clean) || binanceSymbolsSet.has(clean + 'USDT');
-}
-
-/**
- * Фильтрация монет для защиты от маркет-мейкеров Binance
- */
-export function filterBinanceMarketMakerPairs(
-  signals: SignalData[],
-  excludeBinance: boolean = true
-): SignalData[] {
-  if (!excludeBinance) return signals;
-
-  return signals.filter(s => {
-    const isBinanceCrossed = isBinanceCrossListed(s.symbol);
-    s.isBinanceCrossListed = isBinanceCrossed;
-    // Если флаг включен, убираем монеты, которые торгуются на Binance
-    return !isBinanceCrossed;
-  });
-}
-
 /**
  * Анализ 1m/15m свечей на наличие паттернов фьючерсного шорт-скальпинга:
  * 1. SAR Peak Reversal
@@ -506,12 +477,9 @@ export function evaluateSignalByMarketType(
  */
 export function filterValidSignals(
   signals: SignalData[],
-  minVolumeUsdt: number = 50000,
-  excludeBinance: boolean = true
+  minVolumeUsdt: number = 50000
 ): SignalData[] {
-  const step1 = filterBinanceMarketMakerPairs(signals, excludeBinance);
-
-  return step1.filter(s => {
+  return signals.filter(s => {
     if (s.volume24h && s.volume24h < minVolumeUsdt && Math.abs(s.change24h || 0) < 15) {
       return false;
     }

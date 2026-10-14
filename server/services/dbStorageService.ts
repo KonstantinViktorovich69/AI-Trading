@@ -4,6 +4,7 @@ import { inferDataOrigin, inferDecisionSource, inferCloseReasonCode } from './tr
 import { processIncomingStateMessage } from './stateSync.ts';
 import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive.ts';
 import { getConfigVersion, getBuildId, PROCESS_STARTED_AT } from './buildInfo.ts';
+import { normalizeExchangeId, DEFAULT_EXCHANGE } from './activeExchange.ts';
 
 export interface DbStorageContext {
   getAtomicStore: () => { loadState: <T>(fallback: T) => T; saveState: (data: any) => Promise<any>; getRevision: () => number };
@@ -380,7 +381,7 @@ export async function saveTradeToDB(trade: any, immediate: boolean = false, ctx:
               id: `peak_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
               symbol: cleanSym,
               rawSymbol: trade.symbol,
-              exchange: trade.exchange || 'mexc',
+              exchange: trade.exchange ? normalizeExchangeId(trade.exchange) : DEFAULT_EXCHANGE,
               peakPrice,
               dumpTime: Date.now(),
               pnlPercent: trade.pnlPercent,

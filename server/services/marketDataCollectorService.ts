@@ -470,59 +470,42 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
   }
 }
 
+let lastWeexFundingWarningTs = 0;
+
+export function resetLastWeexFundingWarningTsForTest(): void {
+  lastWeexFundingWarningTs = 0;
+}
+
 export async function updateDerivativesData(ctx: MarketDataCollectorContext): Promise<void> {
   try {
-    let funding: any = {};
-    let oi: any = {};
-    const isBinanceGeoblocked = ctx.isBinanceGeoblocked();
+    let funding: any = null;
     const fundingRates = ctx.getFundingRates();
-    const openInterests = ctx.getOpenInterests();
     const GLOBAL_DERIVATIVES = ctx.getGlobalDerivatives();
 
-    if (!isBinanceGeoblocked) {
-      try {
-        const binance = new ccxt.binance({ enableRateLimit: true });
-        binance.options['defaultType'] = 'swap';
-        [funding, oi] = await Promise.all([
-          binance.fetchFundingRates().catch(() => ({})),
-          binance.fetchOpenInterests().catch(() => ({}))
-        ]);
-      } catch (bErr: any) {
-        const msg = bErr?.message || bErr?.toString() || '';
-        if (msg.includes('451') || msg.includes('restricted location') || msg.includes('Eligibility')) {
-          ctx.setBinanceGeoblocked(true);
-          console.warn('[DERIVATIVES] Binance API is geoblocked (451). Falling back to Bybit.');
-        }
+    try {
+      const ex = ctx.getCcxtExchange('weex');
+      if (ex && typeof ex.fetchFundingRates === 'function') {
+        funding = await ex.fetchFundingRates();
       }
+    } catch (err: any) {
+      funding = null;
     }
-    if (ctx.isBinanceGeoblocked() || !funding || Object.keys(funding).length === 0) {
-      try {
-        const bybit = new ccxt.bybit({ enableRateLimit: true });
-        bybit.options['defaultType'] = 'swap';
-        const [bFunding, bOi] = await Promise.all([
-          bybit.fetchFundingRates().catch(() => ({})),
-          bybit.fetchOpenInterests().catch(() => ({}))
-        ]);
-        funding = bFunding || {};
-        oi = bOi || {};
-      } catch (bybitErr: any) {
-        console.warn('[DERIVATIVES] Bybit fetch error:', bybitErr?.message || bybitErr);
+
+    if (!funding || typeof funding !== 'object' || Object.keys(funding).length === 0) {
+      const now = Date.now();
+      if (now - lastWeexFundingWarningTs >= 10 * 60 * 1000) {
+        lastWeexFundingWarningTs = now;
+        console.warn('[DERIVATIVES] Failed to fetch WEEX funding rates or returned empty, keeping previous rates');
       }
+      return;
     }
+
     GLOBAL_DERIVATIVES.fundingRates = funding;
     for (const [symbol, data] of Object.entries<any>(funding)) {
       if (data && data.fundingRate !== undefined) {
         const cleanKey = symbol.split(':')[0].replace(/[\/:]/g, '');
         fundingRates[cleanKey] = data.fundingRate;
         fundingRates[symbol.replace(/[\/:]/g, '')] = data.fundingRate;
-      }
-    }
-    for (const [symbol, data] of Object.entries<any>(oi)) {
-      if (data) {
-        const cleanKey = symbol.split(':')[0].replace(/[\/:]/g, '');
-        const val = data.openInterestValue || data.baseVolume;
-        openInterests[cleanKey] = val;
-        openInterests[symbol.replace(/[\/:]/g, '')] = val; 
       }
     }
   } catch (e: any) { 

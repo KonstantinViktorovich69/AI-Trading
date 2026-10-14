@@ -1,6 +1,6 @@
 {
-  "virtualBalance": 111.11,
-  "startOfDayBalance": 137.31,
+  "virtualBalance": 107.04,
+  "startOfDayBalance": 107.04,
   "telegramBots": [
     {
       "muteWatchdog": true,
@@ -22,18 +22,18 @@
   "btcShockThreshold": 2,
   "failedAutopilotSymbols": [],
   "modelWeights": {
-    "beta0": -1.3088646685557717,
-    "beta1": 0.4029443125185406,
-    "beta2": -0.06959977811578895,
-    "beta3": 0.8254818945346812,
-    "beta4": 0.35921500910349774,
-    "beta5": -0.16254496217053727,
-    "beta6": -0.268933323373614,
-    "beta7": -0.37154361172830325,
-    "beta8": 0.6461893714080149,
-    "beta9": 0.6908918707580369,
-    "beta10": 0.6295679811548563,
-    "beta11": 1.0365467544992597
+    "beta0": -1.430612035739266,
+    "beta1": 0.4023805288414353,
+    "beta2": -0.06950239687075643,
+    "beta3": 0.8243269130560354,
+    "beta4": 0.3587124097308004,
+    "beta5": -0.16231753571576327,
+    "beta6": -0.2685570425495962,
+    "beta7": -0.3710237626645061,
+    "beta8": 0.6452852489062189,
+    "beta9": 0.689925202294736,
+    "beta10": 0.6286871146421,
+    "beta11": 1.0350964594520595
   },
   "autopilotAggressiveness": "aggressive",
   "isAiExpertTraderEnabled": true,
@@ -67,12 +67,22 @@
   "tradingMarketMode": "FUTURES",
   "excludeBinanceCrossListed": false,
   "maxSpotAllocationPct": 10,
+  "isSessionFilterEnabled": false,
+  "allowedSessions": [
+    "ASIAN",
+    "LONDON",
+    "OVERLAP_LONDON_NY",
+    "NEW_YORK",
+    "PACIFIC_OFF_HOURS"
+  ],
+  "blockedHoursUtc": [],
+  "sessionAdaptiveScoreBoost": false,
   "modelStatusMetadata": {
-    "totalLearnedTrades": 502,
-    "lastRetrained": 1791795810304
+    "totalLearnedTrades": 462,
+    "lastRetrained": 1791959174284
   },
-  "stateRevision": 138,
-  "updatedAt": 1791795810305,
-  "virtualEquity": 137.31,
+  "stateRevision": 143,
+  "updatedAt": 1791959174286,
+  "virtualEquity": 133.84,
   "uiStatsResetTimestamp": 1791122286530
 }

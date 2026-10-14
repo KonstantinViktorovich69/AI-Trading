@@ -12,7 +12,6 @@ export interface SignalItem {
   riskLevel: string;
   type: string;
   marketType?: 'SPOT' | 'FUTURES';
-  isBinanceCrossListed?: boolean;
   aiScore?: number;
   vwap?: number;
   rsi?: number;

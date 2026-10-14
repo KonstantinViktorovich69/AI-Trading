@@ -11,6 +11,7 @@ import { isEntryPaused } from './entryGate.ts';
 import type { GapCandleResult } from './gapCandleFetcher.ts';
 import { scheduleLearningCellsRecompute } from './learningCellService.ts';
 import { scheduleModelV2RetrainIfNeeded } from './quantModelV2.ts';
+import { resolveActiveExchange } from './activeExchange.ts';
 
 const lastAlivePersistMap = new Map<string, number>();
 
@@ -271,32 +272,29 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     const nowForStale = Date.now();
     const stalePriceGuardMs = (globalSettings as any).stalePriceGuardMs ?? 60000;
 
+    const activeEx = resolveActiveExchange(globalSettings);            // 'weex'
+    const wsKey = activeEx.charAt(0).toUpperCase() + activeEx.slice(1); // 'Weex'
+
     // 1. WebSocket search
-    for (const ex in wsTickers) {
-      const t = findTickerInMap(symbol, wsTickers[ex]);
-      if (t) {
-        if (stalePriceGuardMs > 0 && typeof t.timestamp === 'number' && (nowForStale - t.timestamp > stalePriceGuardMs)) {
-          currentPrice = 0;
-          staleSeen = true;
-        } else {
-          currentPrice = t.last || t.bid || t.close || 0;
-          if (currentPrice > 0) break;
-        }
+    const tWs = wsTickers ? findTickerInMap(symbol, wsTickers[wsKey]) : undefined;
+    if (tWs) {
+      if (stalePriceGuardMs > 0 && typeof tWs.timestamp === 'number' && (nowForStale - tWs.timestamp > stalePriceGuardMs)) {
+        currentPrice = 0;
+        staleSeen = true;
+      } else {
+        currentPrice = tWs.last || tWs.bid || tWs.close || 0;
       }
     }
 
     // 2. CCXT Cache fallback
     if (currentPrice <= 0) {
-      for (const ex in globalCcxtTickers) {
-        const t = findTickerInMap(symbol, globalCcxtTickers[ex]);
-        if (t) {
-          if (stalePriceGuardMs > 0 && typeof t.timestamp === 'number' && (nowForStale - t.timestamp > stalePriceGuardMs)) {
-            currentPrice = 0;
-            staleSeen = true;
-          } else {
-            currentPrice = t.last || t.bid || t.close || 0;
-            if (currentPrice > 0) break;
-          }
+      const tCcxt = globalCcxtTickers ? findTickerInMap(symbol, globalCcxtTickers[activeEx]) : undefined;
+      if (tCcxt) {
+        if (stalePriceGuardMs > 0 && typeof tCcxt.timestamp === 'number' && (nowForStale - tCcxt.timestamp > stalePriceGuardMs)) {
+          currentPrice = 0;
+          staleSeen = true;
+        } else {
+          currentPrice = tCcxt.last || tCcxt.bid || tCcxt.close || 0;
         }
       }
     }

@@ -4,6 +4,7 @@ import { DEFAULT_BASELINE_EXPERT_INSTRUCTIONS } from '../data/defaultStrategyKno
 import { sanitizeExpertInstructions as quantSanitizeExpertInstructions } from '../quant.ts';
 import { atomicWriteJson } from '../atomicDbSaver.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
+import { DEFAULT_EXCHANGE, normalizeExchangeId } from './activeExchange.ts';
 
 export interface TelegramBotConfig {
   id: string;
@@ -68,7 +69,6 @@ export interface GlobalSettings {
   maxSameDirectionPositions: number;
   tradingExecutionMode: 'auto' | 'semi_auto' | 'manual';
   tradingMarketMode: 'HYBRID' | 'FUTURES' | 'SPOT';
-  excludeBinanceCrossListed: boolean;
   maxSpotAllocationPct: number;
   uiStatsResetTimestamp?: number;
   isSessionFilterEnabled?: boolean;
@@ -83,7 +83,7 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     startOfDayBalance: 1000.0,
     telegramBots: [],
     discordWebhooks: [],
-    exchangeApiConfig: { exchange: 'mexc', apiKey: '', apiSecret: '', password: '', isEnabled: false },
+    exchangeApiConfig: { exchange: DEFAULT_EXCHANGE, apiKey: '', apiSecret: '', password: '', isEnabled: false },
     btcShockThreshold: 1.5,
     failedAutopilotSymbols: [],
     modelWeights: null,
@@ -117,7 +117,6 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     maxSameDirectionPositions: 3,
     tradingExecutionMode: 'auto',
     tradingMarketMode: 'HYBRID',
-    excludeBinanceCrossListed: true,
     maxSpotAllocationPct: 10,
     isSessionFilterEnabled: false,
     allowedSessions: ['ASIAN', 'LONDON', 'OVERLAP_LONDON_NY', 'NEW_YORK', 'PACIFIC_OFF_HOURS'],
@@ -234,6 +233,15 @@ export class SettingsManager {
         if (Array.isArray(loaded.failedAutopilotSymbols)) {
           this.autopilotFailedSymbols.clear();
           loaded.failedAutopilotSymbols.forEach((s: string) => this.autopilotFailedSymbols.add(s));
+        }
+      }
+
+      if (this.settings.exchangeApiConfig) {
+        const rawExchange = this.settings.exchangeApiConfig.exchange;
+        const normalized = normalizeExchangeId(rawExchange);
+        if (rawExchange !== normalized) {
+          console.log(`[SETTINGS_MANAGER] Normalized exchangeApiConfig.exchange from "${rawExchange}" to "${normalized}"`);
+          this.settings.exchangeApiConfig.exchange = normalized;
         }
       }
     } catch (e) {

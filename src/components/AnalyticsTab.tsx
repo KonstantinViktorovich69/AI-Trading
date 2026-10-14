@@ -7,6 +7,8 @@ import {
   calculateSessionStats, 
   calculateHourlyStats, 
   getCurrentSessionInfo, 
+  sanitizeAllowedSessions,
+  sanitizeBlockedHours,
   TRADING_SESSIONS, 
   type TradingSessionId 
 } from '../lib/sessionTrading';
@@ -86,8 +88,8 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading, uiStatsRe
         const s = data.data;
         setSessionConfig({
           isSessionFilterEnabled: !!s.isSessionFilterEnabled,
-          allowedSessions: Array.isArray(s.allowedSessions) ? s.allowedSessions : ['ASIAN', 'LONDON', 'OVERLAP_LONDON_NY', 'NEW_YORK', 'PACIFIC_OFF_HOURS'],
-          blockedHoursUtc: Array.isArray(s.blockedHoursUtc) ? s.blockedHoursUtc : [],
+          allowedSessions: sanitizeAllowedSessions(s.allowedSessions),
+          blockedHoursUtc: sanitizeBlockedHours(s.blockedHoursUtc),
           sessionAdaptiveScoreBoost: !!s.sessionAdaptiveScoreBoost
         });
       })
@@ -595,6 +597,12 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading, uiStatsRe
                       <span>Чистый PnL:</span>
                       <span className={cn("font-bold font-mono", sm.totalPnl > 0 ? "text-emerald-400" : sm.totalPnl < 0 ? "text-red-400" : "text-zinc-500")}>
                         {sm.totalPnl > 0 ? '+' : ''}${sm.totalPnl.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-zinc-400">
+                      <span>Profit Factor:</span>
+                      <span className="font-bold font-mono text-zinc-200">
+                        {sm.profitFactor >= 999 ? 'MAX' : sm.profitFactor > 0 ? sm.profitFactor.toFixed(2) : '—'}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/60">

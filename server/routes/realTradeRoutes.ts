@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response, Router } from 'express';
 import ccxt from 'ccxt';
+import { normalizeExchangeId, DEFAULT_EXCHANGE } from '../services/activeExchange.ts';
 
 export interface RealTradeRouterContext {
   getGlobalSettings: () => any;
@@ -97,7 +98,7 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
       return res.status(400).json({ success: false, error: 'Failed to initialize exchange client' });
     }
     const formatSym = ctx.formatFuturesSymbol || ((s: string) => s);
-    const formattedSymbol = formatSym(symbol, config.exchange);
+    const formattedSymbol = formatSym(symbol, normalizeExchangeId(config.exchange));
     const closeSide = (side === 'BUY' || side === 'LONG' || side === 'buy' || side === 'long') ? 'sell' : 'buy';
     try {
       const execRetry = ctx.executeWithRetry || (async (fn: any) => fn());
@@ -123,26 +124,23 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
 
   // POST /api/settings/exchange/test
   router.post('/settings/exchange/test', async (req: Request, res: Response) => {
-    const exchange = req.body.exchange;
+    const exchange = normalizeExchangeId(req.body.exchange);
     const apiKey = req.body.apiKey?.trim();
     const apiSecret = req.body.apiSecret?.trim();
     const password = req.body.password?.trim();
     try {
-      if (exchange === 'mexc' && apiKey && apiKey.toLowerCase().includes('weex')) {
-        return res.json({ success: false, error: 'Вы выбрали биржу MEXC, но используете ключи от WEEX. Пожалуйста, выберите WEEX в списке бирж выше.' });
-      }
-      if (!(ccxt.pro as any)[exchange] && !(ccxt as any)[exchange]) {
+      const exClass = (ccxt.pro as any)[exchange] || (ccxt as any)[exchange];
+      if (!exClass) {
         return res.json({ success: false, error: 'Биржа не поддерживается' });
       }
-      const exClass = (ccxt.pro as any)[exchange] || (ccxt as any)[exchange];
-      const defaultOptions = { defaultType: exchange === 'weex' ? 'swap' : 'future' };
+      const defaultOptions = { defaultType: 'swap' };
       const client = new exClass({
         apiKey,
         secret: apiSecret,
         password,
         enableRateLimit: true,
         options: defaultOptions,
-        headers: exchange === 'weex' ? ctx.WEEX_HEADERS : undefined
+        headers: ctx.WEEX_HEADERS
       });
       
       // Check balance to verify auth
@@ -162,19 +160,11 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
       if (!config || !config.isEnabled || !config.apiKey) {
         return res.status(400).json({ success: false, error: 'API биржи не настроено' });
       }
-      const exClass = (ccxt as any)[config.exchange] as typeof ccxt.Exchange;
+      const exchange = normalizeExchangeId(config.exchange);
+      const exClass = (ccxt as any)[exchange] as typeof ccxt.Exchange;
       if (!exClass) return res.status(400).json({ success: false, error: 'Invalid exchange' });
       
-      const typesToCheck: string[] = [];
-      if (config.exchange === 'weex') {
-        typesToCheck.push('swap', 'future', 'spot');
-      } else if (config.exchange === 'bybit') {
-        typesToCheck.push('future', 'swap', 'unified', 'spot', 'funding');
-      } else if (config.exchange === 'mexc') {
-        typesToCheck.push('swap', 'future', 'spot');
-      } else {
-        typesToCheck.push('future', 'swap', 'spot', 'margin');
-      }
+      const typesToCheck: string[] = ['swap', 'future', 'spot'];
 
       let maxUsdt = 0;
       let balanceTypeUsed = 'unknown';
@@ -187,7 +177,7 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
             password: config.password,
             enableRateLimit: true,
             options: { defaultType: type },
-            headers: config.exchange === 'weex' ? ctx.WEEX_HEADERS : undefined
+            headers: ctx.WEEX_HEADERS
           });
           const balance = await client.fetchBalance();
           const anyBalance = balance as any;
@@ -204,14 +194,14 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
 
       if (maxUsdt === 0) {
         try {
-          const defaultOptions = { defaultType: config.exchange === 'weex' ? 'swap' : 'future' };
+          const defaultOptions = { defaultType: 'swap' };
           const client = new exClass({
             apiKey: config.apiKey,
             secret: config.apiSecret,
             password: config.password,
             enableRateLimit: true,
             options: defaultOptions,
-            headers: config.exchange === 'weex' ? ctx.WEEX_HEADERS : undefined
+            headers: ctx.WEEX_HEADERS
           });
           const balance = await client.fetchBalance({ type: defaultOptions.defaultType });
           const anyBalance = balance as any;
@@ -322,7 +312,7 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
           dbTrade = {
             id: newTradeId,
             symbol: pos.symbol,
-            exchange: config.exchange || 'real',
+            exchange: config.exchange ? normalizeExchangeId(config.exchange) : DEFAULT_EXCHANGE,
             entryPrice: entryPrice,
             amount: amountVal,
             leverage: leverageVal,

@@ -57,7 +57,6 @@ export interface SignalData {
   timestamp: number;
   patternName?: string;
   isLiquiditySweep?: boolean;
-  isBinanceCrossListed?: boolean;
   marketRegime?: MarketRegime;
   decisionTrace?: DecisionTrace;
 }
@@ -66,7 +65,6 @@ export type TradingMode = 'FUTURES' | 'SPOT' | 'COMBINED';
 
 export interface SystemTradingSettings {
   tradingMode: TradingMode;
-  excludeBinanceCrossListed: boolean;
   minVolumeUsdt: number;
   minAiScore: number;
   futuresLeverage: number;

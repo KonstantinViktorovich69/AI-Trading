@@ -193,4 +193,44 @@ describe('MarketDataCollectorService', () => {
       expect(obData.walls).toBeDefined();
     });
   });
+
+  describe('updateDerivativesData', () => {
+    it('fetches funding rates from WEEX and populates fundingRates and globalDerivatives', async () => {
+      const mockWeex = {
+        fetchFundingRates: vi.fn().mockResolvedValue({
+          'BTC/USDT:USDT': { fundingRate: 0.0001 },
+          'ETH/USDT': { fundingRate: -0.0002 }
+        })
+      };
+
+      const ctx = createMockContext({
+        getCcxtExchange: (name: string) => name === 'weex' ? mockWeex : null
+      });
+
+      await updateDerivativesData(ctx);
+
+      expect(mockWeex.fetchFundingRates).toHaveBeenCalled();
+      const rates = ctx.getFundingRates();
+      expect(rates['BTCUSDT']).toBe(0.0001);
+      expect(rates['ETHUSDT']).toBe(-0.0002);
+      expect(ctx.getGlobalDerivatives().fundingRates).toBeDefined();
+      expect(Object.keys(ctx.getOpenInterests()).length).toBe(0);
+    });
+
+    it('does not overwrite fundingRates if WEEX fetch fails or returns empty', async () => {
+      const mockWeex = {
+        fetchFundingRates: vi.fn().mockRejectedValue(new Error('Network error'))
+      };
+
+      const ctx = createMockContext({
+        getCcxtExchange: (name: string) => name === 'weex' ? mockWeex : null
+      });
+      ctx.getFundingRates()['BTCUSDT'] = 0.0005;
+
+      await updateDerivativesData(ctx);
+
+      // Previous rates must be preserved
+      expect(ctx.getFundingRates()['BTCUSDT']).toBe(0.0005);
+    });
+  });
 });

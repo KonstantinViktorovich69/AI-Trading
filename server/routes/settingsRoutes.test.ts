@@ -199,6 +199,47 @@ describe('Settings Router Security Tests', () => {
     expect(res.jsonData.data.isOteEntryEnabled).toBe(true);
   });
 
+  it('POST /settings normalizes legacy exchange values to weex and sanitizes session settings', async () => {
+    const realSettings: any = {
+      exchangeApiConfig: {
+        exchange: 'weex',
+        apiKey: 'key',
+        apiSecret: 'secret',
+        password: 'pass',
+        isEnabled: true
+      }
+    };
+
+    const mockCtx: Partial<SettingsRouterContext> = {
+      getGlobalSettings: vi.fn().mockReturnValue(realSettings),
+      getAutopilotFailedSymbols: vi.fn().mockReturnValue(new Set()),
+      getLastSanitizationStatus: vi.fn().mockReturnValue({ sanitized: false }),
+      saveSettings: vi.fn()
+    };
+
+    const router = createSettingsRouter(mockCtx as SettingsRouterContext);
+    const handler = getHandler(router, '/settings', 'post');
+    const res = createMockRes();
+
+    const req: any = {
+      body: {
+        exchangeApiConfig: {
+          exchange: 'mexc',
+          apiKey: 'key-2',
+          apiSecret: 'secret-2'
+        },
+        allowedSessions: ['INVALID', 'ASIAN', 'LONDON'],
+        blockedHoursUtc: [5, 5, 23, 0, -1, 100]
+      }
+    };
+
+    await handler(req, res);
+
+    expect(realSettings.exchangeApiConfig.exchange).toBe('weex');
+    expect(realSettings.allowedSessions).toEqual(['ASIAN', 'LONDON']);
+    expect(realSettings.blockedHoursUtc).toEqual([0, 5, 23]);
+  });
+
   it('GET /database/export masks settings in backup export', async () => {
     const cachedDB = {
       virtualTrades: [{ id: 'trade-1', symbol: 'BTCUSDT' }],

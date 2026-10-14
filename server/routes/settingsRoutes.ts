@@ -2,6 +2,8 @@ import express from 'express';
 import type { Request, Response, Router } from 'express';
 import ccxt from 'ccxt';
 import { sanitizeSettingsForClient, CONFIGURED_SECRET_MASK } from '../utils/settingsSanitizer.ts';
+import { normalizeExchangeId, DEFAULT_EXCHANGE, detectExchangeByCredentials } from '../services/activeExchange.ts';
+import { sanitizeAllowedSessions, sanitizeBlockedHours } from '../../src/lib/sessionTrading.ts';
 
 export interface SettingsRouterContext {
   getGlobalSettings: () => any;
@@ -133,7 +135,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     if (discordWebhooks) globalSettings.discordWebhooks = discordWebhooks;
     if (exchangeApiConfig) {
       const existingConfig = globalSettings.exchangeApiConfig || {
-        exchange: 'mexc',
+        exchange: DEFAULT_EXCHANGE,
         apiKey: '',
         apiSecret: '',
         password: '',
@@ -150,6 +152,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       globalSettings.exchangeApiConfig = {
         ...existingConfig,
         ...exchangeApiConfig,
+        exchange: normalizeExchangeId(exchangeApiConfig.exchange || existingConfig.exchange),
         apiKey: finalApiKey,
         apiSecret: finalApiSecret,
         password: finalPassword
@@ -240,17 +243,14 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     if (req.body.tradingMarketMode !== undefined) {
       globalSettings.tradingMarketMode = req.body.tradingMarketMode;
     }
-    if (req.body.excludeBinanceCrossListed !== undefined) {
-      globalSettings.excludeBinanceCrossListed = !!req.body.excludeBinanceCrossListed;
-    }
     if (req.body.isSessionFilterEnabled !== undefined) {
       globalSettings.isSessionFilterEnabled = !!req.body.isSessionFilterEnabled;
     }
-    if (Array.isArray(req.body.allowedSessions)) {
-      globalSettings.allowedSessions = req.body.allowedSessions;
+    if (req.body.allowedSessions !== undefined) {
+      globalSettings.allowedSessions = sanitizeAllowedSessions(req.body.allowedSessions, globalSettings.allowedSessions);
     }
-    if (Array.isArray(req.body.blockedHoursUtc)) {
-      globalSettings.blockedHoursUtc = req.body.blockedHoursUtc.map(Number);
+    if (req.body.blockedHoursUtc !== undefined) {
+      globalSettings.blockedHoursUtc = sanitizeBlockedHours(req.body.blockedHoursUtc);
     }
     if (req.body.sessionAdaptiveScoreBoost !== undefined) {
       globalSettings.sessionAdaptiveScoreBoost = !!req.body.sessionAdaptiveScoreBoost;
@@ -381,7 +381,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
 
   // POST /api/settings/exchange/test
   router.post('/settings/exchange/test', async (req: Request, res: Response) => {
-    const exchange = req.body.exchange;
+    const exchange = normalizeExchangeId(req.body.exchange);
     let apiKey = req.body.apiKey?.trim();
     let apiSecret = req.body.apiSecret?.trim();
     let password = req.body.password?.trim();
@@ -396,27 +396,47 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       password = existingConfig.password;
     }
     try {
-      if (exchange === 'mexc' && apiKey && apiKey.toLowerCase().includes('weex')) {
-        return res.json({ success: false, error: 'Вы выбрали биржу MEXC, но используете ключи от WEEX. Пожалуйста, выберите WEEX в списке бирж выше.' });
-      }
-      if (!(ccxt.pro as any)[exchange] && !(ccxt as any)[exchange]) {
+      const exClass = (ccxt.pro as any)[exchange] || (ccxt as any)[exchange];
+      if (!exClass) {
         return res.json({ success: false, error: 'Биржа не поддерживается' });
       }
-      const exClass = (ccxt.pro as any)[exchange] || (ccxt as any)[exchange];
-      const defaultOptions = { defaultType: exchange === 'weex' ? 'swap' : 'future' };
+      const defaultOptions = { defaultType: 'swap' };
       const client = new exClass({
         apiKey,
         secret: apiSecret,
         password,
         enableRateLimit: true,
         options: defaultOptions,
-        headers: exchange === 'weex' ? ctx.WEEX_HEADERS : undefined
+        headers: ctx.WEEX_HEADERS
       });
       await client.fetchBalance({ type: defaultOptions.defaultType });
       res.json({ success: true, message: 'Успешное подключение к бирже' });
     } catch (error) {
       res.json({ success: false, error: ctx.enrichExchangeError(error) });
     }
+  });
+
+  // POST /api/settings/exchange/detect
+  router.post('/settings/exchange/detect', async (req: Request, res: Response) => {
+    let apiKey = req.body.apiKey?.trim();
+    let apiSecret = req.body.apiSecret?.trim();
+    let password = req.body.password?.trim();
+    const existingConfig = ctx.getGlobalSettings().exchangeApiConfig;
+    if (apiKey === CONFIGURED_SECRET_MASK && existingConfig) {
+      apiKey = existingConfig.apiKey;
+    }
+    if (apiSecret === CONFIGURED_SECRET_MASK && existingConfig) {
+      apiSecret = existingConfig.apiSecret;
+    }
+    if (password === CONFIGURED_SECRET_MASK && existingConfig) {
+      password = existingConfig.password;
+    }
+
+    const result = await detectExchangeByCredentials(
+      { apiKey, apiSecret, password },
+      { headers: ctx.WEEX_HEADERS }
+    );
+    res.json(result);
   });
 
   // POST /api/settings/ai-auditor

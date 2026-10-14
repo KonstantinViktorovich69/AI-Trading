@@ -532,10 +532,6 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             try { incFunnel('shield_traditional_equity', 'traditional_equity_symbol', symbol); } catch {}
             continue; // Skip traditional stock equities (DELL, AAL, CRM, etc.) from crypto scalp engine
         }
-        if (globalSettings.excludeBinanceCrossListed === true && currentSig.isBinanceCrossListed === true) {
-            try { incFunnel('binance_cross', 'binance_cross_listed', symbol); } catch {}
-            continue; // Skip Binance cross-listed coins to protect against market maker manipulation
-        }
 
         const isBearishExpansion = marketRegime === 'BEAR_TREND' || marketRegime === 'DUMP';
         if (isBearishExpansion && finalAiScore < 85 && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'))) {
@@ -1196,11 +1192,6 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             );
             if (realKbEval.isBlocked) {
                 console.log(`[AUTOPILOT REAL KNOWLEDGE GUARD] Skipping real entry for ${symbol}: ${realKbEval.blockReason}`);
-                continue;
-            }
-
-            if (globalSettings.excludeBinanceCrossListed === true && currentSig.isBinanceCrossListed === true) {
-                console.log(`[AUTOPILOT REAL BINANCE GUARD] Skipping real entry for ${symbol}: Coin is cross-listed on Binance`);
                 continue;
             }
 

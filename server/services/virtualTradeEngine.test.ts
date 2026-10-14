@@ -38,7 +38,7 @@ describe('virtualTradeEngine service', () => {
       getVirtualTrades: () => [sampleTrade],
       getGlobalSettings: () => ({ isAiPartialCloseRealEnabled: true }),
       getGlobalCcxtTickers: () => ({
-        binance: {
+        weex: {
           'BTC/USDT': { last: 65000, bid: 64995, ask: 65005, close: 65000 }
         }
       }),
@@ -77,7 +77,7 @@ describe('virtualTradeEngine service', () => {
 
   it('updates current price from ticker and calculates PnL correctly', async () => {
     mockDeps.getGlobalCcxtTickers = () => ({
-      binance: {
+      weex: {
         'BTC/USDT': { last: 64000, bid: 63990, ask: 64010, close: 64000 }
       }
     });
@@ -90,7 +90,7 @@ describe('virtualTradeEngine service', () => {
 
   it('triggers Stop Loss when price exceeds SL for duration', async () => {
     mockDeps.getGlobalCcxtTickers = () => ({
-      binance: {
+      weex: {
         'BTC/USDT': { last: 66500, bid: 66490, ask: 66510, close: 66500 }
       }
     });
@@ -105,7 +105,7 @@ describe('virtualTradeEngine service', () => {
 
   it('executes DCA grid order when price crosses grid level', async () => {
     mockDeps.getGlobalCcxtTickers = () => ({
-      binance: {
+      weex: {
         'BTC/USDT': { last: 65600, bid: 65590, ask: 65610, close: 65600 }
       }
     });
@@ -120,7 +120,7 @@ describe('virtualTradeEngine service', () => {
   it('blocks DCA when price is within 0.5% of Stop Loss', async () => {
     // SL is 66000. 0.5% before SL is 65670. Setting price to 65700 (within 0.5% of SL).
     mockDeps.getGlobalCcxtTickers = () => ({
-      binance: {
+      weex: {
         'BTC/USDT': { last: 65700, bid: 65690, ask: 65710, close: 65700 }
       }
     });
@@ -142,7 +142,7 @@ describe('virtualTradeEngine service', () => {
     ];
 
     mockDeps.getGlobalCcxtTickers = () => ({
-      binance: {
+      weex: {
         'BTC/USDT': { last: 65550, bid: 65540, ask: 65560, close: 65550 }
       }
     });
@@ -161,7 +161,7 @@ describe('virtualTradeEngine service', () => {
 
     // Price recovers past entry (for SHORT, price falls below entry to 65100)
     mockDeps.getGlobalCcxtTickers = () => ({
-      binance: {
+      weex: {
         'BTC/USDT': { last: 65100, bid: 65090, ask: 65110, close: 65100 }
       }
     });

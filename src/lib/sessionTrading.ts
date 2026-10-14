@@ -23,9 +23,9 @@ export const TRADING_SESSIONS: Record<TradingSessionId, TradingSessionMeta> = {
     nameRu: 'Азиатская сессия (Токио / Гонконг)',
     startHourUtc: 0,
     endHourUtc: 8,
-    description: 'Низкая/средняя ликвидность на альтах, повышенный риск ложных пробоев и сбора стопов.',
+    description: 'Азиатские часы торгов. Умеренная ликвидность на основных парах и альтах.',
     liquidityRating: 'MEDIUM',
-    recommendedBias: 'HIGH_RISK'
+    recommendedBias: 'NEUTRAL'
   },
   LONDON: {
     id: 'LONDON',
@@ -33,7 +33,7 @@ export const TRADING_SESSIONS: Record<TradingSessionId, TradingSessionMeta> = {
     nameRu: 'Лондонская сессия (Европа)',
     startHourUtc: 8,
     endHourUtc: 13,
-    description: 'Приток институциональных объемов, формирование локальных внутридневных трендов.',
+    description: 'Европейские утренние часы торгов. Повышенная ликвидность основных рынков.',
     liquidityRating: 'HIGH',
     recommendedBias: 'NEUTRAL'
   },
@@ -43,9 +43,9 @@ export const TRADING_SESSIONS: Record<TradingSessionId, TradingSessionMeta> = {
     nameRu: 'Перекрытие Лондон + Нью-Йорк',
     startHourUtc: 13,
     endHourUtc: 17,
-    description: 'Пиковая мировая ликвидность. Исторически наивысший винрейт и чистая отработка паттернов.',
+    description: 'Пересечение европейской и американской сессий. Высокая ликвидность и объемы.',
     liquidityRating: 'HIGH',
-    recommendedBias: 'FAVORABLE'
+    recommendedBias: 'NEUTRAL'
   },
   NEW_YORK: {
     id: 'NEW_YORK',
@@ -53,7 +53,7 @@ export const TRADING_SESSIONS: Record<TradingSessionId, TradingSessionMeta> = {
     nameRu: 'Американская сессия (Нью-Йорк)',
     startHourUtc: 17,
     endHourUtc: 22,
-    description: 'Высокая волатильность, направленные импульсы (историческое преимущество Лонг-позиций).',
+    description: 'Американские дневные часы торгов. Высокая волатильность и объемы.',
     liquidityRating: 'HIGH',
     recommendedBias: 'NEUTRAL'
   },
@@ -63,11 +63,50 @@ export const TRADING_SESSIONS: Record<TradingSessionId, TradingSessionMeta> = {
     nameRu: 'Тихоокеанская / Ночная пауза',
     startHourUtc: 22,
     endHourUtc: 24,
-    description: 'Тонкий стакан, переходный период закрытия рынков США. Сниженная активность.',
+    description: 'Межсессионная пауза после закрытия рынков США. Сниженная активность.',
     liquidityRating: 'LOW',
-    recommendedBias: 'HIGH_RISK'
+    recommendedBias: 'NEUTRAL'
   }
 };
+
+export const TRADING_SESSION_IDS: TradingSessionId[] = Object.keys(TRADING_SESSIONS) as TradingSessionId[];
+
+export const PROFIT_FACTOR_CAP = 999;
+
+function filterValidSessionIds(arr: unknown): TradingSessionId[] {
+  if (!Array.isArray(arr)) return [];
+  const valid = new Set<TradingSessionId>();
+  for (const item of arr) {
+    if (typeof item === 'string' && TRADING_SESSION_IDS.includes(item as TradingSessionId)) {
+      valid.add(item as TradingSessionId);
+    }
+  }
+  return Array.from(valid);
+}
+
+export function sanitizeAllowedSessions(raw: unknown, prev?: unknown): TradingSessionId[] {
+  const parsedRaw = filterValidSessionIds(raw);
+  if (parsedRaw.length > 0) {
+    return parsedRaw;
+  }
+  const parsedPrev = filterValidSessionIds(prev);
+  if (parsedPrev.length > 0) {
+    return parsedPrev;
+  }
+  return [...TRADING_SESSION_IDS];
+}
+
+export function sanitizeBlockedHours(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const set = new Set<number>();
+  for (const item of raw) {
+    const num = typeof item === 'number' ? item : (typeof item === 'string' ? parseInt(item, 10) : NaN);
+    if (!isNaN(num) && Number.isInteger(num) && num >= 0 && num <= 23) {
+      set.add(num);
+    }
+  }
+  return Array.from(set).sort((a, b) => a - b);
+}
 
 export function getTradingSessionForHour(hourUtc: number): TradingSessionId {
   const h = ((hourUtc % 24) + 24) % 24;
@@ -102,12 +141,7 @@ export function getCurrentSessionInfo(time: number | Date = Date.now()): Current
   const utcTimeFormatted = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
   const localTimeFormatted = `${pad(d.getHours())}:${pad(d.getMinutes())} Local`;
 
-  let recommendation = session.description;
-  if (sessionId === 'OVERLAP_LONDON_NY') {
-    recommendation = 'Оптимальное окно для входов: максимальная ликвидность, высокая статистическая отработка.';
-  } else if (sessionId === 'ASIAN' && (utcHour >= 4 && utcHour <= 7)) {
-    recommendation = 'Период утреннего азиатского сброса / сбора стопов: повышенная осторожность для новых входов.';
-  }
+  const recommendation = 'Справочная информация о сессии. Влияние времени суток на результат бота пока статистически не подтверждено.';
 
   return {
     session,
@@ -159,14 +193,65 @@ const getTradeTimestamp = (t: any): number => {
 };
 
 const getTradePnl = (t: any): number => {
-  if (t.pnl !== undefined && t.pnl !== null) return Number(t.pnl);
-  if (t.realizedPnl !== undefined && t.realizedPnl !== null) return Number(t.realizedPnl);
-  if (t.pnlPercent !== undefined && t.pnlPercent !== null) {
+  if (typeof t.pnl === 'number' && isFinite(t.pnl)) return t.pnl;
+  if (typeof t.realizedPnl === 'number' && isFinite(t.realizedPnl)) return t.realizedPnl;
+  if (typeof t.pnlPercent === 'number' && isFinite(t.pnlPercent)) {
     const amt = Number(t.amount || t.initialAmount || 10);
-    return amt * (Number(t.pnlPercent) / 100);
+    return amt * (t.pnlPercent / 100);
   }
   return 0;
 };
+
+export function isSessionStatsTrade(t: any): boolean {
+  if (!t) return false;
+
+  // 1. Must be closed
+  if (t.status !== 'CLOSED') return false;
+
+  // 2. Not forced reset, system cleanup, gap affected or auto-learning
+  if (t.isForcedReset === true) return false;
+  if (t.isSystemCleanup === true) return false;
+  if (t.gapAffected === true) return false;
+  if (t.isAutoLearning === true) return false;
+
+  // 3. Close reason code (uppercase) not FORCED_RESET or MANUAL
+  if (t.closeReasonCode && typeof t.closeReasonCode === 'string') {
+    const code = t.closeReasonCode.toUpperCase().trim();
+    if (code === 'FORCED_RESET' || code === 'MANUAL') return false;
+  }
+
+  // 4. Data origin not SEED, HISTORICAL_SEED, FORCED_RESET, LEGACY_UNKNOWN
+  if (t.dataOrigin && typeof t.dataOrigin === 'string') {
+    const origin = t.dataOrigin.toUpperCase().trim();
+    if (origin === 'SEED' || origin === 'HISTORICAL_SEED' || origin === 'FORCED_RESET' || origin === 'LEGACY_UNKNOWN') {
+      return false;
+    }
+  }
+
+  // 5. ID does not start with hist_trade_ or seed_
+  if (typeof t.id === 'string' && (t.id.startsWith('hist_trade_') || t.id.startsWith('seed_'))) {
+    return false;
+  }
+
+  // 6. Funding farm exclusion (identical to isCleanLearningTrade)
+  if (t.mode === 'FUNDING_FARM' || t.isFundingFarm === true) return false;
+
+  // 7. Outliers: |closePrice/entryPrice - 1| > 0.25 or |pnlPercent| > 100
+  if (typeof t.entryPrice === 'number' && typeof t.closePrice === 'number' && t.entryPrice > 0) {
+    if (Math.abs(t.closePrice / t.entryPrice - 1) > 0.25) return false;
+  }
+  if (typeof t.pnlPercent === 'number' && isFinite(t.pnlPercent) && Math.abs(t.pnlPercent) > 100) {
+    return false;
+  }
+
+  // 8. Finite pnl check: must have at least one finite number among pnl / realizedPnl / pnlPercent
+  const hasFinitePnl = (typeof t.pnl === 'number' && isFinite(t.pnl)) ||
+                       (typeof t.realizedPnl === 'number' && isFinite(t.realizedPnl)) ||
+                       (typeof t.pnlPercent === 'number' && isFinite(t.pnlPercent));
+  if (!hasFinitePnl) return false;
+
+  return true;
+}
 
 export function calculateSessionStats(trades: any[]): Record<TradingSessionId, SessionMetrics> {
   const sessions: Record<TradingSessionId, SessionMetrics> = {
@@ -177,9 +262,25 @@ export function calculateSessionStats(trades: any[]): Record<TradingSessionId, S
     PACIFIC_OFF_HOURS: createEmptySessionMetrics('PACIFIC_OFF_HOURS')
   };
 
-  const closedTrades = (trades || []).filter(t => t && t.status === 'CLOSED');
+  const grossProfits: Record<TradingSessionId, number> = {
+    ASIAN: 0,
+    LONDON: 0,
+    OVERLAP_LONDON_NY: 0,
+    NEW_YORK: 0,
+    PACIFIC_OFF_HOURS: 0
+  };
 
-  for (const t of closedTrades) {
+  const grossLosses: Record<TradingSessionId, number> = {
+    ASIAN: 0,
+    LONDON: 0,
+    OVERLAP_LONDON_NY: 0,
+    NEW_YORK: 0,
+    PACIFIC_OFF_HOURS: 0
+  };
+
+  const validTrades = (trades || []).filter(t => isSessionStatsTrade(t));
+
+  for (const t of validTrades) {
     const ts = getTradeTimestamp(t);
     if (!ts) continue;
     const h = new Date(ts).getUTCHours();
@@ -194,8 +295,10 @@ export function calculateSessionStats(trades: any[]): Record<TradingSessionId, S
     sm.totalPnl += pnl;
     if (isWin) {
       sm.winningTrades++;
+      grossProfits[sessionId] += pnl;
     } else if (pnl < 0) {
       sm.losingTrades++;
+      grossLosses[sessionId] += Math.abs(pnl);
     }
 
     if (isShort) {
@@ -214,6 +317,16 @@ export function calculateSessionStats(trades: any[]): Record<TradingSessionId, S
     s.totalPnl = Number(s.totalPnl.toFixed(2));
     s.shortWinRate = s.shortCount > 0 ? Number(((s.shortWins / s.shortCount) * 100).toFixed(1)) : 0;
     s.longWinRate = s.longCount > 0 ? Number(((s.longWins / s.longCount) * 100).toFixed(1)) : 0;
+
+    const gp = grossProfits[key];
+    const gl = grossLosses[key];
+    if (gl === 0 && gp > 0) {
+      s.profitFactor = PROFIT_FACTOR_CAP;
+    } else if (gl > 0 && gp > 0) {
+      s.profitFactor = Number((gp / gl).toFixed(2));
+    } else {
+      s.profitFactor = 0;
+    }
   }
 
   return sessions;
@@ -255,8 +368,8 @@ export function calculateHourlyStats(trades: any[]): HourlyMetrics[] {
     });
   }
 
-  const closedTrades = (trades || []).filter(t => t && t.status === 'CLOSED');
-  for (const t of closedTrades) {
+  const validTrades = (trades || []).filter(t => isSessionStatsTrade(t));
+  for (const t of validTrades) {
     const ts = getTradeTimestamp(t);
     if (!ts) continue;
     const h = new Date(ts).getUTCHours();
@@ -325,6 +438,7 @@ export function evaluateSessionFilter(
 
   let scoreAdjustment = 0;
   if (settings.sessionAdaptiveScoreBoost) {
+    // эвристика, данными не подтверждена, по умолчанию выключено
     if (session === 'OVERLAP_LONDON_NY') {
       scoreAdjustment = 3;
     } else if (session === 'ASIAN') {

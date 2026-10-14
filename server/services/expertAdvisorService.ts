@@ -1,5 +1,6 @@
 import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
+import { normalizeExchangeId } from './activeExchange.ts';
 
 export interface ExpertAdvisorDependencies {
   getVirtualTrades: () => any[];
@@ -351,7 +352,7 @@ export async function runAiExpertTraderLoop(deps: ExpertAdvisorDependencies): Pr
         continue;
       }
 
-      const ex = trade.exchange || 'mexc';
+      const ex = normalizeExchangeId(trade.exchange);
       const tickersForEx = globalCcxtTickers[ex] || {};
       const ticker = findTickerInMap(trade.symbol, tickersForEx);
       const currentPrice = ticker ? (ticker.last || ticker.close || trade.entryPrice) : trade.entryPrice;

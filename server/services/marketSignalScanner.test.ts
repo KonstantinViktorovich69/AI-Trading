@@ -131,7 +131,6 @@ describe('marketSignalScanner', () => {
           liquiditySweepWickThreshold: 0.60,
           isLateShortFilterEnabled: true
         }),
-        isBinanceCrossListed: vi.fn().mockReturnValue(true),
         setCachedSignals: vi.fn((obj) => { cachedSignals = obj; }),
         emitSignalsUpdated: vi.fn(),
         runAutopilotAndVirtualTradeEntry: vi.fn().mockResolvedValue(undefined),

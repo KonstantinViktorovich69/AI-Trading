@@ -64,7 +64,7 @@ describe('quantRiskEngine', () => {
           }
         }),
         getGlobalCcxtTickers: () => ({
-          binance: {
+          weex: {
             'BTC/USDT': { quoteVolume: 2400000 }
           }
         }),
@@ -131,12 +131,12 @@ describe('quantRiskEngine', () => {
       const cache: any = {};
       const mockContext: QuantRiskEngineContext = {
         getGlobalTrueOHLCV: () => ({}),
-        getGlobalCcxtTickers: () => ({}),
-        getWsTickers: () => ({
-          Binance: {
-            'BTC/USDT': { change: 18, quoteVolume: 5000000 }
+        getGlobalCcxtTickers: () => ({
+          weex: {
+            'BTC/USDT:USDT': { percentage: 18, quoteVolume: 5000000 }
           }
         }),
+        getWsTickers: () => ({}),
         getOrderBookImbalance: () => ({}),
         getModelWeights: () => ({}),
         getAiKnowledgeBase: () => [],

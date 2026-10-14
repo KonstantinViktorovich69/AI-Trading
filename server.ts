@@ -25,8 +25,7 @@ import { atomicWriteJson, validateDbIntegrity, getAtomicStoreRevision, dbAtomicS
 import { calculateExecutionPriceWithSlippage, calculateTradingFee, calculateNetPnl } from './server/slippageFeeSimulator.ts';
 import { withRateLimitRetry } from './server/rateLimiter.ts';
 import { isPostgresConfigured, syncTradesToPg, syncKnowledgeToPg, loadAllFromPg } from './server/postgresDb.ts';
-import { setBinanceSymbols, isBinanceCrossListed, evaluateSignalByMarketType, analyzeSpotAccumulationPatterns, updatePatternBlacklistFromStats, getBlacklistedPatterns } from './server/services/signalEngine.ts';
-import { validatePaperTradeInput } from './server/tradeInputValidator.ts';
+import { evaluateSignalByMarketType, analyzeSpotAccumulationPatterns, updatePatternBlacklistFromStats, getBlacklistedPatterns } from './server/services/signalEngine.ts';
 import { validateApiKey, getAuthMode, authMiddleware } from './server/middleware/auth.ts';
 import { evaluateStrategySignal, evaluateEntryDecision, getApprovedExecutionSide } from './server/services/strategyEngine.ts';
 import { createAiFallbackDecision, evaluateCommitteeConsensus, type AgentDecisionEnvelope } from './server/services/agentEngine.ts';
@@ -1381,7 +1380,6 @@ function getMarketSignalScannerContext(): MarketSignalScannerContext {
     getGlobalTrueOHLCV: () => GLOBAL_TRUE_OHLCV,
     getGlobalCcxtTickers: () => GLOBAL_CCXT_TICKERS,
     getGlobalSettings: () => globalSettings,
-    isBinanceCrossListed: (sym: string) => isBinanceCrossListed(sym),
     setCachedSignals: (cacheObj) => {
       CACHE.signals = cacheObj;
     },
