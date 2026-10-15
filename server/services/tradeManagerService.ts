@@ -340,8 +340,9 @@ export class TradeManagerService {
               }
             }
           }
-          applyPendingGapsToOpenTrades(virtualTrades, this.deps.saveTradeDB);
         }
+
+        applyPendingGapsToOpenTrades(virtualTrades, this.deps.saveTradeDB);
       }
     } catch (gapErr) {
       console.warn('[WATCHDOG] Failed to apply pending gaps to open trades:', gapErr);

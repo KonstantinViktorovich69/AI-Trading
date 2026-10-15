@@ -310,13 +310,8 @@ export function applyPendingGapsToOpenTrades(
         const tradeOpenTime = trade.openTime || trade.createdAt || 0;
         if (tradeOpenTime <= gap.from) {
           trade.gapEvents = trade.gapEvents || [];
-          trade.appliedGapIds = trade.appliedGapIds || [];
-          const alreadyMarked = trade.appliedGapIds.includes(gap.id) || trade.gapEvents.some((e: any) => e.id === gap.id);
+          const alreadyMarked = trade.gapEvents.some((e: any) => e.id === gap.id);
           if (!alreadyMarked) {
-            trade.appliedGapIds.push(gap.id);
-            if (trade.appliedGapIds.length > 500) {
-              trade.appliedGapIds = trade.appliedGapIds.slice(-500);
-            }
             trade.gapAffected = true;
             trade.gapFrom = typeof trade.gapFrom === 'number' ? Math.min(trade.gapFrom, gap.from) : gap.from;
             trade.gapTo = typeof trade.gapTo === 'number' ? Math.max(trade.gapTo, gap.to) : gap.to;

@@ -1,6 +1,6 @@
 {
-  "virtualBalance": 107.04,
-  "startOfDayBalance": 107.04,
+  "virtualBalance": 105.14,
+  "startOfDayBalance": 133.84,
   "telegramBots": [
     {
       "muteWatchdog": true,
@@ -65,7 +65,6 @@
   "maxSameDirectionPositions": 3,
   "tradingExecutionMode": "auto",
   "tradingMarketMode": "FUTURES",
-  "excludeBinanceCrossListed": false,
   "maxSpotAllocationPct": 10,
   "isSessionFilterEnabled": false,
   "allowedSessions": [
@@ -77,12 +76,13 @@
   ],
   "blockedHoursUtc": [],
   "sessionAdaptiveScoreBoost": false,
+  "excludeBinanceCrossListed": false,
   "modelStatusMetadata": {
-    "totalLearnedTrades": 462,
-    "lastRetrained": 1791959174284
+    "totalLearnedTrades": 439,
+    "lastRetrained": 1792058518017
   },
-  "stateRevision": 143,
-  "updatedAt": 1791959174286,
+  "stateRevision": 147,
+  "updatedAt": 1792058518018,
   "virtualEquity": 133.84,
   "uiStatsResetTimestamp": 1791122286530
 }

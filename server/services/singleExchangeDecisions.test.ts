@@ -225,20 +225,22 @@ describe('Single Exchange (WEEX Only) Decisions & Strategy Isolation', () => {
       const signals: SignalData[] = [
         {
           symbol: 'BTCUSDT',
+          exchange: 'weex',
           price: 65000,
           change24h: 3.5,
           volume24h: 1000000,
           signal: 'SHORT',
-          score: 85,
+          aiScore: 85,
           timestamp: Date.now()
         },
         {
           symbol: 'LOWVOLUSDT',
+          exchange: 'weex',
           price: 1.0,
           change24h: 1.0,
           volume24h: 10000, // < 50,000 and abs(change) < 15% -> filtered out
           signal: 'SHORT',
-          score: 80,
+          aiScore: 80,
           timestamp: Date.now()
         }
       ];

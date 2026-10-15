@@ -623,6 +623,10 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading, uiStatsRe
           })}
         </div>
 
+        <p className="text-[10px] text-zinc-500 -mt-1">
+          В статистику не входят seed, принудительные закрытия и аномальные сделки.
+        </p>
+
         {/* Почасовое распределение 24h (UTC) */}
         <div>
           <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-2">
@@ -734,6 +738,10 @@ export function AnalyticsTab({ trades, onRefresh, onExport, isLoading, uiStatsRe
                   <div className="text-zinc-500">+3 pts к AI score в Лондон-NY overlap; штраф -4 в Азии и -3 для Short в NY.</div>
                 </div>
               </label>
+
+              <p className="text-[10px] text-zinc-500">
+                Фильтр выключен по умолчанию. На накопленных данных (проверка от 13.10.2026) зависимость результата от времени суток статистически не подтверждена. Используйте как эксперимент, а не как рекомендацию.
+              </p>
             </div>
 
             {/* Session Checkboxes */}

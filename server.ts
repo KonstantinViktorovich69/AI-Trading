@@ -25,6 +25,7 @@ import { atomicWriteJson, validateDbIntegrity, getAtomicStoreRevision, dbAtomicS
 import { calculateExecutionPriceWithSlippage, calculateTradingFee, calculateNetPnl } from './server/slippageFeeSimulator.ts';
 import { withRateLimitRetry } from './server/rateLimiter.ts';
 import { isPostgresConfigured, syncTradesToPg, syncKnowledgeToPg, loadAllFromPg } from './server/postgresDb.ts';
+import { validatePaperTradeInput } from './server/tradeInputValidator.ts';
 import { evaluateSignalByMarketType, analyzeSpotAccumulationPatterns, updatePatternBlacklistFromStats, getBlacklistedPatterns } from './server/services/signalEngine.ts';
 import { validateApiKey, getAuthMode, authMiddleware } from './server/middleware/auth.ts';
 import { evaluateStrategySignal, evaluateEntryDecision, getApprovedExecutionSide } from './server/services/strategyEngine.ts';

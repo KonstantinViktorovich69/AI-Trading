@@ -75,7 +75,6 @@ export class AtomicStateStore {
   private writeQueue: Promise<any> = Promise.resolve();
 
   private currentRevision: number = 0;
-  private lastBackupRotateTime: number = 0;
 
   constructor(filePath: string, options: AtomicStoreOptions = {}) {
     this.filePath = path.resolve(filePath);
@@ -400,12 +399,6 @@ export class AtomicStateStore {
       if (!fs.existsSync(this.filePath)) return;
       const stats = fs.statSync(this.filePath);
       if (stats.size < 10) return; // Never backup empty or corrupt 0-byte file
-
-      const now = Date.now();
-      if (now - this.lastBackupRotateTime < 10000) {
-        return;
-      }
-      this.lastBackupRotateTime = now;
 
       const backupPath = `${this.filePath}.bak_${Date.now()}`;
       fs.copyFileSync(this.filePath, backupPath);
