@@ -32,14 +32,14 @@ describe('RealTradeEngine Service', () => {
           multiAccounts: [
             {
               isEnabled: true,
-              exchange: 'bybit',
+              exchange: 'okx',
               apiKey: 'key_multi_1',
               apiSecret: 'sec_multi_1',
-              name: 'Bybit Mirror'
+              name: 'OKX Mirror'
             },
             {
               isEnabled: false,
-              exchange: 'mexc',
+              exchange: 'okx',
               apiKey: 'key_disabled'
             }
           ]
@@ -53,8 +53,8 @@ describe('RealTradeEngine Service', () => {
       expect(accounts[0].id).toBe('primary');
 
       expect(accounts[1].apiKey).toBe('key_multi_1');
-      expect(accounts[1].exchange).toBe('bybit');
-      expect(accounts[1].name).toBe('Bybit Mirror');
+      expect(accounts[1].exchange).toBe('okx');
+      expect(accounts[1].name).toBe('OKX Mirror');
     });
 
     it('avoids duplicate apiKeys across primary and multi accounts', () => {
@@ -81,18 +81,18 @@ describe('RealTradeEngine Service', () => {
 
   describe('getCcxtClient and pool', () => {
     it('returns null if real trading is not allowed', () => {
-      const config = { exchange: 'binance', apiKey: 'abc', apiSecret: 'def' };
+      const config = { exchange: 'okx', apiKey: 'abc', apiSecret: 'def' };
       const client = getCcxtClient(config, false);
       expect(client).toBeNull();
     });
 
     it('returns null if config or apiKey is missing', () => {
       expect(getCcxtClient(null as any, true)).toBeNull();
-      expect(getCcxtClient({ exchange: 'binance', apiKey: '' }, true)).toBeNull();
+      expect(getCcxtClient({ exchange: 'okx', apiKey: '' }, true)).toBeNull();
     });
 
     it('creates and pools instance for supported exchange', () => {
-      const config = { exchange: 'binance', apiKey: 'test_key_1', apiSecret: 'test_sec_1' };
+      const config = { exchange: 'okx', apiKey: 'test_key_1', apiSecret: 'test_sec_1' };
       const client1 = getCcxtClient(config, true);
       expect(client1).not.toBeNull();
       expect(getCcxtClientConstructionCount()).toBe(1);

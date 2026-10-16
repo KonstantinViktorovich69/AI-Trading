@@ -74,7 +74,7 @@ export async function initPostgresSchema(): Promise<boolean> {
         CREATE TABLE IF NOT EXISTS trades (
           id VARCHAR(128) PRIMARY KEY,
           symbol VARCHAR(64) NOT NULL,
-          exchange VARCHAR(64) DEFAULT 'bybit',
+          exchange VARCHAR(64) DEFAULT 'weex',
           side VARCHAR(16) NOT NULL,
           status VARCHAR(16) NOT NULL,
           entry_price NUMERIC(20, 8),
@@ -195,7 +195,7 @@ export async function syncTradesToPg(trades: any[]): Promise<number> {
         await client.query(queryText, [
           String(t.id),
           t.symbol || 'UNKNOWN',
-          t.exchange || 'bybit',
+          t.exchange || 'weex',
           t.side || 'SHORT',
           t.status || 'OPEN',
           t.entryPrice ?? null,

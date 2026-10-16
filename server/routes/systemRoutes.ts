@@ -26,7 +26,7 @@ export interface SystemRouterContext {
   getEventLoopLagMs?: () => number;
   getWatchdogStatus?: () => any;
   getServerStartTime?: () => number;
-  getLatencyInfo?: () => { weexLatencyMs: number; binanceLatencyMs: number };
+  getLatencyInfo?: () => { weexLatencyMs: number };
 }
 
 export function createSystemRouter(ctx: SystemRouterContext): Router {
@@ -56,8 +56,7 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
       const virtualTrades = ctx.getVirtualTrades();
       const directionalStats = DirectionalMemoryAnalyticsService.generateSplitMemoryReport(virtualTrades);
       const latencies = ctx.getLatencyInfo ? ctx.getLatencyInfo() : {
-        weexLatencyMs: (globalThis as any).weexLatencyMs || 38,
-        binanceLatencyMs: (globalThis as any).binanceLatencyMs || 24
+        weexLatencyMs: (globalThis as any).weexLatencyMs || 38
       };
 
       const audit = {
@@ -66,7 +65,6 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         connectivity: {
           status: 'ONLINE',
           weexLatencyMs: latencies.weexLatencyMs,
-          binanceLatencyMs: latencies.binanceLatencyMs,
           currentPingMs: ctx.getCurrentExchangePingMs()
         },
         marketScanner: {
@@ -114,14 +112,12 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
   router.get('/ping', (req: Request, res: Response) => {
     const t0 = Date.now();
     const latencies = ctx.getLatencyInfo ? ctx.getLatencyInfo() : {
-      weexLatencyMs: (globalThis as any).weexLatencyMs || 38,
-      binanceLatencyMs: (globalThis as any).binanceLatencyMs || 24
+      weexLatencyMs: (globalThis as any).weexLatencyMs || 38
     };
     res.json({
       success: true,
       serverTime: t0,
-      weexLatency: latencies.weexLatencyMs,
-      binanceLatency: latencies.binanceLatencyMs
+      weexLatency: latencies.weexLatencyMs
     });
   });
 
@@ -153,8 +149,7 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
     const signalsCache = ctx.getSignalsCache();
     const serverStartTime = ctx.getServerStartTime ? ctx.getServerStartTime() : ((globalThis as any).SERVER_START_TIME || Date.now());
     const latencies = ctx.getLatencyInfo ? ctx.getLatencyInfo() : {
-      weexLatencyMs: (globalThis as any).weexLatencyMs || 38,
-      binanceLatencyMs: (globalThis as any).binanceLatencyMs || 24
+      weexLatencyMs: (globalThis as any).weexLatencyMs || 38
     };
 
     res.json({
@@ -171,10 +166,8 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
       activePositionsCount: activeCount,
       signalsCount: signalsCache?.data?.length || 0,
       weexLatencyMs: latencies.weexLatencyMs,
-      binanceLatencyMs: latencies.binanceLatencyMs,
       wsLatenciesMs: {
-        weex: latencies.weexLatencyMs,
-        binance: latencies.binanceLatencyMs
+        weex: latencies.weexLatencyMs
       }
     });
   });

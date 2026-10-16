@@ -707,14 +707,5 @@ Each object must contain these keys exactly:
     }
   });
 
-  // GET /api/debug-mexc
-  router.get('/debug-mexc', (req: Request, res: Response) => {
-    const globalCcxtTickers = ctx.getGlobalCcxtTickers();
-    const c = globalCcxtTickers['mexc'] ? Object.keys(globalCcxtTickers['mexc']).length : 0;
-    const mKeys = globalCcxtTickers['mexc'] ? Object.keys(globalCcxtTickers['mexc']).filter(k => k.toLowerCase().includes('m')) : [];
-
-    res.json({ mexcTickersCount: c, keysSample: c > 0 ? Object.keys(globalCcxtTickers['mexc']).slice(0, 5) : [], mKeys });
-  });
-
   return router;
 }

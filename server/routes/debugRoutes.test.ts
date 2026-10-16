@@ -46,9 +46,6 @@ describe('Debug Router Handlers', () => {
           percentage: 5.5,
           quoteVolume: 1000000
         }
-      },
-      mexc: {
-        'BTC/USDT': { symbol: 'BTC/USDT', last: 65000 }
       }
     }),
     getGlobalSettings: vi.fn().mockReturnValue({
@@ -118,15 +115,6 @@ describe('Debug Router Handlers', () => {
     expect(res.jsonData.success).toBe(true);
     expect(Array.isArray(res.jsonData.diagnostics)).toBe(true);
     expect(res.jsonData.diagnostics[0].symbol).toBe('BTCUSDT');
-  });
-
-  it('handles GET /debug-mexc', async () => {
-    const handler = getHandler(router, '/debug-mexc', 'get');
-    const req: any = {};
-    const res = createMockRes();
-    await handler(req, res);
-
-    expect(res.jsonData.mexcTickersCount).toBe(1);
   });
 
   it('handles POST /debug/inject-test-signal', async () => {

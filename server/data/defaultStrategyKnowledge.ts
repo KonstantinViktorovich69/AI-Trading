@@ -150,7 +150,7 @@ export function formatFuturesSymbol(symbol: string, exchange?: string): string {
     }
   }
 
-  if (exchange === 'mexc' || exchange === 'weex') {
+  if (exchange === 'weex') {
     if (cleanSym.includes('/') && cleanSym.includes(':')) {
       return cleanSym;
     }

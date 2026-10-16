@@ -29,13 +29,7 @@ export function getExchangeInstance(exchangeName: string): any | null {
   }
 
   try {
-    if (name === 'binance' && ccxt.binance) {
-      initializedExchanges[name] = new ccxt.binance({ enableRateLimit: true, timeout: 10000 });
-    } else if (name === 'bybit' && ccxt.bybit) {
-      initializedExchanges[name] = new ccxt.bybit({ enableRateLimit: true, timeout: 10000 });
-    } else if (name === 'mexc' && ccxt.mexc) {
-      initializedExchanges[name] = new ccxt.mexc({ enableRateLimit: true, timeout: 10000 });
-    } else if (name === 'okx' && ccxt.okx) {
+    if (name === 'okx' && ccxt.okx) {
       initializedExchanges[name] = new ccxt.okx({ enableRateLimit: true, timeout: 10000 });
     } else if (name === 'gateio' && (ccxt.gate || ccxt.gateio)) {
       const GateClass = ccxt.gate || ccxt.gateio;

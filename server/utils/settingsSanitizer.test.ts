@@ -32,7 +32,7 @@ describe('sanitizeSettingsForClient', () => {
   it('keeps empty exchange secrets as empty strings', () => {
     const rawSettings = {
       exchangeApiConfig: {
-        exchange: 'mexc',
+        exchange: 'weex',
         apiKey: '',
         apiSecret: '   ',
         password: null,

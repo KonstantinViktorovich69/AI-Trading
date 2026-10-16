@@ -6,7 +6,7 @@ async function test() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       symbol: "BTC/USDT",
-      exchange: "binance",
+      exchange: "weex",
       price: 60000,
       change24h: 1,
       volatility: 1,

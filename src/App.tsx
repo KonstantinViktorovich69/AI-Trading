@@ -1277,7 +1277,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Market Modes & Binance Protection */}
+                  {/* Market Modes */}
                   <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-4">
                     <div>
                       <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2 mb-1">

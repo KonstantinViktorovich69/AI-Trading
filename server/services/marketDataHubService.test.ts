@@ -23,7 +23,7 @@ describe('MarketDataHubService', () => {
     const hub = new MarketDataHubService(mockDeps);
     expect(hub.getPairs().length).toBeGreaterThan(10);
     expect(hub.getCcxtExchanges().weex).toBeDefined();
-    expect(hub.getExchangeInstance('binance')).toBeDefined();
+    expect(hub.getExchangeInstance('okx')).toBeDefined();
 
     // Test findTickerInMap variations
     const tickers = {
@@ -48,9 +48,6 @@ describe('MarketDataHubService', () => {
     // Test getTickerSyncContext
     const ctx = hub.getTickerSyncContext();
     expect(ctx.getCcxtExchanges()).toBe(hub.getCcxtExchanges());
-    expect(ctx.isBinanceGeoblocked()).toBe(false);
-    ctx.setBinanceGeoblocked(true);
-    expect(hub.getIsBinanceGeoblocked()).toBe(true);
 
     // Test price emission throttling
     hub.throttlePriceEmit();

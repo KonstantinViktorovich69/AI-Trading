@@ -310,7 +310,7 @@ const modelStatus = {
   isTrainingActive: false
 };
 
-const wsTickers: Record<string, Record<string, Ticker>> = { Binance: {}, Bybit: {}, Mexc: {}, Weex: {} };
+const wsTickers: Record<string, Record<string, Ticker>> = { Weex: {} };
 const historyData: Record<string, CoinHistory[]> = {};
 const fundingRates: Record<string, number> = {};
 const openInterests: Record<string, number> = {};
@@ -402,7 +402,6 @@ marketDataHubService.initMarkets();
 
 const ccxtExchanges: Record<string, Exchange> = marketDataHubService.getCcxtExchanges();
 const restBlockedExchanges: Set<string> = marketDataHubService.getRestBlockedExchanges();
-let isBinanceGeoblocked = marketDataHubService.getIsBinanceGeoblocked();
 const PAIRS = marketDataHubService.getPairs();
 const EXCHANGE_SYMBOLS: Record<string, Record<string, string>> = marketDataHubService.getExchangeSymbols();
 
@@ -439,18 +438,6 @@ function throttlePriceEmit() {
 }
 
 const exchangeWsManager = marketDataHubService.getExchangeWsManager();
-
-function startMexcWS(retryCount = 0) {
-  marketDataHubService.startMexcWS(retryCount);
-}
-
-function startBinanceWS(retryCount = 0) {
-  marketDataHubService.startBinanceWS(retryCount);
-}
-
-function startBybitWS(retryCount = 0) {
-  marketDataHubService.startBybitWS(retryCount);
-}
 
 // ==========================================
 // АДДИТИВНЫЕ РАСШИРЕНИЯ КЛАССА TIER-1 QUANT:
@@ -1042,9 +1029,7 @@ function sendFormattedTelegramSignal(params: Parameters<typeof serviceSendFormat
   serviceSendFormattedTelegramSignal(params, (text) => sendTelegramMessage(text));
 }
 
-function startFuturesLiquidationWS(retryCount = 0) {
-  exchangeWsManager.startFuturesLiquidationWS(retryCount);
-}
+
 
 if (isMainThread) {
   setInterval(() => {
@@ -1074,8 +1059,6 @@ let mainThreadScannerStarted = false;
 function startMainThreadScannerFallback() {
   if (!mainThreadScannerStarted) {
     mainThreadScannerStarted = true;
-    startFuturesLiquidationWS();
-    startBinanceScannerWS();
 
     setInterval(updateGlobalTickers, 12000);
     updateGlobalTickers().then(() => {
@@ -1144,9 +1127,6 @@ if (isMainThread) {
     }
 
     // Boot up all background WS and background intervals
-    startFuturesLiquidationWS();
-    startBinanceScannerWS();
-    
     setInterval(updateGlobalTickers, 12000);
     updateGlobalTickers();
     
@@ -1334,8 +1314,8 @@ const marketDataCollectorCtx: MarketDataCollectorContext = {
   getCacheSignals: () => CACHE.signals,
   getVirtualTrades: () => virtualTrades,
   getCcxtExchange: (name: string) => marketDataHubService.getExchangeInstance(name),
-  isBinanceGeoblocked: () => marketDataHubService.getIsBinanceGeoblocked(),
-  setBinanceGeoblocked: (val: boolean) => { marketDataHubService.setIsBinanceGeoblocked(val); },
+  isBinanceGeoblocked: () => false,
+  setBinanceGeoblocked: () => {},
   isMainThread: () => isMainThread
 };
 
@@ -1366,13 +1346,7 @@ function getWallAdjustedTp(symbol: string, isSell: boolean, currentPrice: number
   return marketDataCollectorService.getWallAdjustedTp(symbol, isSell, currentPrice, targetTpPrice);
 }
 
-function startBinanceScannerWS(retryCount = 0) {
-  exchangeWsManager.startBinanceScannerWS(retryCount);
-}
-// startBinanceScannerWS();
-if (!isMainThread) {
-  startBinanceScannerWS();
-}
+
 
 
 
@@ -1460,8 +1434,6 @@ const marketContext: MarketRouterContext = {
   getCcxtExchanges: () => ccxtExchanges,
   getOhlcvCache: () => ohlcvCache,
   getGlobalSettings: () => globalSettings,
-  getIsBinanceGeoblocked: () => marketDataHubService.getIsBinanceGeoblocked(),
-  setIsBinanceGeoblocked: (val: boolean) => { marketDataHubService.setIsBinanceGeoblocked(val); },
   getRestBlockedExchanges: () => marketDataHubService.getRestBlockedExchanges(),
   log400: (path: string, error: string) => log400(path, error)
 };
@@ -1684,8 +1656,7 @@ const systemContext: SystemRouterContext = {
   getWatchdogStatus: () => exchangeWsManager.getWatchdogStatus(),
   getServerStartTime: () => ((globalThis as any).SERVER_START_TIME || Date.now()),
   getLatencyInfo: () => ({
-    weexLatencyMs: (globalThis as any).weexLatencyMs || 38,
-    binanceLatencyMs: (globalThis as any).binanceLatencyMs || 24
+    weexLatencyMs: (globalThis as any).weexLatencyMs || 38
   })
 };
 

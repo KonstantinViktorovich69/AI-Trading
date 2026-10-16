@@ -147,7 +147,7 @@ describe('createExpressApp production debug routes guard', () => {
       getEventLoopLagMs: () => 0,
       getWatchdogStatus: () => ({}),
       getServerStartTime: () => Date.now(),
-      getLatencyInfo: () => ({ weexLatencyMs: 30, binanceLatencyMs: 20 }),
+      getLatencyInfo: () => ({ weexLatencyMs: 30 }),
       getGlobalTrueOhlcv: () => ({}),
       getCcxtExchanges: () => ({}),
       getRestBlockedExchanges: () => new Set(),
@@ -169,9 +169,7 @@ describe('createExpressApp production debug routes guard', () => {
       getExchangeLink: () => '',
       getTradingAdvice: () => ({}),
       getChartImageHtml: () => '',
-      getCcxtClientConstructionCount: () => 0,
-      getIsBinanceGeoblocked: () => false,
-      setIsBinanceGeoblocked: vi.fn()
+      getCcxtClientConstructionCount: () => 0
     };
 
     const app = createExpressApp({

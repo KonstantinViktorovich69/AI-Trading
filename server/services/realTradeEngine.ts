@@ -76,10 +76,7 @@ export function getCcxtClient(
   }
   if (!config || !config.apiKey) return null;
   const exchange = (config.exchange || '').toLowerCase();
-  let cleanPassword = config.password || config.passphrase;
-  if (['bybit', 'binance', 'mexc'].includes(exchange)) {
-    cleanPassword = undefined;
-  }
+  const cleanPassword = config.password || config.passphrase;
   const secret = config.apiSecret || config.secretKey || '';
   const key = `${exchange}:${config.apiKey}:${secret ? secret.slice(-6) : ''}:${cleanPassword ? cleanPassword.slice(-4) : ''}`;
   if (ccxtClientPool[key]) {
@@ -329,7 +326,7 @@ export async function cancelAllOrdersAndTriggers(
         ).catch(() => {});
       }
 
-      const needsTriggerCleanup = isWeex || client.id === 'mexc' || client.id === 'bybit' || client.id === 'okx' || client.id === 'bingx' || force;
+      const needsTriggerCleanup = isWeex || client.id === 'okx' || client.id === 'bingx' || force;
       if (needsTriggerCleanup) {
         const triggerParamsList = [
           { trigger: true },
@@ -633,10 +630,6 @@ export async function setRealTradeSlTpOnExchange(
 
     if (stopLoss && isFinite(stopLoss) && stopLoss > 0) {
       const spParams: any = { reduceOnly: true, stopLossPrice: stopLoss };
-      if (config.exchange === 'mexc') {
-        spParams.stopPrice = stopLoss;
-        spParams.triggerPrice = stopLoss;
-      }
       try {
         await executeWithRetry(
           () => client.createOrder(formattedSymbol, 'market', orderSide, qty, undefined, spParams),
@@ -650,10 +643,6 @@ export async function setRealTradeSlTpOnExchange(
 
     if (takeProfit && isFinite(takeProfit) && takeProfit > 0) {
       const tpParams: any = { reduceOnly: true, takeProfitPrice: takeProfit };
-      if (config.exchange === 'mexc') {
-        tpParams.stopPrice = takeProfit;
-        tpParams.triggerPrice = takeProfit;
-      }
       try {
         await executeWithRetry(
           () => client.createOrder(formattedSymbol, 'market', orderSide, qty, undefined, tpParams),

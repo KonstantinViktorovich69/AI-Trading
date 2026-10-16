@@ -11,7 +11,7 @@ export interface FeeSlippageConfig {
 }
 
 export const DEFAULT_FEE_CONFIG: FeeSlippageConfig = {
-  takerFeeRate: 0.0005, // 0.05% Taker fee (Binance/Bybit Futures standard)
+  takerFeeRate: 0.0005, // 0.05% Taker fee (стандартная taker-комиссия фьючерсов)
   makerFeeRate: 0.0002, // 0.02% Maker fee
   defaultSlippagePct: 0.03, // 0.03% базовое проскальзывание
   volatilitySlippageMultiplier: 1.2

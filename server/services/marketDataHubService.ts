@@ -89,7 +89,6 @@ export class MarketDataHubService {
   private deps: MarketDataHubDependencies;
   private ccxtExchanges: Record<string, Exchange>;
   private restBlockedExchanges: Set<string> = new Set<string>();
-  private isBinanceGeoblocked: boolean = false;
   private pairs: string[];
   private exchangeSymbols: Record<string, Record<string, string>>;
   private isFetchingGlobalTickers: boolean = false;
@@ -102,9 +101,6 @@ export class MarketDataHubService {
     this.exchangeSymbols = buildExchangeSymbolsMap(this.pairs);
 
     this.ccxtExchanges = {
-      mexc: new ccxt.mexc({ enableRateLimit: true }),
-      binance: new ccxt.binance({ enableRateLimit: true }),
-      bybit: new ccxt.bybit({ enableRateLimit: true }),
       okx: new ccxt.okx({ enableRateLimit: true }),
       gateio: new ccxt.gate({ enableRateLimit: true }),
       kucoin: new ccxt.kucoin({ enableRateLimit: true, timeout: 8000 }),
@@ -154,8 +150,6 @@ export class MarketDataHubService {
       getGlobalCvd: () => this.deps.getGlobalCvd(),
       getCacheSignals: () => this.deps.getCacheSignals(),
       getVirtualTrades: () => this.deps.getVirtualTrades(),
-      getIsBinanceGeoblocked: () => this.isBinanceGeoblocked,
-      setIsBinanceGeoblocked: (val: boolean) => { this.isBinanceGeoblocked = val; },
       throttlePriceEmit: () => this.throttlePriceEmit(),
       getExchangeLink: (ex: string, pair: string) => this.getExchangeLink(ex, pair),
       updateLocalCandlesForSymbol: (cleanSym: string, price: number, vol: number) => this.deps.updateLocalCandlesForSymbol(cleanSym, price, vol),
@@ -180,14 +174,6 @@ export class MarketDataHubService {
 
   public getRestBlockedExchanges(): Set<string> {
     return this.restBlockedExchanges;
-  }
-
-  public getIsBinanceGeoblocked(): boolean {
-    return this.isBinanceGeoblocked;
-  }
-
-  public setIsBinanceGeoblocked(val: boolean): void {
-    this.isBinanceGeoblocked = val;
   }
 
   public getPairs(): string[] {
@@ -268,7 +254,7 @@ export class MarketDataHubService {
     const loadExchangeWithRetry = async (ex: Exchange, maxRetries = 2) => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          if (['binance', 'bybit', 'okx', 'gateio', 'gate', 'mexc', 'weex'].includes(ex.id)) {
+          if (['okx', 'gateio', 'gate', 'weex'].includes(ex.id)) {
             ex.options['defaultType'] = 'swap';
           }
           await ex.loadMarkets();
@@ -289,9 +275,6 @@ export class MarketDataHubService {
           if (isGeoBlocked || isTimeoutOrNetwork) {
             if (!isWeex) {
               this.restBlockedExchanges.add(ex.id.toLowerCase());
-              if (ex.id.toLowerCase() === 'binance') {
-                this.isBinanceGeoblocked = true;
-              }
               if (isGeoBlocked) {
                 console.warn(`[INIT] ${ex.id} is blocked by CloudFront/geo-firewall (${errMsg.includes('451') || errMsg.includes('restricted') ? '451 Restricted Location' : '403 Forbidden'}). Added to REST blocklist.`);
               } else {
@@ -323,9 +306,9 @@ export class MarketDataHubService {
       this.seedExchangeMarkets(ex, this.pairs);
     });
 
-    // Load full markets strictly for primary execution exchange (WEEX) and benchmark (Binance) sequentially.
+    // Load full markets strictly for primary execution exchange (WEEX).
     // Auxiliary exchanges remain active via the lightweight pre-seeded catalog, saving ~1.5GB RAM and preventing container OOM kills.
-    const coreExchanges = [this.ccxtExchanges.weex, this.ccxtExchanges.binance].filter(Boolean);
+    const coreExchanges = [this.ccxtExchanges.weex].filter(Boolean);
     for (const ex of coreExchanges) {
       await loadExchangeWithRetry(ex).catch(() => {});
     }
@@ -335,8 +318,8 @@ export class MarketDataHubService {
     return {
       getCcxtExchanges: () => this.ccxtExchanges,
       getRestBlockedExchanges: () => this.restBlockedExchanges,
-      isBinanceGeoblocked: () => this.isBinanceGeoblocked,
-      setBinanceGeoblocked: (val: boolean) => { this.isBinanceGeoblocked = val; },
+      isBinanceGeoblocked: () => false,
+      setBinanceGeoblocked: () => {},
       getGlobalCcxtTickers: () => this.deps.getGlobalCcxtTickers(),
       getWsTickers: () => this.deps.getWsTickers(),
       getApiHealth: () => this.deps.getApiHealth(),
@@ -354,18 +337,6 @@ export class MarketDataHubService {
 
   public async updateGlobalTickers(forceFullScan = false) {
     return syncGlobalTickers(this.getTickerSyncContext(), forceFullScan);
-  }
-
-  public startMexcWS(retryCount = 0) {
-    this.exchangeWsManager.startMexcWS(retryCount);
-  }
-
-  public startBinanceWS(retryCount = 0) {
-    this.exchangeWsManager.startBinanceWS(retryCount);
-  }
-
-  public startBybitWS(retryCount = 0) {
-    this.exchangeWsManager.startBybitWS(retryCount);
   }
 
   public getExchangeWsManager(): ExchangeWsManager {

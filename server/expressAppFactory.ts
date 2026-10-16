@@ -35,7 +35,7 @@ export function createExpressApp(contexts: ExpressAppFactoryContexts): Express {
 
   // Debug router guard: in production, all debug routes return 404 Not Found regardless of API key
   app.use('/api', (req, res, next) => {
-    if (process.env.NODE_ENV === 'production' && (req.path.startsWith('/debug') || req.path === '/debug-ohlcv' || req.path === '/debug-mexc')) {
+    if (process.env.NODE_ENV === 'production' && (req.path.startsWith('/debug') || req.path === '/debug-ohlcv')) {
       return res.status(404).json({ success: false, error: `API endpoint not found: ${req.method} ${req.path}` });
     }
     next();

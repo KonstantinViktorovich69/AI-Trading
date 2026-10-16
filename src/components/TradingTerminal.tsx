@@ -26,14 +26,11 @@ const getTradeUrl = (exchange: string = '', coin: string = '') => {
   const baseLower = base.toLowerCase();
   const quoteLower = quote.toLowerCase();
   switch (safeEx) {
-    case 'binance': return `https://www.binance.com/en/trade/${base}_${quote}`;
-    case 'bybit': return `https://www.bybit.com/trade/usdt/${base}${quote}`;
     case 'okx': return `https://www.okx.com/trade-spot/${baseLower}-${quoteLower}`;
     case 'htx': case 'huobi': return `https://www.htx.com/trade/${baseLower}_${quoteLower}`;
     case 'kucoin': return `https://www.kucoin.com/trade/${base}-${quote}`;
     case 'gateio': return `https://www.gate.io/trade/${base}_${quote}`;
     case 'bitget': return `https://www.bitget.com/spot/${base}${quote}`;
-    case 'mexc': return `https://www.mexc.com/exchange/${base}_${quote}`;
     case 'kraken': return `https://pro.kraken.com/app/trade/${baseLower}-${quoteLower}`;
     case 'bitfinex': return `https://trading.bitfinex.com/t/${base}${quote}`;
     default: return `https://coinmarketcap.com/currencies/${baseLower}/`;
@@ -1331,7 +1328,7 @@ export function TradingTerminal({
     }
   }, []);
 
-  const [latencyInfo, setLatencyInfo] = useState<{ weex: number; binance: number }>({ weex: 38, binance: 24 });
+  const [latencyInfo, setLatencyInfo] = useState<{ weex: number }>({ weex: 38 });
 
   useEffect(() => {
     let active = true;
@@ -1342,8 +1339,7 @@ export function TradingTerminal({
           const data = await res.json();
           if (active && data && data.success) {
             setLatencyInfo({
-              weex: data.weexLatency || 35,
-              binance: data.binanceLatency || 22
+              weex: data.weexLatency || 35
             });
           }
         }
@@ -7629,16 +7625,12 @@ export function TradingTerminal({
 
                     <div className="h-5 w-px bg-white/[0.05]"></div>
 
-                    <Tooltip text="Мониторинг задержки соединения (Ping в мс) до API эндпоинтов WEEX и Binance">
+                    <Tooltip text="Мониторинг задержки соединения (Ping в мс) до API WEEX">
                       <div className="flex flex-col items-center">
                         <span className="text-[7.5px] text-zinc-500 font-bold uppercase tracking-[0.2em] mb-1.5 leading-none">API LATENCY</span>
                         <div className="flex items-center gap-1.5 font-mono text-[9.5px] font-bold">
                           <span className={cn(latencyInfo.weex < 50 ? "text-emerald-400" : latencyInfo.weex < 100 ? "text-amber-400" : "text-rose-400")}>
                             WX {latencyInfo.weex}ms
-                          </span>
-                          <span className="text-zinc-600">|</span>
-                          <span className={cn(latencyInfo.binance < 50 ? "text-emerald-400" : latencyInfo.binance < 100 ? "text-amber-400" : "text-rose-400")}>
-                            BN {latencyInfo.binance}ms
                           </span>
                         </div>
                       </div>

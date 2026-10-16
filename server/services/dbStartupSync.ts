@@ -337,7 +337,7 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
           fromAgent: 'EXPERT',
           toAgent: 'RISK_MANAGER',
           message: 'Корректировка DCA коэффициентов под волатильность',
-          details: 'Формирую сетку Sell Limit под ретест фитиля. В связи с аномальной волатильностью MEXC, прошу расширить шаг страховочных ордеров до 4.5%.',
+          details: 'Формирую сетку Sell Limit под ретест фитиля. В связи с аномальной волатильностью рынка, прошу расширить шаг страховочных ордеров до 4.5%.',
           type: 'info'
         },
         {

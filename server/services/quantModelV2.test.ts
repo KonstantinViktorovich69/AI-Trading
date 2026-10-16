@@ -294,10 +294,7 @@ describe('Quant Model V2 (Промт 4/4)', () => {
             psarStatus: 'BEARISH'
           }
         }),
-        getGlobalCcxtTickers: () => ({
-          mexc: {},
-          binance: {}
-        }),
+        getGlobalCcxtTickers: () => ({}),
         getOrderBookImbalance: () => ({}),
         getModelWeights: () => ({
           beta0: 0,

@@ -428,7 +428,7 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
          
          let realBookSpread = 0;
          const wsTickers = ctx.getWsTickers();
-         for (const exKey of ['Binance', 'Bybit', 'Weex']) {
+         for (const exKey of ['Weex']) {
            const t = ctx.findTickerInMap(symbol, wsTickers[exKey]);
            if (t && t.bid > 0 && t.ask > 0) {
              const spread = (t.ask - t.bid) / t.bid;

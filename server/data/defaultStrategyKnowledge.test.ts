@@ -27,10 +27,9 @@ describe('defaultStrategyKnowledge', () => {
     expect(isWeexApiSupported('UNKNOWN_COIN_XYZ/USDT')).toBe(false);
   });
 
-  it('formats futures symbols for weex and mexc', () => {
+  it('formats futures symbols for weex', () => {
     expect(formatFuturesSymbol('BTCUSDT', 'weex')).toBe('BTC/USDT:USDT');
     expect(formatFuturesSymbol('PEPE/USDT', 'weex')).toBe('1000PEPE/USDT:USDT');
-    expect(formatFuturesSymbol('SOL/USDC', 'mexc')).toBe('SOL/USDC:USDC');
   });
 
   it('enriches exchange errors with helpful messages', () => {

@@ -5,6 +5,7 @@ import { RSI } from 'technicalindicators';
 import ccxt, { Exchange } from 'ccxt';
 import { MarketDataHubService, ensureExchangeMarket } from '../services/marketDataHubService.ts';
 import { isWeexApiSupported } from '../data/defaultStrategyKnowledge.ts';
+import { DEFAULT_EXCHANGE } from '../services/activeExchange.ts';
 
 export interface AiRoutesContext {
   getGlobalSettings: () => any;
@@ -51,10 +52,8 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
   const router = express.Router();
 
   // High-performance isolated CCXT clients for chart requests
-  // WEEX is the exclusive execution exchange; Binance is used exclusively as a benchmark
   const chartCcxtClients: Record<string, Exchange> = {
-    weex: new ccxt.weex({ enableRateLimit: false, timeout: 5000, headers: MarketDataHubService.WEEX_HEADERS }),
-    binance: new ccxt.binance({ enableRateLimit: false, timeout: 5000 })
+    weex: new ccxt.weex({ enableRateLimit: false, timeout: 5000, headers: MarketDataHubService.WEEX_HEADERS })
   };
 
   // GET /api/settings/default-instructions
@@ -643,7 +642,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
 
       for (const target of targets) {
         let symbol = target.symbol;
-        const exchangeName = (target.exchange || 'binance').toLowerCase();
+        const exchangeName = (target.exchange || DEFAULT_EXCHANGE).toLowerCase();
 
         if (!symbol.includes('/')) symbol = symbol.replace('USDT', '/USDT');
 
@@ -788,8 +787,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
     const fetchTask = async () => {
       const restBlockedExchanges = ctx.getRestBlockedExchanges();
 
-      // WEEX is the exclusive execution exchange; Binance is used solely as liquidity/candle benchmark
-      const candidateExchanges = ['weex', 'binance']
+      const candidateExchanges = ['weex']
         .filter((val) => !restBlockedExchanges.has(val));
 
       let lastError: any = null;
@@ -798,14 +796,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
         if (!curEx) continue;
 
         // Resolve symbol specifically for this exchange
-        let curSymbol = realSymbol;
-        if (exName === 'weex') {
-          curSymbol = ctx.formatFuturesSymbol(realSymbol, 'weex');
-        } else {
-          // Binance benchmark format: BTC/USDT
-          curSymbol = realSymbol.split(':')[0];
-          if (!curSymbol.includes('/')) curSymbol = `${curSymbol}/USDT`;
-        }
+        const curSymbol = ctx.formatFuturesSymbol(realSymbol, 'weex');
 
         // CRITICAL: Pre-seed market on CCXT instance to prevent slow loadMarkets() network downloads
         ensureExchangeMarket(curEx, curSymbol);

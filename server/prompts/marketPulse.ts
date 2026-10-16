@@ -1,11 +1,7 @@
-export function getMarketPulsePrompt(context: string, shortsSq: number | string, longsSq: number | string): string {
+export function getMarketPulsePrompt(context: string, _shortsSq: number | string, _longsSq: number | string): string {
   return `Анализируй текущий пульс рынка криптовалют для трейдингового ИИ-агента.
 Топ 10 волатильных пар:
 ${context}
-
-Общий рынок (Liquidations):
-Binance BTC Shorts: $${shortsSq}
-Binance BTC Longs: $${longsSq}
 
 Твоя задача:
 1. Определить общее настроение: BULLISH (памп-режим), BEARISH (далел-режим), NEUTRAL.

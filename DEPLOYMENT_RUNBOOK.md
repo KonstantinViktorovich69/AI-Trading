@@ -132,6 +132,6 @@ This ensures all historical records conform to the schema with `dataOrigin`, `de
 
 ## 5. Post-Deployment Verification
 
-- Confirm WebSocket connections (WEEX, Binance, Bybit) show `wsWatchdog` active logs without stalled reconnection loops.
+- Confirm WEEX ticker sync logs ("[SCANNER] weex: successfully fetched N tickers") appear regularly.
 - Monitor `serverEventLoopLagMs` metrics under `/api/system/quant-metrics`.
 - Ensure no unexpected error rates occur on `/api/signals` and `/api/stream`.

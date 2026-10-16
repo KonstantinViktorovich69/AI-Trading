@@ -14,8 +14,6 @@ export interface MarketRouterContext {
   getCcxtExchanges: () => Record<string, any>;
   getOhlcvCache: () => Record<string, { data: any[]; timestamp: number }>;
   getGlobalSettings: () => any;
-  getIsBinanceGeoblocked: () => boolean;
-  setIsBinanceGeoblocked: (val: boolean) => void;
   getRestBlockedExchanges: () => Set<string>;
   log400?: (path: string, error: string) => void;
 }
@@ -280,9 +278,6 @@ export function createMarketRouter(ctx: MarketRouterContext): Router {
         if (matches) realSymbol = `${matches[1]}/${matches[2]}`;
         else if (!realSymbol.includes(':')) realSymbol = realSymbol + '/USDT'; 
       }
-      if (exName === 'mexc' && !realSymbol.includes(':') && realSymbol.includes('/')) {
-        realSymbol += ':USDT';
-      }
 
       if (ex.markets && !ex.markets[realSymbol]) {
         const bases = realSymbol.split(':');
@@ -385,67 +380,6 @@ export function createMarketRouter(ctx: MarketRouterContext): Router {
         const ticker = GLOBAL_CCXT_TICKERS[exName][ccxtSymbol];
         return res.json({ success: true, price: ticker.last || ticker.close || ticker.bid });
       }
-    }
-    const wsTickers = ctx.getWsTickers();
-    if (exName === 'binance' && wsTickers.Binance) {
-      const wsTicker = Object.values(wsTickers.Binance).find((t: any) => t.pair === symbol);
-      if (wsTicker) return res.json({ success: true, price: (wsTicker as any).bid });
-    }
-
-    // Server-side fallback directly from exchange API
-    const cleanSym = (symbol as string).replace('/', '').replace(':', '').split('_')[0].toUpperCase();
-    const isBinanceGeoblocked = ctx.getIsBinanceGeoblocked();
-    const restBlockedExchanges = ctx.getRestBlockedExchanges();
-
-    if (exName === 'binance' && !isBinanceGeoblocked) {
-      fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${cleanSym}`)
-        .then(bRes => {
-          if (bRes.status === 451) {
-            ctx.setIsBinanceGeoblocked(true);
-            restBlockedExchanges.add('binance');
-            throw new Error('Binance API is restricted in this location (451)');
-          }
-          return bRes.json();
-        })
-        .then(bData => {
-          if (bData && bData.price) {
-            res.json({ success: true, price: parseFloat(bData.price) });
-          } else {
-            // Fallback to MEXC
-            fetch(`https://api.mexc.com/api/v3/ticker/price?symbol=${cleanSym}`)
-              .then(mRes => mRes.json())
-              .then(mData => {
-                if (mData && mData.price) res.json({ success: true, price: parseFloat(mData.price) });
-                else res.status(404).json({ success: false, error: 'Ticker not found' });
-              })
-              .catch(() => res.status(404).json({ success: false, error: 'Ticker not found' }));
-          }
-        })
-        .catch(() => {
-          // Fallback to MEXC
-          fetch(`https://api.mexc.com/api/v3/ticker/price?symbol=${cleanSym}`)
-            .then(mRes => mRes.json())
-            .then(mData => {
-              if (mData && mData.price) res.json({ success: true, price: parseFloat(mData.price) });
-              else res.status(404).json({ success: false, error: 'Ticker not found' });
-            })
-            .catch(() => res.status(500).json({ success: false, error: 'Failed to fetch ticker' }));
-        });
-      return;
-    } else if (exName === 'mexc' || (exName === 'binance' && isBinanceGeoblocked)) {
-      fetch(`https://api.mexc.com/api/v3/ticker/price?symbol=${cleanSym}`)
-        .then(mRes => mRes.json())
-        .then(mData => {
-          if (mData && mData.price) {
-            res.json({ success: true, price: parseFloat(mData.price) });
-          } else {
-            res.status(404).json({ success: false, error: 'Ticker not found on MEXC' });
-          }
-        })
-        .catch(err => {
-          res.status(500).json({ success: false, error: `Failed to fetch from MEXC on server: ${err.message}` });
-        });
-      return;
     }
 
     res.status(404).json({ success: false, error: 'Ticker not found' });

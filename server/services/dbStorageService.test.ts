@@ -79,7 +79,7 @@ describe('dbStorageService', () => {
   it('saves new trade to DB and updates cache and memory state', async () => {
     const trade = {
       id: 'trade_123',
-      symbol: 'BTCUSDT:mexc',
+      symbol: 'BTCUSDT:weex',
       side: 'SHORT',
       amount: 50,
       entryPrice: 65000,

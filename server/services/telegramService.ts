@@ -70,7 +70,7 @@ const lastTelegramErrorTime: Record<string, number> = {};
 export function getChartImageHtml(symbol: string): string {
   const clean = symbol.replace(/[\/:-]/g, '').replace(/USDT$/i, '').toUpperCase();
   const timestamp = Date.now();
-  const tvSymbol = `MEXC:${clean}USDT`;
+  const tvSymbol = `${clean}USDT`;
   const chartUrl = `https://www.tradingview.com/chart/?symbol=${tvSymbol}&interval=60&theme=dark&_t=${timestamp}`;
   return `<a href="${chartUrl}">&#8205;</a>`;
 }
@@ -237,7 +237,7 @@ export function formatTelegramSignal(params: FormattedSignalParams): string {
   text += `📊 Зоны:\n`;
   text += `• Сопротивление: $${formatPrice(recentHigh || high)}\n`;
   text += `• Поддержка: $${formatPrice(recentLow || (price * 0.985))}\n\n`;
-  text += `🔗 <a href="${exLink}">Открыть на ${exName.toUpperCase() === 'MEXC' ? 'WEEX' : exName.toUpperCase()}</a>\n`;
+  text += `🔗 <a href="${exLink}">Открыть на WEEX</a>\n`;
   text += `⏱ ${timeStr}`;
 
   return text;
