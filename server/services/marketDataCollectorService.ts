@@ -16,8 +16,6 @@ export interface MarketDataCollectorContext {
   getCacheSignals: () => any;
   getVirtualTrades: () => any[];
   getCcxtExchange: (name: string) => any;
-  isBinanceGeoblocked: () => boolean;
-  setBinanceGeoblocked: (val: boolean) => void;
   isMainThread: () => boolean;
   onIndicatorsUpdated?: (cleanSym: string) => void;
 }
@@ -154,20 +152,6 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
             } else {
               realFetchSymbol = unified;
               ensureExchangeMarket(currentEx, realFetchSymbol);
-            }
-          } else if (ex === 'mexc') {
-            if (!currentEx.markets || Object.keys(currentEx.markets).length === 0) {
-              await currentEx.loadMarkets().catch(() => {});
-            }
-            const nativeId = symbol.split(':')[0].replace('/', '_');
-            const market = (Object.values(currentEx.markets || {}) as any[]).find((m: any) => (m.id === nativeId || m.symbol === symbol) && (m.swap || m.future || m.linear || m.contract));
-            if (market) {
-              realFetchSymbol = market.symbol;
-            } else {
-              const spotMarket = (Object.values(currentEx.markets || {}) as any[]).find((m: any) => m.id === nativeId || m.symbol === symbol);
-              if (spotMarket) {
-                realFetchSymbol = spotMarket.symbol;
-              }
             }
           }
 

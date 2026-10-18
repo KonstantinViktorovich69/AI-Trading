@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import https from 'https';
 import { EventEmitter } from 'events';
-import { fetchMexcTickersDirect, fetchWeexTickersDirect } from './directExchangeFetchers.ts';
+import { fetchWeexTickersDirect } from './directExchangeFetchers.ts';
 
 describe('directExchangeFetchers', () => {
   let originalHttpsGet: typeof https.get;
@@ -13,42 +13,6 @@ describe('directExchangeFetchers', () => {
   afterEach(() => {
     https.get = originalHttpsGet;
     vi.restoreAllMocks();
-  });
-
-  it('fetchMexcTickersDirect parses valid response and populates fallback map', async () => {
-    const mockRes = new EventEmitter() as any;
-    const mockReq = new EventEmitter() as any;
-    mockReq.destroy = vi.fn();
-
-    vi.spyOn(https, 'get').mockImplementation((options: any, callback: any) => {
-      callback(mockRes);
-      setTimeout(() => {
-        mockRes.emit('data', JSON.stringify({
-          success: true,
-          data: [
-            {
-              symbol: 'BTC_USDT',
-              lastPrice: 65000,
-              bid1: 64990,
-              ask1: 65010,
-              volume24: 1000,
-              amount24: 65000000,
-              high24Price: 66000,
-              lower24Price: 64000,
-              riseFallRate: 0.05
-            }
-          ]
-        }));
-        mockRes.emit('end');
-      }, 5);
-      return mockReq;
-    });
-
-    const result = await fetchMexcTickersDirect();
-    expect(result['BTC/USDT:USDT']).toBeDefined();
-    expect(result['BTC/USDT:USDT'].last).toBe(65000);
-    expect(result['BTC/USDT:USDT'].percentage).toBe(5);
-    expect((globalThis as any).MEXC_SPOT_TICKERS['BTC_USDT']).toBeDefined();
   });
 
   it('fetchWeexTickersDirect parses valid response array', async () => {

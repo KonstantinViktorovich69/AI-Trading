@@ -22,7 +22,6 @@ function createMockContext(overrides?: Partial<MarketDataCollectorContext>): Mar
   const globalOrderBookHistory: Record<string, any[]> = {};
   const cacheSignals: any = { data: [] };
   const virtualTrades: any[] = [];
-  let isBinanceGeoblocked = false;
 
   const defaultCtx: MarketDataCollectorContext = {
     getGlobalTrueOHLCV: () => globalTrueOHLCV,
@@ -38,8 +37,6 @@ function createMockContext(overrides?: Partial<MarketDataCollectorContext>): Mar
     getCacheSignals: () => cacheSignals,
     getVirtualTrades: () => virtualTrades,
     getCcxtExchange: () => null,
-    isBinanceGeoblocked: () => isBinanceGeoblocked,
-    setBinanceGeoblocked: (val: boolean) => { isBinanceGeoblocked = val; },
     isMainThread: () => true,
     ...overrides
   };

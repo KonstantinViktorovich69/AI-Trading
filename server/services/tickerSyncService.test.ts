@@ -3,10 +3,7 @@ import { getExchangeLink, buildExchangeSymbolsMap, getTradingAdvice, syncGlobalT
 
 describe('tickerSyncService', () => {
   it('getExchangeLink generates correct exchange URLs', () => {
-    expect(getExchangeLink('binance', 'BTC/USDT')).toBe('https://www.binance.com/en/futures/BTCUSDT');
-    expect(getExchangeLink('bybit', 'ETH/USDT')).toBe('https://www.bybit.com/en-US/trade/futures/usdt/ETHUSDT');
     expect(getExchangeLink('okx', 'SOL/USDT')).toBe('https://www.okx.com/trade-swap/SOL-USDT-SWAP');
-    expect(getExchangeLink('mexc', 'BTC/USDT')).toBe('https://futures.mexc.com/exchange/BTC_USDT');
     expect(getExchangeLink('weex', 'PEPE/USDT')).toBe('https://www.weex.com/trade/1000PEPE_USDT');
     expect(getExchangeLink('weex', 'BTC/USDT')).toBe('https://www.weex.com/trade/BTC_USDT');
     expect(getExchangeLink('bitget', 'XRP/USDT')).toBe('https://www.bitget.com/mix/usdt/XRPUSDT_UMCBL');
@@ -14,7 +11,6 @@ describe('tickerSyncService', () => {
 
   it('buildExchangeSymbolsMap builds correct mappings for pairs', () => {
     const map = buildExchangeSymbolsMap(['BTC/USDT', 'ETH/USDT', 'DOGE/USDT']);
-    expect(map.binance['BTC/USDT']).toBe('BTCUSDT');
     expect(map.kraken['BTC/USDT']).toBe('XBTUSDT');
     expect(map.kraken['DOGE/USDT']).toBe('XDGUSDT');
     expect(map.kucoin['ETH/USDT']).toBe('ETH-USDT');
@@ -38,7 +34,6 @@ describe('tickerSyncService', () => {
     let mockContext: TickerSyncContext;
     let isFetchingState = false;
     let isInitialOhlcvState = false;
-    let geoblockedState = false;
     let restBlocked: Set<string>;
     let globalCcxtTickers: Record<string, any>;
     let wsTickers: any;
@@ -47,10 +42,9 @@ describe('tickerSyncService', () => {
     beforeEach(() => {
       isFetchingState = false;
       isInitialOhlcvState = false;
-      geoblockedState = false;
       restBlocked = new Set<string>();
       globalCcxtTickers = {};
-      wsTickers = { Weex: {}, Binance: {}, Bybit: {}, Mexc: {} };
+      wsTickers = { Weex: {} };
       apiHealth = {};
 
       const mockExchange = {
@@ -68,13 +62,9 @@ describe('tickerSyncService', () => {
 
       mockContext = {
         getCcxtExchanges: () => ({
-          weex: mockExchange,
-          binance: mockExchange,
-          bybit: mockExchange
+          weex: mockExchange
         }),
         getRestBlockedExchanges: () => restBlocked,
-        isBinanceGeoblocked: () => geoblockedState,
-        setBinanceGeoblocked: (v) => { geoblockedState = v; },
         getGlobalCcxtTickers: () => globalCcxtTickers,
         getWsTickers: () => wsTickers,
         getApiHealth: () => apiHealth,
@@ -94,8 +84,7 @@ describe('tickerSyncService', () => {
             ask: 50001,
             percentage: 2.5
           }
-        }),
-        fetchMexcTickersDirect: vi.fn().mockResolvedValue({})
+        })
       };
     });
 

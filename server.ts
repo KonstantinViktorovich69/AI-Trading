@@ -1,4 +1,5 @@
 import express from 'express';
+import http from 'http';
 import https from 'https';
 import * as Sentry from "@sentry/node";
 import Redis from "ioredis";
@@ -154,8 +155,8 @@ function safeRedisSet(key: string, value: string, mode: string, duration: number
 
 (globalThis as any).SERVER_START_TIME = Date.now();
 
-import { fetchMexcTickersDirect, fetchWeexTickersDirect } from './server/services/directExchangeFetchers.ts';
-export { fetchMexcTickersDirect, fetchWeexTickersDirect };
+import { fetchWeexTickersDirect } from './server/services/directExchangeFetchers.ts';
+export { fetchWeexTickersDirect };
 
 import { createServer as createViteServer } from 'vite';
 import WebSocket, { WebSocketServer } from 'ws';
@@ -1314,8 +1315,6 @@ const marketDataCollectorCtx: MarketDataCollectorContext = {
   getCacheSignals: () => CACHE.signals,
   getVirtualTrades: () => virtualTrades,
   getCcxtExchange: (name: string) => marketDataHubService.getExchangeInstance(name),
-  isBinanceGeoblocked: () => false,
-  setBinanceGeoblocked: () => {},
   isMainThread: () => isMainThread
 };
 
@@ -1692,9 +1691,10 @@ async function startServer() {
     const PORT = 3000;
 
     // Immediately setup Vite / static files middleware so the app frontend responds instantly
-    await setupStaticAndViteMiddleware(app);
+    const httpServer = http.createServer(app);
+    await setupStaticAndViteMiddleware(app, undefined, httpServer);
 
-    const server = app.listen(PORT, "0.0.0.0", () => {
+    const server = httpServer.listen(PORT, "0.0.0.0", () => {
       console.log("[SERVER] Quantum Scalping Server running on http://localhost:" + PORT);
     });
 

@@ -1,12 +1,10 @@
-import { fetchMexcTickersDirect, fetchWeexTickersDirect } from './directExchangeFetchers.ts';
+import { fetchWeexTickersDirect } from './directExchangeFetchers.ts';
 
 export interface TickerSyncContext {
   getCcxtExchanges: () => Record<string, any>;
   getRestBlockedExchanges: () => Set<string>;
-  isBinanceGeoblocked: () => boolean;
-  setBinanceGeoblocked: (val: boolean) => void;
   getGlobalCcxtTickers: () => Record<string, Record<string, any>>;
-  getWsTickers: () => { Weex: Record<string, any>; Binance: Record<string, any>; Bybit: Record<string, any>; Mexc: Record<string, any> };
+  getWsTickers: () => { Weex: Record<string, any> };
   getApiHealth: () => Record<string, { latency: number; status: 'online' | 'degraded' | 'offline'; lastCheck: number }>;
   safeRedisSet?: (key: string, val: string, mode?: string, duration?: number) => void;
   updateSignalsCache: () => void;
@@ -18,7 +16,6 @@ export interface TickerSyncContext {
   isInitialOhlcvFetched: () => boolean;
   setInitialOhlcvFetched: (val: boolean) => void;
   fetchWeexTickersDirect?: () => Promise<Record<string, any>>;
-  fetchMexcTickersDirect?: () => Promise<Record<string, any>>;
 }
 
 /**
@@ -30,12 +27,7 @@ export function getExchangeLink(exchange: string, symbol: string): string {
   const quote = (symbol || '').split(/[\/:-]/)[1]?.toUpperCase() || 'USDT';
   const clean = `${base}${quote}`;
   
-  if (normEx.includes('binance')) return `https://www.binance.com/en/futures/${clean}`;
-  if (normEx.includes('bybit')) return `https://www.bybit.com/en-US/trade/futures/${quote.toLowerCase()}/${clean}`;
   if (normEx.includes('okx')) return `https://www.okx.com/trade-swap/${base}-${quote}-SWAP`;
-  if (normEx.includes('mexc')) {
-    return `https://futures.mexc.com/exchange/${base}_${quote}`;
-  }
   if (normEx.includes('weex')) {
     let weexBase = base;
     if (['PEPE', 'BONK', 'SHIB', 'FLOKI'].includes(base)) {
@@ -52,20 +44,17 @@ export function getExchangeLink(exchange: string, symbol: string): string {
  */
 export function buildExchangeSymbolsMap(pairs: string[]): Record<string, Record<string, string>> {
   const map: Record<string, Record<string, string>> = {
-    binance: {}, kraken: {}, kucoin: {}, bybit: {}, okx: {}, gateio: {}, mexc: {}, htx: {}, bitget: {}, weex: {}
+    kraken: {}, kucoin: {}, okx: {}, gateio: {}, htx: {}, bitget: {}, weex: {}
   };
 
   for (const pair of pairs) {
-    map.binance[pair] = pair.replace('/', '');
     let krakenSymbol = pair.replace('/', '');
     if (pair.startsWith('BTC/')) krakenSymbol = krakenSymbol.replace('BTC', 'XBT');
     if (pair.startsWith('DOGE/')) krakenSymbol = krakenSymbol.replace('DOGE', 'XDG');
     map.kraken[pair] = krakenSymbol;
     map.kucoin[pair] = pair.replace('/', '-');
-    map.bybit[pair] = pair.replace('/', '');
     map.okx[pair] = pair.replace('/', '-');
     map.gateio[pair] = pair.replace('/', '_');
-    map.mexc[pair] = pair.replace('/', '');
     map.htx[pair] = pair.replace('/', '').toLowerCase();
     map.bitget[pair] = pair.replace('/', '');
     map.weex[pair] = pair.replace('/', '_');
@@ -126,14 +115,14 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
           if (!ex) return;
           const startTime = Date.now();
           
-          if (['binance', 'bybit', 'okx', 'gateio', 'mexc', 'weex'].includes(exName)) {
+          if (['okx', 'gateio', 'weex'].includes(exName)) {
             ex.options = ex.options || {};
             ex.options['defaultType'] = 'swap';
           }
           
           let _tickers: any = {};
           try {
-            const fetchTimeout = exName === 'mexc' ? 15000 : (exName === 'weex' ? 12000 : 10000);
+            const fetchTimeout = exName === 'weex' ? 12000 : 10000;
             let success = false;
             let attempt = 0;
             const maxAttempts = exName === 'weex' ? 2 : 1;
@@ -144,9 +133,7 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
                 const timeoutPromise = new Promise((_, reject) => {
                   timerId = setTimeout(() => reject(new Error('timeout')), fetchTimeout);
                 });
-                const fetchPromise = exName === 'mexc' 
-                  ? (ctx.fetchMexcTickersDirect || fetchMexcTickersDirect)() 
-                  : (exName === 'weex' ? (ctx.fetchWeexTickersDirect || fetchWeexTickersDirect)() : ex.fetchTickers());
+                const fetchPromise = exName === 'weex' ? (ctx.fetchWeexTickersDirect || fetchWeexTickersDirect)() : ex.fetchTickers();
                 _tickers = await Promise.race([
                   fetchPromise,
                   timeoutPromise
@@ -183,9 +170,6 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
               if (isGeoBlocked || isTimeoutOrNetwork) {
                 if (exName.toLowerCase() !== 'weex') {
                   restBlockedExchanges.add(exName.toLowerCase());
-                  if (exName.toLowerCase() === 'binance') {
-                    ctx.setBinanceGeoblocked(true);
-                  }
                   if (isGeoBlocked) {
                     console.warn(`[SCANNER] ${exName} REST API is blocked by CloudFront/geo-firewall (${errMsg.includes('451') || errMsg.includes('restricted') ? '451 Restricted Location' : '403 Forbidden'}). Added to REST blocklist.`);
                   } else {
@@ -245,9 +229,6 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
                 wsTickers.Weex[pair] = tickerObj as any;
                 wsTickers.Weex[cleanSym] = tickerObj as any;
               }
-            }
-            if (exName === 'mexc') {
-              console.log(`[SCANNER] MEXC first ticker example: ${Object.keys(tickers)[0]} -> ${JSON.stringify(tickers[Object.keys(tickers)[0]])}`);
             }
           }
           

@@ -318,8 +318,6 @@ export class MarketDataHubService {
     return {
       getCcxtExchanges: () => this.ccxtExchanges,
       getRestBlockedExchanges: () => this.restBlockedExchanges,
-      isBinanceGeoblocked: () => false,
-      setBinanceGeoblocked: () => {},
       getGlobalCcxtTickers: () => this.deps.getGlobalCcxtTickers(),
       getWsTickers: () => this.deps.getWsTickers(),
       getApiHealth: () => this.deps.getApiHealth(),

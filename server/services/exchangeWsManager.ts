@@ -2,9 +2,6 @@ export interface ExchangeWsManagerContext {
   getPairs: () => string[];
   getExchangeSymbols: () => Record<string, Record<string, string>>;
   getWsTickers: () => {
-    Binance: Record<string, any>;
-    Mexc: Record<string, any>;
-    Bybit: Record<string, any>;
     Kraken: Record<string, any>;
     Kucoin: Record<string, any>;
     Bitget: Record<string, any>;
