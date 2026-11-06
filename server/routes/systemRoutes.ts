@@ -37,8 +37,15 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
     res.json({ success: true, status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // GET /api/ping (Ultra-lightweight ping for RTT latency measurement)
+  // GET /api/ping (Ultra-lightweight ping for RTT latency measurement or info)
   router.get('/ping', (req: Request, res: Response) => {
+    if (req.query.info === '1') {
+      return res.json({
+        success: true,
+        serverTime: Date.now(),
+        weexLatency: ctx.getLatencyInfo ? ctx.getLatencyInfo().weexLatencyMs : 0
+      });
+    }
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.status(200).send('pong');
   });
@@ -56,7 +63,7 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
       const virtualTrades = ctx.getVirtualTrades();
       const directionalStats = DirectionalMemoryAnalyticsService.generateSplitMemoryReport(virtualTrades);
       const latencies = ctx.getLatencyInfo ? ctx.getLatencyInfo() : {
-        weexLatencyMs: (globalThis as any).weexLatencyMs || 38
+        weexLatencyMs: 0
       };
 
       const audit = {
@@ -108,19 +115,6 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
     }
   });
 
-  // GET /api/ping
-  router.get('/ping', (req: Request, res: Response) => {
-    const t0 = Date.now();
-    const latencies = ctx.getLatencyInfo ? ctx.getLatencyInfo() : {
-      weexLatencyMs: (globalThis as any).weexLatencyMs || 38
-    };
-    res.json({
-      success: true,
-      serverTime: t0,
-      weexLatency: latencies.weexLatencyMs
-    });
-  });
-
   // GET /api/auth-audit-stats
   router.get('/auth-audit-stats', (req: Request, res: Response) => {
     res.json({ success: true, data: { authMode: getAuthMode(), apiAccessKeyConfigured: !!process.env.API_ACCESS_KEY } });
@@ -149,7 +143,7 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
     const signalsCache = ctx.getSignalsCache();
     const serverStartTime = ctx.getServerStartTime ? ctx.getServerStartTime() : ((globalThis as any).SERVER_START_TIME || Date.now());
     const latencies = ctx.getLatencyInfo ? ctx.getLatencyInfo() : {
-      weexLatencyMs: (globalThis as any).weexLatencyMs || 38
+      weexLatencyMs: 0
     };
 
     res.json({

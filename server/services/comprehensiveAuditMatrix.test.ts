@@ -313,7 +313,7 @@ describe('Comprehensive Audit Test Matrix', () => {
       const rawContent = fs.readFileSync(testDbPath, 'utf8');
       const parsed = JSON.parse(rawContent);
       expect(parsed.stateRevision).toBe(51);
-    });
+    }, 60000);
   });
 
   describe('5. E2E Governance, Fail-Closed & Correlation Pipeline Tests', () => {

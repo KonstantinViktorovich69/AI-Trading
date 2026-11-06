@@ -1,6 +1,6 @@
 {
-  "virtualBalance": 119.88,
-  "startOfDayBalance": 123.42,
+  "virtualBalance": 102.32,
+  "startOfDayBalance": 119.32,
   "telegramBots": [],
   "discordWebhooks": [],
   "exchangeApiConfig": {
@@ -13,18 +13,18 @@
   "btcShockThreshold": 1.5,
   "failedAutopilotSymbols": [],
   "modelWeights": {
-    "beta0": -0.9044309221250842,
-    "beta1": 0.27534153282748086,
-    "beta2": -0.08285769088668027,
-    "beta3": 0.5421418077375191,
-    "beta4": 0.576001136726296,
-    "beta5": 0.18578394883136146,
-    "beta6": -0.3162778613001646,
-    "beta7": -0.13833991079801727,
-    "beta8": 0.593126209611271,
-    "beta9": 0.5288927017393289,
-    "beta10": 0.9977235928973808,
-    "beta11": 1.282193961035544
+    "beta0": -0.5,
+    "beta1": 1.2,
+    "beta2": -0.04,
+    "beta3": 0.8,
+    "beta4": 0.6,
+    "beta5": 0.3,
+    "beta6": 0.5,
+    "beta7": 0.2,
+    "beta8": 1,
+    "beta9": 1.5,
+    "beta10": 0.8,
+    "beta11": 1.2
   },
   "autopilotAggressiveness": "conservative",
   "isAiExpertTraderEnabled": true,
@@ -47,7 +47,7 @@
   "liquiditySweepWickThreshold": 0.3,
   "allowedTradingDirections": "BOTH",
   "activeStrategy": "SHORT_PUMP_FADE",
-  "isAutopilotEnabled": false,
+  "isAutopilotEnabled": true,
   "isSymmetricConfidenceFilterEnabled": true,
   "isCommitteeConsensusCheckEnabled": false,
   "isOteEntryEnabled": false,
@@ -67,12 +67,12 @@
   ],
   "blockedHoursUtc": [],
   "sessionAdaptiveScoreBoost": false,
-  "virtualEquity": 119.88,
+  "virtualEquity": 113.42,
   "uiStatsResetTimestamp": 1791122286530,
   "modelStatusMetadata": {
-    "totalLearnedTrades": 372,
-    "lastRetrained": 1792322836394
+    "totalLearnedTrades": 0,
+    "lastRetrained": 0
   },
-  "stateRevision": 6,
-  "updatedAt": 1792322870247
+  "stateRevision": 12,
+  "updatedAt": 1792942005917
 }

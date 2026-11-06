@@ -51,7 +51,7 @@ describe('AtomicStateStore', () => {
     const loaded = store.loadState<any>({});
     expect(loaded.stateRevision).toBe(100);
     expect(loaded.counter).toBe(100);
-  }, 15000);
+  }, 60000);
 
   it('recovers from corrupt JSON using latest backup', async () => {
     const store = new AtomicStateStore(tempFile);

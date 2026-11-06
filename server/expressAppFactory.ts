@@ -13,6 +13,7 @@ import { createSettingsRouter, type SettingsRouterContext } from './routes/setti
 import { createSystemRouter, type SystemRouterContext } from './routes/systemRoutes.ts';
 import { createDebugRouter, type DebugRouterContext } from './routes/debugRoutes.ts';
 import { createTelemetryRouter, type TelemetryRouterContext } from './routes/telemetryRoutes.ts';
+import { createTimeMachineRouter, type TimeMachineRouterContext } from './routes/timeMachineRoutes.ts';
 
 export interface ExpressAppFactoryContexts {
   realTradeContext: RealTradeRouterContext;
@@ -25,6 +26,7 @@ export interface ExpressAppFactoryContexts {
   systemContext: SystemRouterContext;
   debugContext: DebugRouterContext;
   telemetryContext?: TelemetryRouterContext;
+  timeMachineContext?: TimeMachineRouterContext;
 }
 
 export function createExpressApp(contexts: ExpressAppFactoryContexts): Express {
@@ -73,6 +75,9 @@ export function createExpressApp(contexts: ExpressAppFactoryContexts): Express {
     getGlobalSettings: () => (contexts.settingsContext ? contexts.settingsContext.getGlobalSettings() : {}),
     getVirtualTrades: () => (contexts.paperTradeContext ? contexts.paperTradeContext.getVirtualTrades() : [])
   }));
+  if (contexts.timeMachineContext) {
+    app.use('/api', createTimeMachineRouter(contexts.timeMachineContext));
+  }
   if (process.env.NODE_ENV !== 'production') {
     app.use('/api', createDebugRouter(contexts.debugContext));
   }

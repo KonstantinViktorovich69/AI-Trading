@@ -54,6 +54,7 @@ import { createAiRoutes, type AiRoutesContext } from './server/routes/aiRoutes.t
 import { createMarketRouter, type MarketRouterContext } from './server/routes/marketRoutes.ts';
 import { createRealTradeRouter, type RealTradeRouterContext } from './server/routes/realTradeRoutes.ts';
 import { createDebugRouter, type DebugRouterContext } from './server/routes/debugRoutes.ts';
+import { type TimeMachineRouterContext } from './server/routes/timeMachineRoutes.ts';
 import { createExpressApp, setupStaticAndViteMiddleware } from './server/expressAppFactory.ts';
 import { createAiOptimizationWorker, getJaccardSimilarity } from './server/workers/aiOptimizationWorker.ts';
 import { ScannerWorkerManager, type ScannerWorkerManagerContext } from './server/workers/scannerWorkerManager.ts';
@@ -1654,9 +1655,13 @@ const systemContext: SystemRouterContext = {
   getEventLoopLagMs: () => (typeof serverEventLoopLagMs !== 'undefined' ? serverEventLoopLagMs : 0),
   getWatchdogStatus: () => exchangeWsManager.getWatchdogStatus(),
   getServerStartTime: () => ((globalThis as any).SERVER_START_TIME || Date.now()),
-  getLatencyInfo: () => ({
-    weexLatencyMs: (globalThis as any).weexLatencyMs || 38
-  })
+  getLatencyInfo: () => {
+    const weexHealth = apiHealth['weex'];
+    const weexLatencyMs = (weexHealth && weexHealth.status !== 'offline') ? (weexHealth.latency || 0) : 0;
+    return {
+      weexLatencyMs
+    };
+  }
 };
 
 const debugContext: DebugRouterContext = {
@@ -1674,6 +1679,14 @@ const debugContext: DebugRouterContext = {
   generateProgrammaticCommitteeFallback: (item: any) => generateProgrammaticCommitteeFallback(item)
 };
 
+const timeMachineContext: TimeMachineRouterContext = {
+  getVirtualTrades: () => virtualTrades,
+  getGlobalTrueOhlcv: () => GLOBAL_TRUE_OHLCV,
+  getAiKnowledgeBase: () => aiKnowledgeBase,
+  saveKnowledgeDB: (rule: any, immediate?: boolean) => saveKnowledgeDB(rule, immediate),
+  emitSignalsUpdated: () => streamEmitter.emit('signals_updated')
+};
+
 export const app = createExpressApp({
   realTradeContext,
   marketContext,
@@ -1683,7 +1696,8 @@ export const app = createExpressApp({
   knowledgeContext,
   settingsContext,
   systemContext,
-  debugContext
+  debugContext,
+  timeMachineContext
 });
 
 async function startServer() {

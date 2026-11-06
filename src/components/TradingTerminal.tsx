@@ -4,11 +4,13 @@ import { Info, Bell, Calculator, TrendingDown, TrendingUp, AlertCircle, AlertTri
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { cn } from '../lib/utils';
+import { mergeTradesById as mergeTradesByIdHelper } from '../lib/mergeTrades';
 
 const TradingChart = lazy(() => import('./TradingChart').then(m => ({ default: m.default || m.TradingChart })));
 const AnalyticsTab = lazy(() => import('./AnalyticsTab').then(m => ({ default: m.default || m.AnalyticsTab })));
 const SignalAnalyticsDashboard = lazy(() => import('./SignalAnalyticsDashboard').then(m => ({ default: m.default || m.SignalAnalyticsDashboard })));
 const FundingArbitragePanel = lazy(() => import('./FundingArbitragePanel').then(m => ({ default: m.default || m.FundingArbitragePanel })));
+const TimeMachineView = lazy(() => import('./TimeMachineView').then(m => ({ default: m.default || m.TimeMachineView })));
 
 function Tooltip({ text, children, className }: { text: string, children: React.ReactNode, position?: 'top' | 'right' | 'bottom', className?: string, key?: string | number }) {
   return (
@@ -1328,18 +1330,18 @@ export function TradingTerminal({
     }
   }, []);
 
-  const [latencyInfo, setLatencyInfo] = useState<{ weex: number }>({ weex: 38 });
+  const [latencyInfo, setLatencyInfo] = useState<{ weex: number }>({ weex: 0 });
 
   useEffect(() => {
     let active = true;
     const fetchPing = async () => {
       try {
-        const res = await fetch('/api/ping');
+        const res = await fetch('/api/ping?info=1');
         if (res.ok) {
           const data = await res.json();
           if (active && data && data.success) {
             setLatencyInfo({
-              weex: data.weexLatency || 35
+              weex: data.weexLatency ?? 0
             });
           }
         }
@@ -1837,39 +1839,7 @@ export function TradingTerminal({
 
   // Стабильное слияние сделок по ID: сохраняет полную историю и не дает статистике прыгать
   const mergeTradesById = useCallback((existing: any[], incoming: any[]) => {
-    if (!incoming || incoming.length === 0) return existing;
-    const map = new Map<string, any>();
-    for (const t of existing) {
-      if (t && t.id) map.set(t.id, t);
-    }
-    for (const t of incoming) {
-      if (t && t.id) {
-        const prev = map.get(t.id);
-        const { decisionTrace, gateDiagnostics, correlationContext, ...leanIncoming } = t;
-        map.set(t.id, prev ? { ...prev, ...leanIncoming } : leanIncoming);
-      }
-    }
-
-    // ВАЖНО: Сервер является абсолютным источником истины для статуса OPEN!
-    // Любая сделка из локального кэша, которой нет среди открытых на сервере (и которая не открыта локально < 15 сек назад),
-    // не может считаться открытой и принудительно переводится в статус CLOSED.
-    const serverOpenIds = new Set(incoming.filter((t: any) => t.status === 'OPEN').map((t: any) => t.id));
-    const now = Date.now();
-    for (const [id, t] of map.entries()) {
-      if (t.status === 'OPEN' && !serverOpenIds.has(id)) {
-        if (!t.openTime || (now - t.openTime >= 15000)) {
-          map.set(id, { ...t, status: 'CLOSED', closeTime: t.closeTime || now });
-        }
-      }
-    }
-
-    return Array.from(map.values()).sort((a, b) => {
-      if (a.status === 'OPEN' && b.status !== 'OPEN') return -1;
-      if (a.status !== 'OPEN' && b.status === 'OPEN') return 1;
-      const timeA = a.closeTime || a.openTime || 0;
-      const timeB = b.closeTime || b.openTime || 0;
-      return timeB - timeA;
-    });
+    return mergeTradesByIdHelper(existing, incoming);
   }, []);
 
   const [realTrades, setRealTrades] = useState<any[]>([]);
@@ -2204,7 +2174,7 @@ export function TradingTerminal({
     };
   }, [reconnectTrigger]);
 
-  const [mainTab, setMainTab] = useState<'scanner' | 'funding' | 'knowledge' | 'history' | 'peaks' | 'telemetry' | 'signal_analytics'>('scanner');
+  const [mainTab, setMainTab] = useState<'scanner' | 'funding' | 'knowledge' | 'history' | 'peaks' | 'telemetry' | 'signal_analytics' | 'timemachine'>('scanner');
   
   useEffect(() => {
     if (isStandaloneTerminal || isStandaloneTrade) {
@@ -3688,9 +3658,9 @@ export function TradingTerminal({
           const symKey = (s.symbol || '').replace('/', '');
           const curPrice = renderedPrices[symKey] || renderedPrices[s.symbol || ''] || s.price || 0;
           const diff = s.price ? ((curPrice - s.price) / s.price) * 100 : 0;
-          // Более строгий фильтр: если цена ушла от точки входа более чем на 0.3% в сторону профита - вход пропущен
-          if (isShort && diff < -0.3) return false;
-          if (!isShort && diff > 0.3) return false;
+          // Фильтр упущенных входов: отсекать только если цена ушла экстремально далеко (> 1.8% в сторону профита)
+          if (isShort && diff < -1.8) return false;
+          if (!isShort && diff > 1.8) return false;
         }
       }
 
@@ -4883,6 +4853,18 @@ export function TradingTerminal({
               )}
             >
               <BarChart3 className="w-3.5 h-3.5 text-indigo-300 shrink-0" /> АНАЛИТИКА СИГНАЛОВ
+            </button>
+
+            <button 
+              onClick={() => setMainTab('timemachine')} 
+              className={cn(
+                "px-2.5 py-1.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all duration-300 whitespace-nowrap flex items-center gap-1.5", 
+                mainTab === 'timemachine' 
+                  ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 shadow-glow-indigo" 
+                  : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.02]"
+              )}
+            >
+              <History className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> МАШИНА ВРЕМЕНИ
             </button>
 
             <button 
@@ -7625,12 +7607,12 @@ export function TradingTerminal({
 
                     <div className="h-5 w-px bg-white/[0.05]"></div>
 
-                    <Tooltip text="Мониторинг задержки соединения (Ping в мс) до API WEEX">
+                    <Tooltip text="Время последней загрузки тикеров WEEX. Прочерк: нет данных или WEEX недоступен">
                       <div className="flex flex-col items-center">
                         <span className="text-[7.5px] text-zinc-500 font-bold uppercase tracking-[0.2em] mb-1.5 leading-none">API LATENCY</span>
                         <div className="flex items-center gap-1.5 font-mono text-[9.5px] font-bold">
-                          <span className={cn(latencyInfo.weex < 50 ? "text-emerald-400" : latencyInfo.weex < 100 ? "text-amber-400" : "text-rose-400")}>
-                            WX {latencyInfo.weex}ms
+                          <span className={cn(latencyInfo.weex <= 0 ? "text-zinc-500" : latencyInfo.weex < 1000 ? "text-emerald-400" : latencyInfo.weex < 2000 ? "text-amber-400" : "text-rose-400")}>
+                            WX {latencyInfo.weex > 0 ? latencyInfo.weex + 'ms' : '—'}
                           </span>
                         </div>
                       </div>
@@ -8217,14 +8199,30 @@ export function TradingTerminal({
                   <tr>
                     <td colSpan={10} className="px-4 py-16 text-center">
                       <div className="max-w-md mx-auto flex flex-col items-center justify-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-zinc-400 text-xs font-black tracking-widest uppercase block">АКТИВНЫХ СИГНАЛОВ НЕТ</span>
-                        <p className="text-zinc-600 text-[10px] leading-relaxed max-w-sm">
-                          Рынок находится в спокойной/флэтовой фазе. Торговый ИИ-сканер активен в режиме <span className="text-zinc-500 font-bold">Smart Safety Mode</span> и ожидает высоковероятных импульсов, подтвержденных снятием ликвидности (Liquidity Sweeps) и структурой BOS/ChoCh по двунаправленной системе <span className="text-zinc-500 font-bold">SHORT & LONG Quantum Scalping</span>.
+                        <span className="text-zinc-300 text-xs font-semibold tracking-wider uppercase block">
+                          {signalDirectionFilter === 'POSITIONS' ? 'НЕТ ОТКРЫТЫХ ПОЗИЦИЙ' : 'АКТИВНЫХ СИГНАЛОВ ПО ВЫБРАННОМУ ФИЛЬТРУ НЕТ'}
+                        </span>
+                        <p className="text-zinc-500 text-[11px] leading-relaxed max-w-sm">
+                          {signalDirectionFilter === 'POSITIONS' 
+                            ? 'В терминале сейчас нет открытых сделок. Автопилот активен и сканирует 970+ инструментов биржи WEEX для входа.' 
+                            : 'Торговый ИИ-сканер работает по двунаправленной системе (SHORT & LONG). Вы можете сбросить фильтры направления или ввести тикер в поиске выше.'}
                         </p>
-                        <p className="text-[9px] text-zinc-600/70 italic mt-1">
-                          Вы можете ввести любой тикер в поиске выше для мгновенного ручного анализа.
-                        </p>
+                        {signalDirectionFilter === 'POSITIONS' && (
+                          <button
+                            onClick={() => setSignalDirectionFilter('ALL')}
+                            className="mt-2 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
+                          >
+                            Показать все рыночные сигналы ({filteredSignals.length})
+                          </button>
+                        )}
+                        {hidePassedEntries && (
+                          <button
+                            onClick={() => setHidePassedEntries(false)}
+                            className="text-[11px] text-cyan-400 hover:text-cyan-300 underline underline-offset-2 transition-colors"
+                          >
+                            Показать упущенные входы
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -9414,6 +9412,14 @@ export function TradingTerminal({
         </div>
       )}
       
+      {mainTab === 'timemachine' && (
+        <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-6">
+          <Suspense fallback={<div className="p-8 text-center text-zinc-500 font-mono text-xs">Загрузка Машины Времени...</div>}>
+            <TimeMachineView />
+          </Suspense>
+        </div>
+      )}
+
       {mainTab === 'history' && (
         <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
