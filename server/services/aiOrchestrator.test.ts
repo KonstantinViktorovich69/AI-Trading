@@ -24,8 +24,10 @@ describe('aiOrchestrator', () => {
       contents: [{ role: 'user', parts: [{ text: 'retrospectiveSummary and ИИ-Контур' }] }]
     }, 'Quota');
     const parsed = JSON.parse(fallback.text);
-    expect(parsed.retrospectiveSummary).toBeDefined();
-    expect(parsed.winRate).toBeGreaterThan(0);
+    expect(parsed.retrospectiveSummary).toBe('ИИ недоступен, ретроспектива пропущена');
+    expect(parsed.winRate).toBeUndefined();
+    expect(parsed.expertModifications).toBe('');
+    expect(parsed.isFallback).toBe(true);
     expect(Array.isArray(parsed.agentExchangeConversations)).toBe(true);
   });
 
@@ -34,9 +36,10 @@ describe('aiOrchestrator', () => {
       contents: [{ role: 'user', parts: [{ text: 'getSignalAnalysisPrompt and judgeDecision' }] }]
     }, 'Timeout');
     const parsed = JSON.parse(fallback.text);
-    expect(parsed.approved).toBe(true);
-    expect(parsed.action).toBe('EXECUTE');
-    expect(parsed.judgeDecision).toBe('LONG');
+    expect(parsed.approved).toBe(false);
+    expect(parsed.action).toBe('HOLD');
+    expect(parsed.judgeDecision).toBe('NEUTRAL');
+    expect(parsed.isFallback).toBe(true);
   });
 
   it('queues frontend task when requested', async () => {

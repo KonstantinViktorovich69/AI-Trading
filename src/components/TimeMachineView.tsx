@@ -212,7 +212,7 @@ export const TimeMachineView: React.FC = () => {
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-zinc-200">Сравнение сценариев сопровождения</h3>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          {summary && Object.entries(summary.scenarioSummaries).map(([scId, sc]) => {
+          {summary && (Object.entries(summary.scenarioSummaries) as [string, ScenarioSummary][]).map(([scId, sc]) => {
             const isBest = scId === summary.overallBestScenario;
             const meta = scenarioDisplayNames[scId] || { name: scId, desc: '' };
             return (
@@ -359,7 +359,7 @@ export const TimeMachineView: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-            {Object.entries(selectedTrade.scenarios).map(([scId, res]) => {
+            {(Object.entries(selectedTrade.scenarios) as [string, { scenarioName: string; pnlPercent: number; closeReason: string; isWin: boolean }][]).map(([scId, res]) => {
               const isBest = scId === selectedTrade.bestScenario;
               return (
                 <div
@@ -386,3 +386,5 @@ export const TimeMachineView: React.FC = () => {
     </div>
   );
 };
+
+export default TimeMachineView;

@@ -23,29 +23,45 @@ describe('AiGatewayService', () => {
       contents: [{ parts: [{ text: 'getRetrospectivePrompt retrospectiveSummary' }] }]
     }, 'test');
     const retroJson = JSON.parse(retroFallback.text);
-    expect(retroJson.retrospectiveSummary).toBeDefined();
-    expect(retroJson.winRate).toBeGreaterThan(0);
+    expect(retroJson.retrospectiveSummary).toBe('ИИ недоступен, ретроспектива пропущена');
+    expect(retroJson.winRate).toBeUndefined();
+    expect(retroJson.expertModifications).toBe('');
+    expect(retroJson.agentExchangeConversations).toEqual([]);
+    expect(retroJson.isFallback).toBe(true);
 
     // Expert trader prompt fallback
     const expertFallback = gateway.getStaticServerSideAiFallback({
       contents: [{ parts: [{ text: 'expertPrompt ИИ-Ведущий Трейдер' }] }]
     }, 'test');
     const expertJson = JSON.parse(expertFallback.text);
-    expect(expertJson.action).toBe('UPDATE_SL');
+    expect(expertJson.action).toBe('HOLD');
+    expect(expertJson.newSl).toBeNull();
+    expect(expertJson.newTp).toBeNull();
+    expect(expertJson.isFallback).toBe(true);
 
     // Trade evaluation prompt fallback
     const evalFallback = gateway.getStaticServerSideAiFallback({
       contents: [{ parts: [{ text: 'getTradeEvaluationPrompt evaluate-closed-trade' }] }]
     }, 'test');
     const evalJson = JSON.parse(evalFallback.text);
-    expect(evalJson.evaluation).toBeDefined();
+    expect(evalJson.evaluation).toBe('ИИ недоступен для разбора сделки.');
+    expect(evalJson.learnedRule).toBe('');
+    expect(evalJson.isFallback).toBe(true);
 
     // Signal analysis prompt fallback
     const signalFallback = gateway.getStaticServerSideAiFallback({
       contents: [{ parts: [{ text: 'techAnalyst riskManager getSignalAnalysisPrompt' }] }]
     }, 'test');
     const signalJson = JSON.parse(signalFallback.text);
-    expect(signalJson.consensus).toBe('ПОДТВЕРЖДЕНО');
+    expect(signalJson.consensus).toBe('НЕТ ДАННЫХ');
+    expect(signalJson.judgeDecision).toBe('NEUTRAL');
+    expect(signalJson.approved).toBe(false);
+    expect(signalJson.aiScore).toBe(0);
+    expect(signalJson.action).toBe('HOLD');
+    expect(signalJson.isFallback).toBe(true);
+
+    // Verify counter
+    expect(gateway.aiFallbackCount).toBe(5);
   });
 
   it('manages frontend task queues and completion', async () => {

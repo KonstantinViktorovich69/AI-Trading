@@ -1,0 +1,14 @@
+src/components/TimeMachineView.tsx(237,41): error TS2339: Property 'totalPnlPct' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(238,27): error TS2339: Property 'totalPnlPct' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(238,58): error TS2339: Property 'totalPnlPct' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(243,57): error TS2339: Property 'winRate' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(247,41): error TS2339: Property 'deltaPnlVsActualPct' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(248,27): error TS2339: Property 'deltaPnlVsActualPct' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(248,60): error TS2339: Property 'deltaPnlVsActualPct' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(248,102): error TS2339: Property 'deltaPnlVsActualPct' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(374,97): error TS2339: Property 'pnlPercent' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(375,26): error TS2339: Property 'pnlPercent' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(375,57): error TS2339: Property 'pnlPercent' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(377,94): error TS2339: Property 'closeReason' does not exist on type 'unknown'.
+src/components/TimeMachineView.tsx(378,26): error TS2339: Property 'closeReason' does not exist on type 'unknown'.
+src/components/TradingTerminal.tsx(13,88): error TS2339: Property 'default' does not exist on type 'typeof import("/app/applet/src/components/TimeMachineView")'.

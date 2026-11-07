@@ -630,32 +630,21 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
         const pttpWins = lastTradesSample.filter((t: any) => (t.closeReason || '').includes('PTTP') || (t.notes || '').includes('PTTP')).length;
         const severeLossTrade = lastTradesSample.find((t: any) => (t.pnlPercent || 0) <= -15);
 
-        let summaryText = `Текущая просадка за день вызвана зависанием сделок во флэте `;
-        if (severeLossTrade) {
-          summaryText += `и критическим убытком по ${severeLossTrade.symbol} из-за отсутствия жесткого стоп-лосса при длительном удержании. `;
-        } else if (worstTrade && worstTrade.pnlPercent < 0) {
-          summaryText += `и локальным откатом по ${worstTrade.symbol} (${worstTrade.pnlPercent.toFixed(1)}% PnL) при росте рыночного шума. `;
-        } else {
-          summaryText += `и боковой консолидацией ключевых активов. `;
+        let summaryText = `Программный аудит выборки из ${totalSample} сделок: винрейт ${calculatedWinRate.toFixed(1)}%.`;
+        if (bestTrade && typeof bestTrade.pnlPercent === 'number') {
+          summaryText += ` Лучшая сделка: ${bestTrade.symbol} (${bestTrade.pnlPercent > 0 ? '+' : ''}${bestTrade.pnlPercent.toFixed(1)}%).`;
         }
-
-        if (pttpWins > 0) {
-          summaryText += `В то же время, алгоритм PTTP демонстрирует отличные результаты на быстрых импульсах (+${pttpWins} фиксаций). `;
-        } else if (bestTrade && bestTrade.pnlPercent > 0) {
-          summaryText += `В то же время, импульсный фильтр продемонстрировал отличный профит по ${bestTrade.symbol} (+${bestTrade.pnlPercent.toFixed(1)}% PnL). `;
+        if (worstTrade && typeof worstTrade.pnlPercent === 'number') {
+          summaryText += ` Худшая сделка: ${worstTrade.symbol} (${worstTrade.pnlPercent > 0 ? '+' : ''}${worstTrade.pnlPercent.toFixed(1)}%).`;
         }
-        summaryText += `Требуется немедленное сокращение максимального времени жизни сделки для волатильных пар.`;
 
         rawDecision = {
           retrospectiveSummary: summaryText,
           winRate: calculatedWinRate,
-          agentExchangeConversations: [
-            { fromAgent: "RETROSPECTIVE", toAgent: "EXPERT", message: `Квантовый ретроспективный аудит выборки ${totalSample} сделок завершен (Винрейт: ${calculatedWinRate.toFixed(1)}%).`, details: `Оптимизированы параметры удержания позиций и спреда.`, type: "info" },
-            { fromAgent: "ARCHIVIST", toAgent: "ALL", message: "База знаний верифицирована программным клинингом.", details: "Удалены дублирующие правила.", type: "success" },
-            { fromAgent: "EXPERT", toAgent: "ALL", message: "Регламент эксперту применен.", details: "Активированы ордера Pegged/Post-Only и затухание объема (Volume Fading).", type: "warning" }
-          ],
+          agentExchangeConversations: [],
           rulesToArchive: [],
-          expertModifications: "Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%. Использовать показатель затухания торгового объема (Volume Fading) на 5-минутном интервале как обязательный фильтр-подтверждение перед активацией шорт-ордеров."
+          expertModifications: "",
+          isFallback: true
         };
       }
 
@@ -700,21 +689,29 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
         }
       }
 
-      if (decision.expertModifications && decision.expertModifications.trim().length > 0 && decision.expertModifications !== 'Входы в штатном режиме') {
+      const isPlaceholderModifications = 
+        !decision.expertModifications ||
+        decision.expertModifications.trim().length === 0 ||
+        decision.expertModifications === 'Входы в штатном режиме' ||
+        decision.expertModifications.includes('Pegged/Post-Only') ||
+        (rawDecision as any)?.isFallback === true;
+
+      if (!isPlaceholderModifications) {
         const globalSettings = ctx.getGlobalSettings();
         let currentInstructions = globalSettings.aiExpertTraderInstructions || "";
         const sectionHeader = "### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)";
         const oldSectionHeader = "### 4. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)";
         
         let updatedInstructions = "";
-        if (currentInstructions.includes(sectionHeader)) {
-          const parts = currentInstructions.split(sectionHeader);
-          updatedInstructions = parts[0] + sectionHeader + "\n" + decision.expertModifications;
-        } else if (currentInstructions.includes(oldSectionHeader)) {
-          const parts = currentInstructions.split(oldSectionHeader);
-          updatedInstructions = parts[0] + sectionHeader + "\n" + decision.expertModifications;
+        const targetHeader = currentInstructions.includes(sectionHeader) ? sectionHeader : (currentInstructions.includes(oldSectionHeader) ? oldSectionHeader : null);
+        if (targetHeader) {
+          const parts = currentInstructions.split(targetHeader);
+          const afterHeader = parts[1] || "";
+          const nextSectionIdx = afterHeader.search(/\n###\s+/);
+          const tail = nextSectionIdx !== -1 ? afterHeader.substring(nextSectionIdx) : "";
+          updatedInstructions = parts[0] + sectionHeader + "\n" + decision.expertModifications.trim() + (tail ? "\n\n" + tail.trimStart() : "");
         } else {
-          updatedInstructions = currentInstructions.trim() + "\n\n" + sectionHeader + "\n" + decision.expertModifications;
+          updatedInstructions = currentInstructions.trim() + "\n\n" + sectionHeader + "\n" + decision.expertModifications.trim();
         }
         
         ctx.setExpertInstructions(updatedInstructions, 'RETROSPECTIVE', `Ретроспективные корректировки: ${decision.expertModifications.slice(0, 100)}...`);

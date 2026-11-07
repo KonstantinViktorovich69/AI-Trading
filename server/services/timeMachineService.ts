@@ -41,10 +41,13 @@ export interface TradeTimeMachineAnalysis {
   bestScenario: SimulationScenarioId;
   deltaPnlVsActual: number; // Насколько лучший сценарий превзошел фактический результат
   recommendedAction: string;
+  skipped?: 'NO_CANDLES';
 }
 
 export interface TimeMachineBatchSummary {
   totalAnalyzedTrades: number;
+  simulatedTradesCount: number;
+  skippedTradesCount: number;
   actualTotalPnlPct: number;
   actualWinRate: number;
   scenarioSummaries: Record<SimulationScenarioId, {
@@ -54,6 +57,11 @@ export interface TimeMachineBatchSummary {
     bestScenarioTradeCount: number;
   }>;
   overallBestScenario: SimulationScenarioId;
+  optimisticBestOfFive: {
+    totalPnlPct: number;
+    deltaVsActualPct: number;
+    note: string;
+  };
   topAdaptiveLessons: Array<{
     patternName: string;
     bestScenario: SimulationScenarioId;
@@ -97,8 +105,8 @@ export function simulateTradeAlternatives(
     executedOtePullback: false
   };
 
-  // Если свечи недоступны, возвращаем фактический результат для всех сценариев
-  if (!candles || candles.length === 0) {
+  // Если свечи недоступны, возвращаем фактический результат с пометкой о пропуске
+  if (!candles || !Array.isArray(candles) || candles.length === 0) {
     return {
       tradeId: trade.id || `trade_${Date.now()}`,
       symbol: trade.symbol,
@@ -118,7 +126,8 @@ export function simulateTradeAlternatives(
       },
       bestScenario: 'ACTUAL',
       deltaPnlVsActual: 0,
-      recommendedAction: 'Недостаточно минутных данных для ретроспективного перебора'
+      recommendedAction: 'Пропущено: нет 15-минутных свечей для симуляции',
+      skipped: 'NO_CANDLES'
     };
   }
 
@@ -497,14 +506,27 @@ export function runTimeMachineBatch(
   };
 
   const patternStats: Record<string, { total: number; scenarioWins: Record<SimulationScenarioId, number>; pnlDeltaSum: number }> = {};
+  let skippedTradesCount = 0;
+  let optimisticBestPnlSum = 0;
 
   for (const trade of closedTrades) {
-    const cleanSym = (trade.symbol || '').replace(/[\/:]/g, '').toUpperCase();
-    const candles = ohlcvMap[cleanSym] || ohlcvMap[trade.symbol] || [];
+    const cleanSym = (trade.symbol || '').split(':')[0].replace(/[\/:]/g, '').toUpperCase();
+    const rawCandles = ohlcvMap[cleanSym] || ohlcvMap[trade.symbol];
+    const candles = Array.isArray(rawCandles)
+      ? rawCandles
+      : (rawCandles && typeof rawCandles === 'object' && Array.isArray((rawCandles as any)['15m'])
+          ? (rawCandles as any)['15m']
+          : []);
     const analysis = simulateTradeAlternatives(trade, candles);
     analyses.push(analysis);
 
+    if (analysis.skipped === 'NO_CANDLES') {
+      skippedTradesCount++;
+      continue;
+    }
+
     counts[analysis.bestScenario] = (counts[analysis.bestScenario] || 0) + 1;
+    optimisticBestPnlSum += analysis.scenarios[analysis.bestScenario].pnlPercent;
 
     for (const [sId, res] of Object.entries(analysis.scenarios)) {
       const scenarioId = sId as SimulationScenarioId;
@@ -527,7 +549,8 @@ export function runTimeMachineBatch(
     patternStats[pat].pnlDeltaSum += analysis.deltaPnlVsActual;
   }
 
-  const total = closedTrades.length || 1;
+  const simulatedTradesCount = closedTrades.length - skippedTradesCount;
+  const total = simulatedTradesCount > 0 ? simulatedTradesCount : 1;
   const actualPnl = pnlSums.ACTUAL;
 
   const scenarioSummaries: Record<SimulationScenarioId, any> = {
@@ -615,12 +638,21 @@ export function runTimeMachineBatch(
 
   topAdaptiveLessons.sort((a, b) => b.advantagePct - a.advantagePct);
 
+  const optimisticBestOfFive = {
+    totalPnlPct: Number(optimisticBestPnlSum.toFixed(2)),
+    deltaVsActualPct: Number((optimisticBestPnlSum - pnlSums.ACTUAL).toFixed(2)),
+    note: "Оптимистичная оценка (смещение выбора): сумма лучших исходов из 5 для каждой сделки post-factum"
+  };
+
   const summary: TimeMachineBatchSummary = {
     totalAnalyzedTrades: closedTrades.length,
+    simulatedTradesCount,
+    skippedTradesCount,
     actualTotalPnlPct: scenarioSummaries.ACTUAL.totalPnlPct,
     actualWinRate: scenarioSummaries.ACTUAL.winRate,
     scenarioSummaries,
     overallBestScenario,
+    optimisticBestOfFive,
     topAdaptiveLessons: topAdaptiveLessons.slice(0, 10),
     simulatedAt: Date.now()
   };

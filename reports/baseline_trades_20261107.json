@@ -1,0 +1,357 @@
+{
+  "generatedAt": "2026-11-07T08:00:04.389Z",
+  "databaseJsonTrades": {
+    "overall": {
+      "count": 95,
+      "wins": 24,
+      "losses": 71,
+      "winRatePct": 25.26,
+      "meanNetReturnPct": -0.6112,
+      "grossProfitPct": 52.4154,
+      "grossLossPct": 110.4767,
+      "profitFactor": 0.474
+    },
+    "byPattern": {
+      "🎯 Bottom Wick Retest (Ретест дна)": {
+        "count": 35,
+        "wins": 8,
+        "losses": 27,
+        "winRatePct": 22.86,
+        "meanNetReturnPct": -0.4663,
+        "grossProfitPct": 20.5323,
+        "grossLossPct": 36.8539,
+        "profitFactor": 0.557
+      },
+      "🧹 False Breakout (Ложный пробой)": {
+        "count": 32,
+        "wins": 6,
+        "losses": 26,
+        "winRatePct": 18.75,
+        "meanNetReturnPct": -0.8266,
+        "grossProfitPct": 19.705,
+        "grossLossPct": 46.1552,
+        "profitFactor": 0.427
+      },
+      "🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)": {
+        "count": 7,
+        "wins": 2,
+        "losses": 5,
+        "winRatePct": 28.57,
+        "meanNetReturnPct": -1.6766,
+        "grossProfitPct": 1.7565,
+        "grossLossPct": 13.4928,
+        "profitFactor": 0.13
+      },
+      "💀 Volume Climax Bottom (Recovery)": {
+        "count": 8,
+        "wins": 2,
+        "losses": 6,
+        "winRatePct": 25,
+        "meanNetReturnPct": -0.2126,
+        "grossProfitPct": 3.1592,
+        "grossLossPct": 4.8602,
+        "profitFactor": 0.65
+      },
+      "💀 Volume Climax (Predictive Dump)": {
+        "count": 9,
+        "wins": 5,
+        "losses": 4,
+        "winRatePct": 55.56,
+        "meanNetReturnPct": 0.0548,
+        "grossProfitPct": 6.1254,
+        "grossLossPct": 5.6324,
+        "profitFactor": 1.088
+      },
+      "🎯 Wick Zone Retest (Ретест фитиля)": {
+        "count": 4,
+        "wins": 1,
+        "losses": 3,
+        "winRatePct": 25,
+        "meanNetReturnPct": -0.5863,
+        "grossProfitPct": 1.137,
+        "grossLossPct": 3.4822,
+        "profitFactor": 0.327
+      }
+    },
+    "byUtcHour": {
+      "00-06": {
+        "count": 16,
+        "wins": 4,
+        "losses": 12,
+        "winRatePct": 25,
+        "meanNetReturnPct": -0.9894,
+        "grossProfitPct": 4.5878,
+        "grossLossPct": 20.4176,
+        "profitFactor": 0.225
+      },
+      "06-12": {
+        "count": 31,
+        "wins": 5,
+        "losses": 26,
+        "winRatePct": 16.13,
+        "meanNetReturnPct": -0.8554,
+        "grossProfitPct": 18.8081,
+        "grossLossPct": 45.3241,
+        "profitFactor": 0.415
+      },
+      "12-18": {
+        "count": 27,
+        "wins": 7,
+        "losses": 20,
+        "winRatePct": 25.93,
+        "meanNetReturnPct": -0.5663,
+        "grossProfitPct": 8.6385,
+        "grossLossPct": 23.9293,
+        "profitFactor": 0.361
+      },
+      "18-24": {
+        "count": 21,
+        "wins": 8,
+        "losses": 13,
+        "winRatePct": 38.1,
+        "meanNetReturnPct": -0.0202,
+        "grossProfitPct": 20.381,
+        "grossLossPct": 20.8057,
+        "profitFactor": 0.98
+      }
+    },
+    "bySide": {
+      "LONG": {
+        "count": 50,
+        "wins": 12,
+        "losses": 38,
+        "winRatePct": 24,
+        "meanNetReturnPct": -0.5952,
+        "grossProfitPct": 25.448,
+        "grossLossPct": 55.2069,
+        "profitFactor": 0.461
+      },
+      "SHORT": {
+        "count": 45,
+        "wins": 12,
+        "losses": 33,
+        "winRatePct": 26.67,
+        "meanNetReturnPct": -0.6289,
+        "grossProfitPct": 26.9674,
+        "grossLossPct": 55.2698,
+        "profitFactor": 0.488
+      }
+    },
+    "featureCompleteness": {
+      "totalClosedTrades": 95,
+      "withFeatures": {
+        "count": 95,
+        "pct": 100
+      },
+      "withEntryDiagnostics": {
+        "count": 89,
+        "pct": 93.68
+      },
+      "withFeaturesV2": {
+        "count": 75,
+        "pct": 78.95
+      },
+      "withQuantPV2": {
+        "count": 0,
+        "pct": 0
+      }
+    }
+  },
+  "allHistoricalTrades": {
+    "overall": {
+      "count": 271,
+      "wins": 92,
+      "losses": 179,
+      "winRatePct": 33.95,
+      "meanNetReturnPct": -0.2478,
+      "grossProfitPct": 141.7282,
+      "grossLossPct": 208.8927,
+      "profitFactor": 0.678
+    },
+    "byPattern": {
+      "🎯 Bottom Wick Retest (Ретест дна)": {
+        "count": 57,
+        "wins": 16,
+        "losses": 41,
+        "winRatePct": 28.07,
+        "meanNetReturnPct": -0.6367,
+        "grossProfitPct": 31.7384,
+        "grossLossPct": 68.0305,
+        "profitFactor": 0.467
+      },
+      "🧹 False Breakout (Ложный пробой)": {
+        "count": 60,
+        "wins": 18,
+        "losses": 42,
+        "winRatePct": 30,
+        "meanNetReturnPct": -0.3478,
+        "grossProfitPct": 46.9358,
+        "grossLossPct": 67.8042,
+        "profitFactor": 0.692
+      },
+      "🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)": {
+        "count": 15,
+        "wins": 4,
+        "losses": 11,
+        "winRatePct": 26.67,
+        "meanNetReturnPct": -0.4898,
+        "grossProfitPct": 9.8546,
+        "grossLossPct": 17.2013,
+        "profitFactor": 0.573
+      },
+      "💀 Volume Climax Bottom (Recovery)": {
+        "count": 21,
+        "wins": 10,
+        "losses": 11,
+        "winRatePct": 47.62,
+        "meanNetReturnPct": 0.2786,
+        "grossProfitPct": 17.0535,
+        "grossLossPct": 11.2027,
+        "profitFactor": 1.522
+      },
+      "💀 Volume Climax (Predictive Dump)": {
+        "count": 9,
+        "wins": 5,
+        "losses": 4,
+        "winRatePct": 55.56,
+        "meanNetReturnPct": 0.0548,
+        "grossProfitPct": 6.1254,
+        "grossLossPct": 5.6324,
+        "profitFactor": 1.088
+      },
+      "🎯 Wick Zone Retest (Ретест фитиля)": {
+        "count": 6,
+        "wins": 1,
+        "losses": 5,
+        "winRatePct": 16.67,
+        "meanNetReturnPct": -0.7924,
+        "grossProfitPct": 1.137,
+        "grossLossPct": 5.8915,
+        "profitFactor": 0.193
+      },
+      "⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry)": {
+        "count": 37,
+        "wins": 13,
+        "losses": 24,
+        "winRatePct": 35.14,
+        "meanNetReturnPct": -0.0195,
+        "grossProfitPct": 11.3165,
+        "grossLossPct": 12.0399,
+        "profitFactor": 0.94
+      },
+      "⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry)": {
+        "count": 35,
+        "wins": 11,
+        "losses": 24,
+        "winRatePct": 31.43,
+        "meanNetReturnPct": -0.0152,
+        "grossProfitPct": 9.2735,
+        "grossLossPct": 9.8044,
+        "profitFactor": 0.946
+      },
+      "🔥 Vertical Exhaustion (Разворот)": {
+        "count": 29,
+        "wins": 13,
+        "losses": 16,
+        "winRatePct": 44.83,
+        "meanNetReturnPct": -0.1004,
+        "grossProfitPct": 7.8685,
+        "grossLossPct": 10.7813,
+        "profitFactor": 0.73
+      },
+      "🔥 Reversal from Dump (Разворот пролива)": {
+        "count": 2,
+        "wins": 1,
+        "losses": 1,
+        "winRatePct": 50,
+        "meanNetReturnPct": -0.0397,
+        "grossProfitPct": 0.425,
+        "grossLossPct": 0.5045,
+        "profitFactor": 0.842
+      }
+    },
+    "byUtcHour": {
+      "00-06": {
+        "count": 50,
+        "wins": 17,
+        "losses": 33,
+        "winRatePct": 34,
+        "meanNetReturnPct": -0.4066,
+        "grossProfitPct": 16.4073,
+        "grossLossPct": 36.7389,
+        "profitFactor": 0.447
+      },
+      "06-12": {
+        "count": 106,
+        "wins": 32,
+        "losses": 74,
+        "winRatePct": 30.19,
+        "meanNetReturnPct": -0.372,
+        "grossProfitPct": 56.7505,
+        "grossLossPct": 96.1861,
+        "profitFactor": 0.59
+      },
+      "12-18": {
+        "count": 64,
+        "wins": 24,
+        "losses": 40,
+        "winRatePct": 37.5,
+        "meanNetReturnPct": -0.1095,
+        "grossProfitPct": 39.1384,
+        "grossLossPct": 46.1475,
+        "profitFactor": 0.848
+      },
+      "18-24": {
+        "count": 51,
+        "wins": 19,
+        "losses": 32,
+        "winRatePct": 37.25,
+        "meanNetReturnPct": -0.0076,
+        "grossProfitPct": 29.432,
+        "grossLossPct": 29.8201,
+        "profitFactor": 0.987
+      }
+    },
+    "bySide": {
+      "LONG": {
+        "count": 130,
+        "wins": 42,
+        "losses": 88,
+        "winRatePct": 32.31,
+        "meanNetReturnPct": -0.2954,
+        "grossProfitPct": 68.345,
+        "grossLossPct": 106.7434,
+        "profitFactor": 0.64
+      },
+      "SHORT": {
+        "count": 141,
+        "wins": 50,
+        "losses": 91,
+        "winRatePct": 35.46,
+        "meanNetReturnPct": -0.204,
+        "grossProfitPct": 73.3832,
+        "grossLossPct": 102.1493,
+        "profitFactor": 0.718
+      }
+    },
+    "featureCompleteness": {
+      "totalClosedTrades": 271,
+      "withFeatures": {
+        "count": 258,
+        "pct": 95.2
+      },
+      "withEntryDiagnostics": {
+        "count": 89,
+        "pct": 32.84
+      },
+      "withFeaturesV2": {
+        "count": 75,
+        "pct": 27.68
+      },
+      "withQuantPV2": {
+        "count": 0,
+        "pct": 0
+      }
+    }
+  }
+}

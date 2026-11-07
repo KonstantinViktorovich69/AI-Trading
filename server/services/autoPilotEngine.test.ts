@@ -709,5 +709,96 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
       expect(virtualTrades.filter(t => t.status === 'OPEN' && t.side === 'LONG').length).toBe(3);
       expect(virtualTrades.filter(t => t.status === 'OPEN' && t.side === 'SHORT').length).toBe(3);
     });
+
+    describe('3. T2.2: blockEntriesOnEstimatedFeatures & entryDiagnostics', () => {
+      const estimatedSignal = {
+        id: 'sig_est_1',
+        symbol: 'SOL/USDT',
+        signal: 'SELL',
+        price: 150,
+        exchange: 'weex',
+        aiScore: 92,
+        volatility: 2.0,
+        volumeSpike: 3.5,
+        volume24h: 300000,
+        matchedPattern: 'Volume Climax (Predictive Dump)',
+        dataQuality: 'ESTIMATED',
+        estimatedFields: ['rsi1h', 'volumeSpike', 'wicks', 'sar'],
+        shadowRegimeReal: 'HIGH_VOLATILITY'
+      };
+
+      it('when blockEntriesOnEstimatedFeatures is false (default): allows entry and records shadow diagnostics', async () => {
+        const virtualTrades: any[] = [];
+        const { deps } = createMockAutopilotDeps({
+          getGlobalSettings: () => ({
+            isAutopilotEnabled: true,
+            tradingMode: 'virtual',
+            tradingExecutionMode: 'auto',
+            autopilotAggressiveness: 'aggressive',
+            allowedTradingDirections: 'BOTH',
+            maxActivePositionsVirtual: 6,
+            maxSameDirectionPositions: 3,
+            virtualBalance: 1000,
+            isCommitteeConsensusCheckEnabled: false,
+            blockEntriesOnEstimatedFeatures: false // Default
+          }),
+          getVirtualTrades: () => virtualTrades,
+          pushVirtualTrade: (t: any) => {
+            virtualTrades.push(t);
+          },
+          getCacheSignals: () => ({
+            data: [estimatedSignal],
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING_FLAT',
+            marketHealth: 80,
+            btcTrend24h: 0.2
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+
+        expect(virtualTrades).toHaveLength(1);
+        const opened = virtualTrades[0];
+        expect(opened.symbol).toBe('SOL/USDT');
+        expect(opened.entryDiagnostics).toBeDefined();
+        expect(opened.entryDiagnostics.dataQuality).toBe('ESTIMATED');
+        expect(opened.entryDiagnostics.estimatedFields).toContain('rsi1h');
+        expect(opened.entryDiagnostics.shadow.wouldBlockEstimatedFeatures).toBe(true);
+        expect(opened.entryDiagnostics.shadow.regimeReal).toBe('HIGH_VOLATILITY');
+      });
+
+      it('when blockEntriesOnEstimatedFeatures is true: skips candidate with ESTIMATED features', async () => {
+        const virtualTrades: any[] = [];
+        const { deps } = createMockAutopilotDeps({
+          getGlobalSettings: () => ({
+            isAutopilotEnabled: true,
+            tradingMode: 'virtual',
+            tradingExecutionMode: 'auto',
+            autopilotAggressiveness: 'aggressive',
+            allowedTradingDirections: 'BOTH',
+            maxActivePositionsVirtual: 6,
+            maxSameDirectionPositions: 3,
+            virtualBalance: 1000,
+            isCommitteeConsensusCheckEnabled: false,
+            blockEntriesOnEstimatedFeatures: true // Activated gate
+          }),
+          getVirtualTrades: () => virtualTrades,
+          pushVirtualTrade: (t: any) => {
+            virtualTrades.push(t);
+          },
+          getCacheSignals: () => ({
+            data: [estimatedSignal],
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING_FLAT',
+            marketHealth: 80,
+            btcTrend24h: 0.2
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+
+        expect(virtualTrades).toHaveLength(0);
+      });
+    });
   });
 });

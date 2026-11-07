@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { simulateTradeAlternatives, runTimeMachineBatch } from './timeMachineService.ts';
 
 describe('timeMachineService (Машина времени и бэктестинг сделок)', () => {
-  it('correctly returns actual outcome when no candle data is supplied', () => {
+  it('correctly returns actual outcome when no candle data is supplied and marks skipped', () => {
     const mockTrade = {
       id: 'trade_test_1',
       symbol: 'BTC/USDT:USDT',
@@ -18,6 +18,7 @@ describe('timeMachineService (Машина времени и бэктестин�
     expect(result.tradeId).toBe('trade_test_1');
     expect(result.actualResult.pnlPercent).toBe(11.11);
     expect(result.scenarios.ACTUAL.isWin).toBe(true);
+    expect(result.skipped).toBe('NO_CANDLES');
   });
 
   it('accurately evaluates OTE pullback, trailing stop and breakeven scenarios with candle data', () => {
@@ -88,6 +89,9 @@ describe('timeMachineService (Машина времени и бэктестин�
 
     expect(analyses.length).toBe(2);
     expect(summary.totalAnalyzedTrades).toBe(2);
+    expect(summary.skippedTradesCount).toBe(0);
+    expect(summary.optimisticBestOfFive).toBeDefined();
+    expect(summary.optimisticBestOfFive.note).toContain('смещение выбора');
     expect(summary.scenarioSummaries.ACTUAL).toBeDefined();
     expect(summary.scenarioSummaries.OTE_ENTRY).toBeDefined();
     expect(summary.scenarioSummaries.TRAILING_STOP).toBeDefined();

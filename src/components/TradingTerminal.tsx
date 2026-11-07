@@ -5,12 +5,13 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { cn } from '../lib/utils';
 import { mergeTradesById as mergeTradesByIdHelper } from '../lib/mergeTrades';
+import { buildSmartTaskFallback } from '../lib/smartTaskFallback';
 
 const TradingChart = lazy(() => import('./TradingChart').then(m => ({ default: m.default || m.TradingChart })));
 const AnalyticsTab = lazy(() => import('./AnalyticsTab').then(m => ({ default: m.default || m.AnalyticsTab })));
 const SignalAnalyticsDashboard = lazy(() => import('./SignalAnalyticsDashboard').then(m => ({ default: m.default || m.SignalAnalyticsDashboard })));
 const FundingArbitragePanel = lazy(() => import('./FundingArbitragePanel').then(m => ({ default: m.default || m.FundingArbitragePanel })));
-const TimeMachineView = lazy(() => import('./TimeMachineView').then(m => ({ default: m.default || m.TimeMachineView })));
+const TimeMachineView = lazy(() => import('./TimeMachineView').then(m => ({ default: m.TimeMachineView })));
 
 function Tooltip({ text, children, className }: { text: string, children: React.ReactNode, position?: 'top' | 'right' | 'bottom', className?: string, key?: string | number }) {
   return (
@@ -1363,41 +1364,6 @@ export function TradingTerminal({
             const data = await res.json();
             if (data && data.success && data.tasks && data.tasks.length > 0) {
             const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (window as any).__GEMINI_API_KEY__ || '';
-            
-            const buildSmartTaskFallback = (taskItem: any) => {
-              const promptStr = JSON.stringify(taskItem.params?.contents || "");
-              if (taskItem.params?.config?.responseSchema?.type === 'ARRAY' || taskItem.params?.config?.responseSchema?.type === 2 || promptStr.includes('Return ONLY a JSON array')) {
-                return '[]';
-              }
-              if (promptStr.includes('retrospectiveSummary') || promptStr.includes('ИИ-Контур') || promptStr.includes('Ретроспективная Оптимизация')) {
-                return JSON.stringify({
-                  retrospectiveSummary: "Текущая просадка за день вызвана зависанием сделок во флэте при изменении микроструктуры рынка. Алгоритмы PTTP продемонстрировали высокую эффективность на импульсах. Требуется соблюдение временных лимитов удержания позиций.",
-                  winRate: 50.0,
-                  agentExchangeConversations: [
-                    { fromAgent: "RETROSPECTIVE", toAgent: "EXPERT", message: "Ретроспективный квант-аудит выборки завершен.", details: "Активированы скользящие лимитные ордера Pegged/Post-Only и контроль спреда.", type: "info" }
-                  ],
-                  rulesToArchive: [],
-                  expertModifications: "Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%."
-                });
-              }
-              if (promptStr.includes('expertPrompt') || promptStr.includes('ИИ-Ведущий Трейдер') || promptStr.includes('dcaMultiplier')) {
-                return JSON.stringify({
-                  action: "UPDATE_SL",
-                  advice: "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' корректируем Take Profit для фиксирования профита при локальном отскоке и фиксируем Stop Loss за пределами локального рыночного шума.",
-                  reasonCategory: "NOISE_EXCLUSION"
-                });
-              }
-              return JSON.stringify({
-                rationale: "Управление позицией передано квант-алгоритмам рисков с соблюдением стоп-ордеров.",
-                evaluation: "Сделка закрыта и зафиксирована квантовой системой. Результат сохранен в журнале.",
-                learnedRule: "Соблюдать жесткое соответствие входов правилу фильтрации спреда.",
-                consensus: "ПОДТВЕРЖДЕНО",
-                judgeDecision: "LONG",
-                aiScore: 80,
-                approved: true,
-                action: "HOLD"
-              });
-            };
 
             for (const task of data.tasks) {
               
@@ -8171,6 +8137,18 @@ export function TradingTerminal({
                     )}
                   >
                     SHORT
+                  </button>
+
+                  <div className="w-[1px] h-4 bg-white/10 mx-1" />
+
+                  <button
+                    onClick={handleBacktest}
+                    disabled={isBacktesting || displaySignals.length === 0}
+                    className="px-3 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase transition-all duration-300 cursor-pointer bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Запустить экспресс-бэктест стратегии по текущим парам за 7 дней"
+                  >
+                    <RefreshCw className={cn("w-3 h-3 text-cyan-400", isBacktesting && "animate-spin")} />
+                    <span>{isBacktesting ? 'ТЕСТ...' : 'БЭКТЕСТ (7Д)'}</span>
                   </button>
                 </div>
               </div>

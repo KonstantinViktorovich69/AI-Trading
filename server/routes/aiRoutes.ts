@@ -158,17 +158,51 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
   // POST /api/ai-tasks/complete
   router.post('/ai-tasks/complete', (req: Request, res: Response) => {
     const { id, result, error } = req.body;
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ success: false, error: 'Invalid or missing task id' });
+    }
+
     const pendingAiTasks = ctx.getPendingAiTasks();
     const task = pendingAiTasks.get(id);
-    if (task) {
-      if (error) {
-        task.reject(new Error(error));
-      } else {
-        task.resolve(result);
-      }
-      pendingAiTasks.delete(id);
+    if (!task) {
+      return res.status(404).json({ success: false, error: 'Task not found or already completed' });
     }
-    res.json({ success: true });
+
+    // Удаляем из списка ожидающих перед обработкой, исключая повторное решение
+    pendingAiTasks.delete(id);
+
+    if (error) {
+      task.reject(new Error(String(error)));
+      return res.json({ success: true });
+    }
+
+    // Валидация размера полезной нагрузки (макс. 200 КБ)
+    const resultStr = typeof result === 'string' ? result : JSON.stringify(result ?? '');
+    if (Buffer.byteLength(resultStr, 'utf8') > 200 * 1024) {
+      task.reject(new Error('Payload exceeds 200 KB limit'));
+      return res.status(400).json({ success: false, error: 'Result payload exceeds 200 KB limit' });
+    }
+
+    // Для задач, ожидающих JSON, проверяем валидность синтаксиса
+    const isJsonExpected = task.params?.config?.responseMimeType === 'application/json' ||
+                           (task.params?.contents && JSON.stringify(task.params.contents).includes('JSON'));
+    if (isJsonExpected && result) {
+      const textToParse = typeof result === 'string' ? result : (result.text || JSON.stringify(result));
+      let isValidJson = false;
+      try {
+        JSON.parse(textToParse);
+        isValidJson = true;
+      } catch {
+        isValidJson = false;
+      }
+      if (!isValidJson) {
+        task.reject(new Error('Task expected valid JSON but received non-JSON payload'));
+        return res.status(400).json({ success: false, error: 'Invalid JSON result payload' });
+      }
+    }
+
+    task.resolve(result);
+    return res.json({ success: true });
   });
 
   // GET /api/patterns/blacklist

@@ -306,7 +306,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             break;
         }
 
-        if (!currentSig || currentSig.signal === 'NEUTRAL' || (currentSig.aiScore || 0) < 70) continue;
+        if (!currentSig || currentSig.isFallback || currentSig.signal === 'NEUTRAL' || (currentSig.aiScore || 0) < 70) continue;
         const symbol = currentSig.rawSymbol || currentSig.symbol;
         if (!symbol || typeof symbol !== 'string') continue;
         try { incFunnel('seen', 'evaluating_candidate', symbol); } catch {}
@@ -314,6 +314,15 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         const exName = currentSig.exchange;
         let finalAiScore = currentSig.aiScore;
         const volatility = typeof currentSig.volatility !== 'undefined' ? Number(currentSig.volatility) : 2.0;
+
+        // T2.2: Проверка качества данных сигнала (blockEntriesOnEstimatedFeatures, default false)
+        const isEstimatedSignal = currentSig.dataQuality === 'ESTIMATED' || (currentSig.decisionTrace?.metadata?.dataQuality === 'ESTIMATED');
+        const wouldBlockEstimatedFeatures = isEstimatedSignal;
+        if ((globalSettings as any).blockEntriesOnEstimatedFeatures === true && isEstimatedSignal) {
+            try { incFunnel('estimated_guard', 'blocked_estimated_features', symbol); } catch {}
+            console.log(`[AUTOPILOT ESTIMATED GUARD] Skipping entry for ${symbol}: Signal has ESTIMATED data quality (estimated fields: ${(currentSig.estimatedFields || []).join(', ')})`);
+            continue;
+        }
 
         // --- КВАНТОВОЕ АВТО-ОБУЧЕНИЕ: ПРОВЕРКА ПРАВИЛ БАЗЫ ЗНАНИЙ ---
         const aiKnowledgeBase = deps.getAiKnowledgeBase ? deps.getAiKnowledgeBase() : [];
@@ -999,6 +1008,8 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
                                 autoEntryRes.trade.entryDiagnostics = {
                                     indicatorsSource: currentSig.decisionTrace?.metadata?.indicatorsSource ?? null,
+                                    dataQuality: currentSig.dataQuality || (currentSig.decisionTrace?.metadata?.dataQuality ?? 'REAL'),
+                                    estimatedFields: currentSig.estimatedFields || (currentSig.decisionTrace?.metadata?.estimatedFields ?? []),
                                     features: currentQuantFeatures,
                                     featuresHadIndicators: !!GLOBAL_TRUE_OHLCV[symbol],
                                     featuresV2: qfV2.features,
@@ -1019,7 +1030,11 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                         verdict: currentCellVerdict.verdict,
                                         adjustment: currentCellVerdict.adjustment,
                                         wouldBlockIfFullPolicy: currentCellVerdict.wouldBlockIfFullPolicy
-                                    } : null
+                                    } : null,
+                                    shadow: {
+                                        regimeReal: (currentSig as any).shadowRegimeReal || (currentSig as any).regimeReal || (cacheSignals as any)?.shadowRegimeReal?.regime || (cacheSignals as any)?.regimeReal || null,
+                                        wouldBlockEstimatedFeatures
+                                    }
                                 };
                             } catch {}
                             if (kbEval.matchedRuleIds.length > 0) {

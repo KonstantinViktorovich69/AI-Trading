@@ -349,28 +349,8 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
     });
   });
 
-  // GET /api/ai-tasks/pending
-  router.get('/ai-tasks/pending', (req: Request, res: Response) => {
-    const tasks = ctx.getPendingFrontendAiTasks();
-    const now = Date.now();
-    // Filter out expired tasks older than 45 seconds
-    const validTasks = tasks.filter(t => (now - t.createdAt) < 45000);
-    ctx.setPendingFrontendAiTasks(validTasks);
-    res.json({ success: true, tasks: validTasks });
-  });
-
-  // POST /api/ai-tasks/complete
-  router.post('/ai-tasks/complete', (req: Request, res: Response) => {
-    const { id, result, error } = req.body;
-    if (!id) {
-      return res.status(400).json({ success: false, error: 'Missing task id' });
-    }
-    if (ctx.resolvePendingAiTask) {
-      const resolved = ctx.resolvePendingAiTask(id, result, error);
-      return res.json({ success: resolved });
-    }
-    res.json({ success: false, error: 'Resolver not configured' });
-  });
+  // GET /api/ai-tasks/pending и POST /api/ai-tasks/complete
+  // Дубликаты удалены в рамках T1.5. Каноническая валидированная реализация объявлена в server/routes/aiRoutes.ts.
 
   // POST /api/debug/inject-test-signal
   router.post('/debug/inject-test-signal', (req: Request, res: Response) => {

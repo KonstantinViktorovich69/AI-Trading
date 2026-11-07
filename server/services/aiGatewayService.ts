@@ -30,10 +30,23 @@ export class AiGatewayService {
   private serverGeminiCooldownUntil: number = 0;
   private currentAiQueue: Promise<any> = Promise.resolve();
   private cachedMarketNews: { text: string; timestamp: number } | null = null;
+  private _aiFallbackCount: number = 0;
   private options: AiGatewayOptions;
 
   constructor(options: AiGatewayOptions = {}) {
     this.options = options;
+  }
+
+  public get aiFallbackCount(): number {
+    return this._aiFallbackCount;
+  }
+
+  public getAiFallbackCount(): number {
+    return this._aiFallbackCount;
+  }
+
+  public resetAiFallbackCount(): void {
+    this._aiFallbackCount = 0;
   }
 
   public getPendingAiTasks(): Map<string, PendingAiTask> {
@@ -87,6 +100,7 @@ export class AiGatewayService {
       setTimeout(() => {
         if (this.pendingAiTasks.has(id)) {
           this.pendingAiTasks.delete(id);
+          this._aiFallbackCount++;
           console.log(`[AI Router] Task ${id} timed out on frontend. Returning static fallback JSON.`);
           let defaultFallback = JSON.stringify({
             rationale: "Бот запрашивал AI, но вкладка браузера закрыта или не отвечает.",
@@ -95,8 +109,10 @@ export class AiGatewayService {
             judgeDecision: "NEUTRAL",
             aiScore: 0,
             approved: false,
-            wouldBlock: false,
-            action: "HOLD"
+            wouldBlock: true,
+            action: "HOLD",
+            isFallback: true,
+            fallbackReason: "Frontend task timeout"
           });
           if (
             params.config?.responseSchema?.type === 'ARRAY' ||
@@ -141,6 +157,7 @@ export class AiGatewayService {
   }
 
   public getStaticServerSideAiFallback(params: any, errorMsg: string): { text: string } {
+    this._aiFallbackCount++;
     const promptString = JSON.stringify(params.contents || "");
     let text = "[]";
 
@@ -154,66 +171,81 @@ export class AiGatewayService {
       text = "[]";
     } else if (promptString.includes('retrospectiveSummary') || promptString.includes('ИИ-Контур') || promptString.includes('Ретроспективная Оптимизация') || promptString.includes('getRetrospectivePrompt')) {
       text = JSON.stringify({
-        retrospectiveSummary: "Текущая динамика закрытых сделок показывает устойчивые показатели винрейта. Алгоритмы PTTP и ватчдог оптимизировали точки выхода. Внедрен регламент по контролю спреда и использованию лимитных ордеров.",
-        winRate: 52.5,
-        agentExchangeConversations: [
-          { fromAgent: "RETROSPECTIVE", toAgent: "EXPERT", message: "Проведен аудит закрытых сделок.", details: "Винрейт стабилен, активирована защита от проскальзываний.", type: "info" },
-          { fromAgent: "ARCHIVIST", toAgent: "ALL", message: "Оптимизирована база знаний.", details: "Проведена программная дедупликация авто-правил.", type: "success" },
-          { fromAgent: "EXPERT", toAgent: "ALL", message: "Регламент эксперту актуализирован.", details: "Внедрены лимитные ордера Pegged/Post-Only.", type: "warning" }
-        ],
+        retrospectiveSummary: "ИИ недоступен, ретроспектива пропущена",
+        agentExchangeConversations: [],
         rulesToArchive: [],
-        expertModifications: "Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыночного проскальзывания. Запретить открытие позиций по монетам, у которых спред превышает 0.25%. Использовать показатель затухания торгового объема (Volume Fading) на 5-минутном интервале как обязательный фильтр-подтверждение перед активацией шорт-ордеров.",
-        optimizedLogicSummary: "Плановая квант-оптимизация параметров входа и спреда",
-        impactAssessment: "Сохранение устойчивости торговых показателей",
-        historicalSelfReview: "Стабильное поддержание винрейта на интервале"
+        expertModifications: "",
+        optimizedLogicSummary: "Оптимизация пропущена из-за недоступности ИИ",
+        impactAssessment: "Нейтрально",
+        historicalSelfReview: "Пропущено",
+        isFallback: true,
+        fallbackReason: errorMsg
       });
     } else if (promptString.includes('expertPrompt') || promptString.includes('ИИ-Ведущий Трейдер') || promptString.includes('dcaMultiplier') || promptString.includes('partialCloseRatio')) {
       text = JSON.stringify({
-        action: "UPDATE_SL",
-        advice: "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
+        action: "HOLD",
+        advice: "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
         newSl: null,
         newTp: null,
-        reasonCategory: "NOISE_EXCLUSION"
+        reasonCategory: "HOLD_CURRENT",
+        isFallback: true,
+        fallbackReason: errorMsg
       });
     } else if (promptString.includes('getTradeEvaluationPrompt') || promptString.includes('learnedRule') || promptString.includes('evaluate-closed-trade') || promptString.includes('EVALUATE_CLOSED_TRADE')) {
       text = JSON.stringify({
-        evaluation: "Сделка закрыта и зафиксирована квантовой системой. Защитные механизмы волатильности и лимиты депозита отработали корректно.",
-        learnedRule: "Соблюдать жесткое соответствие входов правилу фильтрации спреда и снятию ликвидности.",
+        evaluation: "ИИ недоступен для разбора сделки.",
+        learnedRule: "",
         agent: "MANAGER",
-        rationale: "Аналитический разбор: позиция закрыта согласно текущему режиму рынка с соблюдением риск-параметров."
+        rationale: "Оценка пропущена: ИИ недоступен.",
+        isFallback: true,
+        fallbackReason: errorMsg
       });
     } else if (promptString.includes('updatedSettings') || promptString.includes('globalSettings') || promptString.includes('SettingsOptimizer')) {
       text = JSON.stringify({
         updatedSettings: {},
-        explanation: `Сервис ИИ в режиме сохранения лимитов. Настройки приведены к оптимальному балансу риска и прибыльности.`
+        explanation: `ИИ недоступен (${errorMsg}). Настройки оставлены без изменений.`,
+        isFallback: true,
+        fallbackReason: errorMsg
       });
     } else if (promptString.includes('techAnalyst') || promptString.includes('riskManager') || promptString.includes('judgeDecision') || promptString.includes('getSignalAnalysisPrompt')) {
       text = JSON.stringify({
-        techAnalyst: "Многофакторный локальный квант-анализ: выявлен отклик цены от структурной зоны, SAR переключен, волатильность в пределах допустимой нормы.",
-        riskManager: "Параметры риска проверены: размер позиции соответствует лимитам плеча и волатильности.",
-        consensus: "ПОДТВЕРЖДЕНО",
-        judgeDecision: "LONG",
-        consensusReason: "Параметры входа верифицированы локальными индикаторами волатильности и объема.",
-        aiScore: 82,
-        approved: true,
-        action: "EXECUTE"
+        techAnalyst: `ИИ недоступен (${errorMsg}). Технический вердикт не сформирован.`,
+        riskManager: `ИИ недоступен (${errorMsg}). Риск-оценка нейтральна.`,
+        consensus: "НЕТ ДАННЫХ",
+        judgeDecision: "NEUTRAL",
+        consensusReason: `ИИ недоступен: ${errorMsg}`,
+        aiScore: 0,
+        approved: false,
+        action: "HOLD",
+        isFallback: true,
+        fallbackReason: errorMsg
       });
     } else if (promptString.includes('rationale') || promptString.includes('evaluation') || promptString.includes('wouldBlock')) {
       text = JSON.stringify({
-        rationale: `Управление позицией передано квант-алгоритмам рисков с соблюдением стоп-ордеров.`,
-        evaluation: "Сделка сопровождена локальным риск-менеджером.",
-        consensus: "ПОДТВЕРЖДЕНО",
+        rationale: `ИИ недоступен (${errorMsg}). Действие заблокировано.`,
+        evaluation: "Оценка недоступна.",
+        consensus: "НЕТ ДАННЫХ",
         judgeDecision: "NEUTRAL",
-        aiScore: 80,
-        approved: true,
-        wouldBlock: false,
-        action: "HOLD"
+        aiScore: 0,
+        approved: false,
+        wouldBlock: true,
+        action: "HOLD",
+        isFallback: true,
+        fallbackReason: errorMsg
       });
     } else {
       if (params.config?.responseMimeType === "application/json") {
-        text = "{}";
+        text = JSON.stringify({
+          isFallback: true,
+          fallbackReason: errorMsg,
+          judgeDecision: "NEUTRAL",
+          aiScore: 0,
+          approved: false,
+          action: "HOLD",
+          consensus: "НЕТ ДАННЫХ"
+        });
       } else {
-        text = `ИИ-анализ выполнен локальным квант-модулем торговой системы.`;
+        text = `ИИ недоступен: ${errorMsg}`;
       }
     }
 

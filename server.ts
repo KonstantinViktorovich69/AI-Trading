@@ -1353,6 +1353,7 @@ function getWallAdjustedTp(symbol: string, isSell: boolean, currentPrice: number
 function getMarketSignalScannerContext(): MarketSignalScannerContext {
   return {
     getGlobalTrueOHLCV: () => GLOBAL_TRUE_OHLCV,
+    getGlobalRawOHLCV: () => GLOBAL_RAW_OHLCV,
     getGlobalCcxtTickers: () => GLOBAL_CCXT_TICKERS,
     getGlobalSettings: () => globalSettings,
     setCachedSignals: (cacheObj) => {
@@ -1682,6 +1683,8 @@ const debugContext: DebugRouterContext = {
 const timeMachineContext: TimeMachineRouterContext = {
   getVirtualTrades: () => virtualTrades,
   getGlobalTrueOhlcv: () => GLOBAL_TRUE_OHLCV,
+  getGlobalRawOHLCV: () => GLOBAL_RAW_OHLCV,
+  getGlobalSettings: () => globalSettings,
   getAiKnowledgeBase: () => aiKnowledgeBase,
   saveKnowledgeDB: (rule: any, immediate?: boolean) => saveKnowledgeDB(rule, immediate),
   emitSignalsUpdated: () => streamEmitter.emit('signals_updated')

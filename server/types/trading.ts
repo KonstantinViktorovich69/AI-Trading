@@ -58,6 +58,10 @@ export interface SignalData {
   patternName?: string;
   isLiquiditySweep?: boolean;
   marketRegime?: MarketRegime;
+  shadowRegimeReal?: MarketRegime;
+  regimeReal?: MarketRegime;
+  dataQuality?: 'REAL' | 'ESTIMATED';
+  estimatedFields?: string[];
   decisionTrace?: DecisionTrace;
 }
 

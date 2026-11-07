@@ -6,6 +6,7 @@ import type { MarketRegime } from '../types/trading.ts';
 
 export interface MarketSignalScannerContext {
   getGlobalTrueOHLCV: () => Record<string, any>;
+  getGlobalRawOHLCV?: () => Record<string, Record<string, any[][]>>;
   getGlobalCcxtTickers: () => Record<string, Record<string, any>>;
   getGlobalSettings: () => {
     isEma200FilterEnabled?: boolean;
@@ -23,6 +24,10 @@ export interface MarketSignalScannerContext {
     marketHealth: number;
     btcTrend24h: number;
     regimeDetails?: any;
+    shadowRegimeReal?: any;
+    regimeReal?: any;
+    regimeLegacy?: any;
+    [key: string]: any;
   }) => void;
   emitSignalsUpdated: () => void;
   runAutopilotAndVirtualTradeEntry?: () => Promise<void>;
@@ -133,6 +138,12 @@ export function runDeterministicQuantCommitteeFallback(data: any[]): any[] {
   return data.map(item => generateProgrammaticCommitteeFallback(item));
 }
 
+let lastShadowLogTime = 0;
+export const shadowRegimeStats = {
+  legacy: {} as Record<string, number>,
+  real: {} as Record<string, number>
+};
+
 /**
  * Основной движок сканирования и кэширования торговых сигналов
  */
@@ -175,9 +186,35 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
       }
     }
 
+    // T2.1: Сбор реальных свечей BTC из raw OHLCV
+    const rawOHLCV = ctx.getGlobalRawOHLCV ? ctx.getGlobalRawOHLCV() : undefined;
+    let btcCandles: any[] = [];
+    if (rawOHLCV) {
+      const btcRaw = rawOHLCV['BTCUSDT'] || rawOHLCV['BTC/USDT:USDT'];
+      if (btcRaw) {
+        btcCandles = (Array.isArray(btcRaw['1h']) && btcRaw['1h'].length >= 5)
+          ? btcRaw['1h']
+          : (Array.isArray(btcRaw['15m']) ? btcRaw['15m'] : []);
+      }
+    }
+
     const btcOhlcvData = GLOBAL_TRUE_OHLCV['BTCUSDT'] || GLOBAL_TRUE_OHLCV['BTC/USDT:USDT'] || [];
-    const regimeAnalysis = classifyMarketRegime(btcTickerObj, btcOhlcvData);
+    const regimeLegacy = classifyMarketRegime(btcTickerObj, btcOhlcvData);
+    const regimeReal = classifyMarketRegime(btcTickerObj, btcCandles);
+
+    // Флаг regimeUsesRealBtcCandles (по умолчанию false)
+    const regimeUsesRealBtcCandles = globalSettings.regimeUsesRealBtcCandles === true;
+    const regimeAnalysis = regimeUsesRealBtcCandles ? regimeReal : regimeLegacy;
     const marketRegime: MarketRegime = regimeAnalysis.regime;
+
+    // Раз в 10 минут логировать распределение: [REGIME-SHADOW] legacy={...} real={...}
+    shadowRegimeStats.legacy[regimeLegacy.regime] = (shadowRegimeStats.legacy[regimeLegacy.regime] || 0) + 1;
+    shadowRegimeStats.real[regimeReal.regime] = (shadowRegimeStats.real[regimeReal.regime] || 0) + 1;
+    const now = Date.now();
+    if (now - lastShadowLogTime >= 10 * 60 * 1000) {
+      lastShadowLogTime = now;
+      console.log(`[REGIME-SHADOW] legacy=${JSON.stringify(shadowRegimeStats.legacy)} real=${JSON.stringify(shadowRegimeStats.real)}`);
+    }
 
     // Индексация тикеров исключительно по бирже WEEX для сканирования и торговли
     const cleanToTickerMap = new Map<string, { ticker: any, sym: string, exchange: string }>();
@@ -247,7 +284,21 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
       const isShortTermBearish = psarStatus1m === 'BEARISH' || dropFromRecentHigh >= 0.8;
       const isQuickLocalSpike = (change >= 3.0 || riseFromLow >= 3.0) && dropFromRecentHigh <= 4.0;
       const isQuickLocalDrop = (change <= -3.0 || dropFromRecentHigh >= 3.0) && riseFromLow <= 4.0;
-      const hasRealOhlcv = !!(rawIndicators && (rawIndicators.sar || rawIndicators.rsi1h || rawIndicators.psarStatus1m));
+
+      // T2.2: Определение полноты данных и списка оцененных полей
+      const estimatedFields: string[] = [];
+      if (!rawIndicators) {
+        estimatedFields.push('rsi1h', 'volumeSpike', 'wicks', 'sar', 'vwap', 'bb1h', 'psarStatus1m', 'isSarBearishFlipped1m', 'isSarBullishFlipped1m');
+      } else {
+        if (rawIndicators.rsi1h === undefined) estimatedFields.push('rsi1h');
+        if (rawIndicators.volumeSpike === undefined) estimatedFields.push('volumeSpike');
+        if (!rawIndicators.wicks) estimatedFields.push('wicks');
+        if (rawIndicators.sar === undefined) estimatedFields.push('sar');
+        if (rawIndicators.vwap === undefined) estimatedFields.push('vwap');
+        if (rawIndicators.psarStatus1m === undefined) estimatedFields.push('psarStatus1m');
+      }
+      const dataQuality: 'REAL' | 'ESTIMATED' = estimatedFields.length > 0 ? 'ESTIMATED' : 'REAL';
+      const hasRealOhlcv = dataQuality === 'REAL';
 
       let matchedPattern = 'None';
       let signalSide: 'SHORT' | 'LONG' | 'NEUTRAL' = 'NEUTRAL';
@@ -479,7 +530,9 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
         metadata: {
           indicatorsSource: hasRealOhlcv ? 'OHLCV' : 'TICKER_ESTIMATE',
           hasRealOhlcv,
-          volumeSpike
+          volumeSpike,
+          dataQuality,
+          estimatedFields
         },
         requiredScore: (() => {
           // Dynamic adaptive required score based on market regime and trend alignment:
@@ -537,6 +590,10 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
         blockLocks,
         blockDetails,
         marketRegime,
+        shadowRegimeReal: regimeReal.regime,
+        regimeReal: regimeReal.regime,
+        dataQuality,
+        estimatedFields,
         decisionTrace: trace,
         indicators: {
           rsi1h: trueRsi,
@@ -568,6 +625,9 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
       lastUpdated: Date.now(),
       marketRegime,
       regimeDetails: regimeAnalysis,
+      shadowRegimeReal: regimeReal,
+      regimeReal: regimeReal.regime,
+      regimeLegacy: regimeLegacy.regime,
       marketHealth: Math.min(100, Math.max(10, 50 + (signals.filter(s => s.signal !== 'NEUTRAL').length * 4))),
       btcTrend24h
     });
