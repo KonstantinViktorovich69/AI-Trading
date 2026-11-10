@@ -4,6 +4,11 @@ import { PROCESS_STARTED_AT } from './buildInfo.ts';
 export interface EntryGateDeps {
   getGlobalTrueOhlcv?: () => Record<string, any>;
   getGlobalSettings?: () => any;
+  getGlobalCcxtTickers?: () => Record<string, any>;
+  getTickerTimestamp?: () => number | undefined;
+  getBtcOhlcvTimestamp?: () => number | undefined;
+  getApiHealth?: () => Record<string, any>;
+  silent?: boolean;
 }
 
 export interface EntryGateStatus {
@@ -14,6 +19,7 @@ export interface EntryGateStatus {
 
 let pausedUntilTs = 0;
 let pauseReason = '';
+let lastStaleLogTs = 0;
 
 /**
  * Manually or programmatically pause new entries for `sec` seconds.
@@ -42,12 +48,74 @@ try {
   console.warn('[ENTRY GATE] Failed registering gap listener:', err);
 }
 
+export function resolveTickerTimestamp(deps?: EntryGateDeps): number | undefined {
+  if (!deps) return undefined;
+  if (typeof deps.getTickerTimestamp === 'function') {
+    const ts = deps.getTickerTimestamp();
+    if (typeof ts === 'number' && ts > 0) return ts;
+  }
+  const health = deps.getApiHealth ? deps.getApiHealth() : undefined;
+  const syncTs = health?.weex?.lastSuccessfulSyncAt;
+  if (typeof syncTs === 'number' && syncTs > 0) return syncTs;
+
+  const tickersMap = deps.getGlobalCcxtTickers ? deps.getGlobalCcxtTickers()?.weex : undefined;
+  if (tickersMap && typeof tickersMap === 'object') {
+    const btcTs = tickersMap['BTC/USDT:USDT']?.timestamp || tickersMap['BTC/USDT']?.timestamp;
+    if (typeof btcTs === 'number' && btcTs > 0) return btcTs;
+    let maxTs = 0;
+    let inspected = 0;
+    for (const val of Object.values<any>(tickersMap)) {
+      if (val && typeof val.timestamp === 'number' && val.timestamp > maxTs) {
+        maxTs = val.timestamp;
+      }
+      inspected++;
+      if (inspected >= 15) break;
+    }
+    if (maxTs > 0) return maxTs;
+  }
+  return undefined;
+}
+
+export function resolveBtcOhlcvTimestamp(deps?: EntryGateDeps): number | undefined {
+  if (!deps) return undefined;
+  if (typeof deps.getBtcOhlcvTimestamp === 'function') {
+    const ts = deps.getBtcOhlcvTimestamp();
+    if (typeof ts === 'number' && ts > 0) return ts;
+  }
+  const trueOhlcv = deps.getGlobalTrueOhlcv ? deps.getGlobalTrueOhlcv() : undefined;
+  if (trueOhlcv && typeof trueOhlcv === 'object') {
+    const btcEntry = trueOhlcv['BTCUSDT'] || trueOhlcv['BTC/USDT'] || trueOhlcv['BTC/USDT:USDT'];
+    if (btcEntry && typeof btcEntry.updatedAt === 'number' && btcEntry.updatedAt > 0) {
+      return btcEntry.updatedAt;
+    }
+  }
+  return undefined;
+}
+
+export function getMarketDataFreshness(nowTs?: number, deps?: EntryGateDeps): {
+  tickerTimestamp: number | null;
+  tickerAgeSec: number | null;
+  btcOhlcvTimestamp: number | null;
+  btcOhlcvAgeSec: number | null;
+} {
+  const now = nowTs || Date.now();
+  const tickerTs = resolveTickerTimestamp(deps);
+  const btcOhlcvTs = resolveBtcOhlcvTimestamp(deps);
+  return {
+    tickerTimestamp: tickerTs ?? null,
+    tickerAgeSec: typeof tickerTs === 'number' && tickerTs > 0 ? Math.max(0, Math.round((now - tickerTs) / 1000)) : null,
+    btcOhlcvTimestamp: btcOhlcvTs ?? null,
+    btcOhlcvAgeSec: typeof btcOhlcvTs === 'number' && btcOhlcvTs > 0 ? Math.max(0, Math.round((now - btcOhlcvTs) / 1000)) : null
+  };
+}
+
 /**
  * Checks whether entry gate is paused.
  * Rules:
  * 1. Process startup grace period: < entryPauseAfterStartSec (default 120; 0 = off).
  * 2. Warmup check: < 3 symbols in getGlobalTrueOhlcv(), while < 300s since start. After 300s warmup pause forced release.
  * 3. now < pausedUntilTs.
+ * 4. T7.5 Stale data check: ticker age or BTC OHLCV age > staleDataPauseSec (default 300s).
  */
 export function isEntryPaused(nowTs?: number, deps?: EntryGateDeps): EntryGateStatus {
   const now = nowTs || Date.now();
@@ -93,6 +161,39 @@ export function isEntryPaused(nowTs?: number, deps?: EntryGateDeps): EntryGateSt
     };
   }
 
+  // 4. T7.5: Pause new entries when ticker or BTC OHLCV data exceeds staleDataPauseSec
+  const staleDataPauseSec = typeof (settings as any)?.staleDataPauseSec === 'number'
+    ? (settings as any).staleDataPauseSec
+    : 300;
+  if (staleDataPauseSec > 0) {
+    const thresholdMs = staleDataPauseSec * 1000;
+    const tickerTs = resolveTickerTimestamp(deps);
+    if (typeof tickerTs === 'number' && tickerTs > 0 && (now - tickerTs) > thresholdMs) {
+      const ageSec = Math.round((now - tickerTs) / 1000);
+      if (!deps?.silent && (now - lastStaleLogTs > 60000)) {
+        lastStaleLogTs = now;
+        console.warn(`[ENTRY GATE] Pausing entries: tickers age ${ageSec}s > ${staleDataPauseSec}s`);
+      }
+      return {
+        paused: true,
+        reason: `stale_data_tickers (${ageSec}s > ${staleDataPauseSec}s)`
+      };
+    }
+
+    const btcOhlcvTs = resolveBtcOhlcvTimestamp(deps);
+    if (typeof btcOhlcvTs === 'number' && btcOhlcvTs > 0 && (now - btcOhlcvTs) > thresholdMs) {
+      const ageSec = Math.round((now - btcOhlcvTs) / 1000);
+      if (!deps?.silent && (now - lastStaleLogTs > 60000)) {
+        lastStaleLogTs = now;
+        console.warn(`[ENTRY GATE] Pausing entries: BTC OHLCV age ${ageSec}s > ${staleDataPauseSec}s`);
+      }
+      return {
+        paused: true,
+        reason: `stale_data_btc_ohlcv (${ageSec}s > ${staleDataPauseSec}s)`
+      };
+    }
+  }
+
   return { paused: false };
 }
 
@@ -102,4 +203,5 @@ export function isEntryPaused(nowTs?: number, deps?: EntryGateDeps): EntryGateSt
 export function resetEntryGateForTest(): void {
   pausedUntilTs = 0;
   pauseReason = '';
+  lastStaleLogTs = 0;
 }

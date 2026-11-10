@@ -138,6 +138,11 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
 
   // GET /api/ai-tasks/pending
   router.get('/ai-tasks/pending', (req: Request, res: Response) => {
+    const globalSettings = ctx.getGlobalSettings ? ctx.getGlobalSettings() : {};
+    if (!globalSettings?.allowBrowserAiPoller) {
+      return res.json({ success: true, tasks: [] });
+    }
+
     const now = Date.now();
     const tasksToSend: any[] = [];
     const pendingAiTasks = ctx.getPendingAiTasks();

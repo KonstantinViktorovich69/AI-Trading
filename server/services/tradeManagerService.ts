@@ -1,6 +1,7 @@
 import ccxt, { Exchange } from 'ccxt';
 import { manageActiveTrades, VirtualTradeEngineDependencies } from './virtualTradeEngine.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
+import { getCostModel } from './costModel.ts';
 import { applyPendingGapsToOpenTrades, recordGap, getRecordedGaps } from './heartbeatService.ts';
 import { PROCESS_STARTED_AT } from './buildInfo.ts';
 
@@ -43,6 +44,7 @@ export interface TradeManagerServiceDependencies {
   setStartOfWeekBalance?: (val: number) => void;
   getIsCircuitBreakerActive?: () => boolean;
   setIsCircuitBreakerActive?: (val: boolean) => void;
+  getApiHealth?: () => Record<string, any>;
 }
 
 export class TradeManagerService {
@@ -241,9 +243,14 @@ export class TradeManagerService {
         t.closePrice = lastPrice;
         t.closeTime = Date.now();
         
-        const { pnlUsd, leveragedPct } = getUnifiedTradeClosePnl(t.side, t.entryPrice, lastPrice, t.amount || 0, t.leverage || 1);
+        const costModel = getCostModel(this.deps.getGlobalSettings());
+        const { pnlUsd, grossPnlUsd, feeUsd, slippageUsd, leveragedPct } = getUnifiedTradeClosePnl(t.side, t.entryPrice, lastPrice, t.amount || 0, t.leverage || 1, costModel);
         t.pnl = pnlUsd;
         t.pnlPercent = (t.amount || 0) > 0 ? (t.pnl / t.amount) * 100 : Math.max(-100, leveragedPct);
+        t.grossPnlUsd = grossPnlUsd;
+        t.feeUsd = feeUsd;
+        t.slippageUsd = slippageUsd;
+        t.costModelVersion = costModel.version || 2;
         
         t.closeReason = `Forced close by Circuit Breaker: ${reason}`;
         t.notes = t.closeReason;
@@ -377,7 +384,8 @@ export class TradeManagerService {
       setRealTradeSlTpOnExchange: this.deps.setRealTradeSlTpOnExchange,
       runAiGeneration: this.deps.runAiGeneration,
       fetchGapCandles: this.deps.fetchGapCandles,
-      getPublicExchange: this.deps.getPublicExchange
+      getPublicExchange: this.deps.getPublicExchange,
+      getApiHealth: this.deps.getApiHealth
     };
 
     await manageActiveTrades(deps);

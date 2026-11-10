@@ -5,6 +5,14 @@ import { sanitizeExpertInstructions as quantSanitizeExpertInstructions } from '.
 import { atomicWriteJson } from '../atomicDbSaver.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
 import { DEFAULT_EXCHANGE, normalizeExchangeId } from './activeExchange.ts';
+import {
+  extractAdaptiveSectionBody,
+  findForbiddenExpertInstructionMarker,
+  validateExpertInstructionModification,
+  syncExpertInstructionsHistoryFile,
+  loadExpertInstructionsHistory,
+  getExpertInstructionsHistoryPath
+} from './selfLearningGuard.ts';
 
 export interface TelegramBotConfig {
   id: string;
@@ -73,8 +81,35 @@ export interface GlobalSettings {
   uiStatsResetTimestamp?: number;
   isSessionFilterEnabled?: boolean;
   allowedSessions?: string[];
+  costModel?: {
+    feeRatePerSide: number;
+    slippageRoundTrip: number;
+    version: number;
+  };
+  slippageTierModelEnabled?: boolean;
   blockedHoursUtc?: number[];
   sessionAdaptiveScoreBoost?: boolean;
+  exitTrailingTriggerPct?: number;
+  exitTrailingDistancePct?: number;
+  exitEnableTrailingStop?: boolean;
+  exitMinPttpActivationNetPnlPct?: number;
+  exitMinPttpPeakNetPnlPct?: number;
+  exitPttpTrailingDropPct?: number;
+  exitBypassProfitFloorForPrimaryTp?: boolean;
+  exitBypassProfitFloorForMultiTp?: boolean;
+  exitMinNormalAutoCloseNetPnlPct?: number;
+  exitTimeoutProfitHours?: number;
+  exitMinTimeoutProfitNetPnlPct?: number;
+  exitEnableStagnationTimeout?: boolean;
+  exitMaxStagnationPnlPct?: number;
+  strictLiquidityGate?: boolean;
+  allowBrowserAiPoller?: boolean;
+  realTradingEvidenceGateEnabled?: boolean;
+  evidenceGateOverride?: boolean;
+  evidenceGateMinTrades?: number;
+  evidenceGateMinDays?: number;
+  evidenceGateMaxDrawdownPct?: number;
+  staleDataPauseSec?: number;
 }
 
 export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPERT_INSTRUCTIONS): GlobalSettings {
@@ -121,13 +156,28 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     isSessionFilterEnabled: false,
     allowedSessions: ['ASIAN', 'LONDON', 'OVERLAP_LONDON_NY', 'NEW_YORK', 'PACIFIC_OFF_HOURS'],
     blockedHoursUtc: [],
-    sessionAdaptiveScoreBoost: false
+    sessionAdaptiveScoreBoost: false,
+    costModel: {
+      feeRatePerSide: 0.0006,
+      slippageRoundTrip: 0.0004,
+      version: 2
+    },
+    slippageTierModelEnabled: false,
+    strictLiquidityGate: false,
+    allowBrowserAiPoller: false,
+    realTradingEvidenceGateEnabled: true,
+    evidenceGateOverride: false,
+    evidenceGateMinTrades: 150,
+    evidenceGateMinDays: 14,
+    evidenceGateMaxDrawdownPct: 15,
+    staleDataPauseSec: 300
   };
 }
 
 export interface SettingsManagerContext {
   settingsFilePath?: string;
   dbFilePath?: string;
+  expertHistoryFilePath?: string;
   getCachedDB: () => any;
   flushDB: () => Promise<void>;
   syncToFirebase?: (dbData: any) => Promise<void>;
@@ -146,13 +196,29 @@ export class SettingsManager {
   private autopilotFailedSymbols: Set<string> = new Set();
   private settingsFile: string;
   private dbFile: string;
+  private expertHistoryFile: string;
+  private lastRetrospectiveUpdateAt: number = 0;
 
   constructor(ctx: SettingsManagerContext) {
     this.ctx = ctx;
     this.settings = createDefaultGlobalSettings();
     this.settingsFile = ctx.settingsFilePath || path.join(process.cwd(), 'settings.json');
     this.dbFile = ctx.dbFilePath || path.join(process.cwd(), 'db.json');
+    this.expertHistoryFile = ctx.expertHistoryFilePath || getExpertInstructionsHistoryPath();
+    const existingHistory = loadExpertInstructionsHistory(this.expertHistoryFile);
+    const latestRetro = [...existingHistory].reverse().find(h => h && h.author === 'RETROSPECTIVE');
+    if (latestRetro && typeof latestRetro.timestamp === 'number') {
+      this.lastRetrospectiveUpdateAt = latestRetro.timestamp;
+    }
     this.load();
+  }
+
+  public getLastRetrospectiveUpdateAt(): number {
+    return this.lastRetrospectiveUpdateAt;
+  }
+
+  public getExpertHistoryFilePath(): string {
+    return this.expertHistoryFile;
   }
 
   public getSettings(): GlobalSettings {
@@ -251,6 +317,36 @@ export class SettingsManager {
 
   public setExpertInstructions(newInstructions: string, author: 'USER' | 'RETROSPECTIVE' | 'AI_CHAT', reason?: string): { sanitized: boolean; reason: string } {
     const current = this.settings.aiExpertTraderInstructions || '';
+    const isMigration = Boolean(reason && reason.includes('Автоматическая миграция'));
+
+    if ((author === 'RETROSPECTIVE' || author === 'AI_CHAT') && !isMigration) {
+      const fullForbidden = findForbiddenExpertInstructionMarker(newInstructions);
+      if (fullForbidden) {
+        const rejectReason = `FORBIDDEN_MARKER: "${fullForbidden}"`;
+        console.warn(`[SELF-LEARNING GUARD] Rejected ${author} expert instructions update: ${rejectReason}`);
+        this.lastSanitizationStatus = {
+          sanitized: true,
+          reason: rejectReason
+        };
+        return this.lastSanitizationStatus;
+      }
+
+      const adaptiveBody = extractAdaptiveSectionBody(newInstructions) || newInstructions;
+      if (author === 'RETROSPECTIVE') {
+        const validation = validateExpertInstructionModification(adaptiveBody, {
+          lastRetrospectiveUpdateAt: this.lastRetrospectiveUpdateAt
+        });
+        if (!validation.valid) {
+          console.warn(`[SELF-LEARNING GUARD] Rejected retrospective expert instructions update: ${validation.reason}`);
+          this.lastSanitizationStatus = {
+            sanitized: true,
+            reason: validation.reason || 'Отклонено защитой самообучения'
+          };
+          return this.lastSanitizationStatus;
+        }
+      }
+    }
+
     const sanitized = quantSanitizeExpertInstructions(newInstructions);
 
     const wasSanitized = sanitized.trim() !== newInstructions.trim();
@@ -268,21 +364,33 @@ export class SettingsManager {
 
     if (current !== sanitized) {
       const dbData = this.ctx.getCachedDB();
+      const historyEntry = {
+        id: `inst_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: Date.now(),
+        instructions: current,
+        author,
+        reason: reason || (author === 'USER' ? 'Ручное изменение пользователем' : author === 'RETROSPECTIVE' ? 'Автоматическая ретроспектива' : 'Изменение ИИ-ассистентом')
+      };
+
+      let historyList: any[];
       if (dbData) {
         dbData.aiExpertTraderInstructionsHistory = dbData.aiExpertTraderInstructionsHistory || [];
-
-        // Push previous version to history
-        dbData.aiExpertTraderInstructionsHistory.push({
-          id: `inst_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          timestamp: Date.now(),
-          instructions: current,
-          author,
-          reason: reason || (author === 'USER' ? 'Ручное изменение пользователем' : author === 'RETROSPECTIVE' ? 'Автоматическая ретроспектива' : 'Изменение ИИ-ассистентом')
-        });
-
+        dbData.aiExpertTraderInstructionsHistory.push(historyEntry);
         if (dbData.aiExpertTraderInstructionsHistory.length > 20) {
           dbData.aiExpertTraderInstructionsHistory.shift();
         }
+        historyList = dbData.aiExpertTraderInstructionsHistory;
+      } else {
+        historyList = [...loadExpertInstructionsHistory(this.expertHistoryFile), historyEntry].slice(-20);
+      }
+
+      const isVitestDefaultPath = (process.env.NODE_ENV === 'test' || process.env.VITEST !== undefined) && !this.ctx.expertHistoryFilePath;
+      if (!isVitestDefaultPath) {
+        syncExpertInstructionsHistoryFile(historyList, this.expertHistoryFile);
+      }
+
+      if (author === 'RETROSPECTIVE' && !isMigration) {
+        this.lastRetrospectiveUpdateAt = historyEntry.timestamp;
       }
 
       this.settings.aiExpertTraderInstructions = sanitized;

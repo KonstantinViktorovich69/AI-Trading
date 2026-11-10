@@ -4,6 +4,15 @@ import { getAuthMode, validateApiKey } from '../middleware/auth.ts';
 import { DirectionalMemoryAnalyticsService } from '../services/directionalMemoryAnalyticsService.ts';
 import { sanitizeSettingsForClient } from '../utils/settingsSanitizer.ts';
 import { getCurrentSessionInfo, calculateSessionStats, calculateHourlyStats, TRADING_SESSIONS } from '../services/sessionTradingService.ts';
+import { buildExitPolicyConfig } from '../services/virtualTradeEngine.ts';
+import { getCostModel } from '../services/costModel.ts';
+import { buildEvidenceReport } from '../services/evidenceReport.ts';
+import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
+import { isEntryPaused, getMarketDataFreshness } from '../services/entryGate.ts';
+import { getLastLoopTickTimes } from '../services/heartbeatService.ts';
+import { getAllLearningCells } from '../services/learningCellService.ts';
+import { loadExpertInstructionsHistory } from '../services/selfLearningGuard.ts';
+import { aiGatewayService } from '../services/aiOrchestrator.ts';
 
 export interface SystemRouterContext {
   getVirtualTrades: () => any[];
@@ -27,6 +36,19 @@ export interface SystemRouterContext {
   getWatchdogStatus?: () => any;
   getServerStartTime?: () => number;
   getLatencyInfo?: () => { weexLatencyMs: number };
+  getGlobalCcxtTickers?: () => Record<string, any>;
+  getGlobalTrueOhlcv?: () => Record<string, any>;
+  getApiHealth?: () => Record<string, any>;
+  getAiGatewayHealth?: () => {
+    serverKeyConfigured: boolean;
+    geminiKeyConfigured: boolean;
+    deepseekKeyConfigured: boolean;
+    lastSuccessAt: number | null;
+    aiFallbackCountTotal: number;
+    aiFallbackCountLastHour: number;
+  };
+  setExpertInstructions?: (instructions: string, source: string, reason?: string) => any;
+  saveSettings?: () => any;
 }
 
 export function createSystemRouter(ctx: SystemRouterContext): Router {
@@ -392,6 +414,223 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // GET /api/system/effective-config (and GET /api/effective-config)
+  const handleEffectiveConfig = (req: Request, res: Response) => {
+    try {
+      const globalSettings = ctx.getGlobalSettings() || {};
+      const exitPolicy = buildExitPolicyConfig(globalSettings, { isMultiTp: true, tpStages: [] });
+      const costModel = getCostModel(globalSettings);
+
+      const flags = {
+        regimeUsesRealBtcCandles: !!globalSettings.regimeUsesRealBtcCandles,
+        blockEntriesOnEstimatedFeatures: !!globalSettings.blockEntriesOnEstimatedFeatures,
+        modelSideAwareFeatures: !!globalSettings.modelSideAwareFeatures,
+        requireModelMaturity: !!globalSettings.requireModelMaturity,
+        modelMinSamplesForAdjustment: Number(globalSettings.modelMinSamplesForAdjustment) || 100,
+        strictLiquidityGate: !!globalSettings.strictLiquidityGate,
+        timeMachineApplyLearningsEnabled: !!globalSettings.timeMachineApplyLearningsEnabled,
+        slippageTierModelEnabled: !!globalSettings.slippageTierModelEnabled,
+        allowBrowserAiPoller: !!globalSettings.allowBrowserAiPoller,
+        realTradingEvidenceGateEnabled: globalSettings.realTradingEvidenceGateEnabled !== false,
+        evidenceGateOverride: globalSettings.evidenceGateOverride === true,
+        evidenceGateMinTrades: Number(globalSettings.evidenceGateMinTrades) || 150,
+        evidenceGateMinDays: Number(globalSettings.evidenceGateMinDays) || 14,
+        evidenceGateMaxDrawdownPct: Number(globalSettings.evidenceGateMaxDrawdownPct) || 15,
+        staleDataPauseSec: typeof globalSettings.staleDataPauseSec === 'number' ? globalSettings.staleDataPauseSec : 300
+      };
+
+      const versions = {
+        featuresVersion: globalSettings.modelSideAwareFeatures ? 2 : 1,
+        costModelVersion: costModel.version || 2
+      };
+
+      res.json({
+        success: true,
+        exitPolicy,
+        costModel,
+        flags,
+        versions
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  };
+
+  router.get('/system/effective-config', handleEffectiveConfig);
+  router.get('/effective-config', handleEffectiveConfig);
+
+  // T7.2: GET /api/system/evidence-report
+  router.get('/system/evidence-report', (req: Request, res: Response) => {
+    try {
+      const virtualTrades = ctx.getVirtualTrades() || [];
+      const globalSettings = ctx.getGlobalSettings() || {};
+      const writeSnapshot = req.query.snapshot !== '0';
+      const report = buildEvidenceReport(
+        virtualTrades,
+        globalSettings,
+        getAllLearningCells(),
+        { writeSnapshot }
+      );
+      res.json({
+        success: true,
+        report,
+        ...report
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  // T7.3: GET /api/system/health (read-only unified health panel)
+  router.get('/system/health', (req: Request, res: Response) => {
+    try {
+      const now = Date.now();
+      const virtualTrades = ctx.getVirtualTrades() || [];
+      const globalSettings = ctx.getGlobalSettings() || {};
+      const signalsCache = ctx.getSignalsCache() || {};
+      const tickTimes = getLastLoopTickTimes();
+
+      const gateDeps = {
+        getGlobalTrueOhlcv: ctx.getGlobalTrueOhlcv,
+        getGlobalSettings: () => globalSettings,
+        getGlobalCcxtTickers: ctx.getGlobalCcxtTickers,
+        getApiHealth: ctx.getApiHealth,
+        silent: true
+      };
+
+      const entryGate = isEntryPaused(now, gateDeps);
+      const freshness = getMarketDataFreshness(now, gateDeps);
+      const signalScanTs = typeof signalsCache?.lastUpdated === 'number' && signalsCache.lastUpdated > 0
+        ? signalsCache.lastUpdated
+        : null;
+      const signalScanAgeSec = signalScanTs !== null ? Math.max(0, Math.round((now - signalScanTs) / 1000)) : null;
+      const autopilotTickAgeSec = tickTimes.autopilot > 0 ? Math.max(0, Math.round((now - tickTimes.autopilot) / 1000)) : null;
+      const watchdogTickAgeSec = tickTimes.watchdog > 0 ? Math.max(0, Math.round((now - tickTimes.watchdog) / 1000)) : null;
+      const heartbeatTickAgeSec = tickTimes.heartbeat > 0 ? Math.max(0, Math.round((now - tickTimes.heartbeat) / 1000)) : null;
+
+      const aiHealth = ctx.getAiGatewayHealth
+        ? ctx.getAiGatewayHealth()
+        : {
+            geminiKeyConfigured: Boolean(process.env.GEMINI_API_KEY),
+            deepseekKeyConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
+            serverKeyConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY),
+            lastSuccessAt: aiGatewayService.getLastSuccessAt(),
+            aiFallbackCountTotal: aiGatewayService.getAiFallbackCount(),
+            aiFallbackCountLastHour: aiGatewayService.getAiFallbackCountLastHour(now)
+          };
+
+      const openVirtual = virtualTrades.filter(t => t && t.status === 'OPEN' && !t.isReal).length;
+      const openReal = virtualTrades.filter(t => t && t.status === 'OPEN' && t.isReal).length;
+      const evidenceGate = evaluateEvidenceGate(virtualTrades, globalSettings, now);
+
+      const flags = {
+        regimeUsesRealBtcCandles: !!globalSettings.regimeUsesRealBtcCandles,
+        blockEntriesOnEstimatedFeatures: !!globalSettings.blockEntriesOnEstimatedFeatures,
+        modelSideAwareFeatures: !!globalSettings.modelSideAwareFeatures,
+        requireModelMaturity: !!globalSettings.requireModelMaturity,
+        modelMinSamplesForAdjustment: Number(globalSettings.modelMinSamplesForAdjustment) || 100,
+        strictLiquidityGate: !!globalSettings.strictLiquidityGate,
+        timeMachineApplyLearningsEnabled: !!globalSettings.timeMachineApplyLearningsEnabled,
+        slippageTierModelEnabled: !!globalSettings.slippageTierModelEnabled,
+        allowBrowserAiPoller: !!globalSettings.allowBrowserAiPoller,
+        realTradingEvidenceGateEnabled: globalSettings.realTradingEvidenceGateEnabled !== false,
+        evidenceGateOverride: globalSettings.evidenceGateOverride === true,
+        evidenceGateMinTrades: evidenceGate.minTrades,
+        evidenceGateMinDays: evidenceGate.minDays,
+        evidenceGateMaxDrawdownPct: evidenceGate.maxAllowedDrawdownPct,
+        staleDataPauseSec: typeof globalSettings.staleDataPauseSec === 'number' ? globalSettings.staleDataPauseSec : 300,
+        learningProtectedPatternsPolicy: globalSettings.learningProtectedPatternsPolicy || 'PENALIZE_ONLY',
+        aggregatedLearningMode: globalSettings.aggregatedLearningMode || 'SHADOW'
+      };
+
+      res.json({
+        success: true,
+        timestamp: new Date(now).toISOString(),
+        loops: {
+          signalScanAgeSec,
+          autopilotTickAgeSec,
+          watchdogTickAgeSec,
+          heartbeatTickAgeSec
+        },
+        signalScanAgeSec,
+        autopilotTickAgeSec,
+        watchdogTickAgeSec,
+        marketData: {
+          tickersAgeSec: freshness.tickerAgeSec,
+          btcOhlcvAgeSec: freshness.btcOhlcvAgeSec,
+          tickerTimestamp: freshness.tickerTimestamp,
+          btcOhlcvTimestamp: freshness.btcOhlcvTimestamp
+        },
+        tickersAgeSec: freshness.tickerAgeSec,
+        btcOhlcvAgeSec: freshness.btcOhlcvAgeSec,
+        entryGate,
+        aiGateway: {
+          ...aiHealth,
+          lastSuccessAgeSec: aiHealth.lastSuccessAt ? Math.max(0, Math.round((now - aiHealth.lastSuccessAt) / 1000)) : null
+        },
+        openPositions: {
+          virtual: openVirtual,
+          real: openReal,
+          total: openVirtual + openReal
+        },
+        evidenceGate,
+        regimes: {
+          current: signalsCache?.marketRegime || 'UNKNOWN',
+          legacy: signalsCache?.regimeLegacy || signalsCache?.marketRegime || 'UNKNOWN',
+          real: signalsCache?.regimeReal || signalsCache?.shadowRegimeReal?.regime || 'UNAVAILABLE'
+        },
+        flags
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  // T7.4: POST /api/system/expert-instructions/rollback
+  router.post('/system/expert-instructions/rollback', async (req: Request, res: Response) => {
+    try {
+      const requestedId = req.body?.id;
+      const dbData = ctx.getCachedDB() || {};
+      const dbHistory = Array.isArray(dbData.aiExpertTraderInstructionsHistory)
+        ? dbData.aiExpertTraderInstructionsHistory
+        : [];
+      const history = dbHistory.length > 0 ? dbHistory : loadExpertInstructionsHistory();
+
+      if (!Array.isArray(history) || history.length === 0) {
+        return res.status(404).json({ success: false, error: 'История версий инструкций пуста' });
+      }
+
+      const target = requestedId
+        ? history.find((item: any) => item && item.id === requestedId)
+        : history[history.length - 1];
+
+      if (!target || typeof target.instructions !== 'string') {
+        return res.status(404).json({ success: false, error: 'Версия не найдена в истории' });
+      }
+
+      const reason = `Откат к версии ${target.id} от ${new Date(target.timestamp || Date.now()).toLocaleString()}`;
+      if (ctx.setExpertInstructions) {
+        ctx.setExpertInstructions(target.instructions, 'USER', reason);
+      } else {
+        const globalSettings = ctx.getGlobalSettings();
+        if (globalSettings) {
+          globalSettings.aiExpertTraderInstructions = target.instructions;
+        }
+        await ctx.saveSettings?.();
+      }
+
+      res.json({
+        success: true,
+        restoredId: target.id,
+        restoredTimestamp: target.timestamp,
+        instructions: target.instructions,
+        data: sanitizeSettingsForClient(ctx.getGlobalSettings())
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });
 

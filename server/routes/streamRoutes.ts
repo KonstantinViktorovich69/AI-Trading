@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response, Router } from 'express';
 import { cleanSymbol } from '../utils/symbolUtils.ts';
+import { OWNER_ID } from '../config/owner.ts';
 
 export interface StreamRouterContext {
   getSignalsCache: () => any;
@@ -378,7 +379,7 @@ export function createStreamRouter(ctx: StreamRouterContext): Router {
         fundingRateHarvest: rate,
         takeProfit: side === 'LONG' ? entryPrice * 1.05 : entryPrice * 0.95,
         stopLoss: side === 'LONG' ? entryPrice * 0.93 : entryPrice * 1.07,
-        userId: 'polyakovats3110@gmail.com'
+        userId: OWNER_ID
       };
 
       const virtualTrades = ctx.getVirtualTrades();

@@ -1,4 +1,10 @@
 import { Type } from '@google/genai';
+import {
+  saveKnowledgeSnapshot,
+  validateKnowledgeRebalanceSize,
+  validateExpertInstructionModification,
+  loadExpertInstructionsHistory
+} from '../services/selfLearningGuard.ts';
 
 export interface AiOptimizationWorkerContext {
   getCachedDB: () => any;
@@ -24,6 +30,10 @@ export interface AiOptimizationWorkerContext {
   streamEmitter: { emit: (event: string, ...args: any[]) => boolean };
   updatePatternBlacklistFromStats: (trades: any[]) => void;
   isMainThread: boolean;
+  getReportsDir?: () => string;
+  getLastRetrospectiveUpdateAt?: () => number;
+  setLastRetrospectiveUpdateAt?: (ts: number) => void;
+  getNowTs?: () => number;
 }
 
 export function getJaccardSimilarity(str1: string, str2: string): number {
@@ -89,6 +99,13 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
         if (Array.isArray(newRules) && newRules.length > 0) {
           const activeRulesCopy = aiKnowledgeBase.filter(old => !old.isArchived);
           const archivedRules = aiKnowledgeBase.filter(old => old.isArchived);
+
+          saveKnowledgeSnapshot(aiKnowledgeBase, { reportsDir: ctx.getReportsDir?.() });
+          const sizeCheck = validateKnowledgeRebalanceSize(newRules.length, activeRulesCopy.length);
+          if (!sizeCheck.allowed) {
+            console.warn(`[SELF-LEARNING GUARD] Blocked autonomousKnowledgeRebalance: ${sizeCheck.reason}`);
+            return;
+          }
           
           const builtNewRules: any[] = [];
           for (const r of newRules) {
@@ -697,30 +714,59 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
         (rawDecision as any)?.isFallback === true;
 
       if (!isPlaceholderModifications) {
-        const globalSettings = ctx.getGlobalSettings();
-        let currentInstructions = globalSettings.aiExpertTraderInstructions || "";
-        const sectionHeader = "### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)";
-        const oldSectionHeader = "### 4. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)";
-        
-        let updatedInstructions = "";
-        const targetHeader = currentInstructions.includes(sectionHeader) ? sectionHeader : (currentInstructions.includes(oldSectionHeader) ? oldSectionHeader : null);
-        if (targetHeader) {
-          const parts = currentInstructions.split(targetHeader);
-          const afterHeader = parts[1] || "";
-          const nextSectionIdx = afterHeader.search(/\n###\s+/);
-          const tail = nextSectionIdx !== -1 ? afterHeader.substring(nextSectionIdx) : "";
-          updatedInstructions = parts[0] + sectionHeader + "\n" + decision.expertModifications.trim() + (tail ? "\n\n" + tail.trimStart() : "");
-        } else {
-          updatedInstructions = currentInstructions.trim() + "\n\n" + sectionHeader + "\n" + decision.expertModifications.trim();
+        const nowTs = ctx.getNowTs ? ctx.getNowTs() : Date.now();
+        let lastRetroTs = ctx.getLastRetrospectiveUpdateAt ? ctx.getLastRetrospectiveUpdateAt() : 0;
+        if (!lastRetroTs && !ctx.getLastRetrospectiveUpdateAt) {
+          const hist = loadExpertInstructionsHistory();
+          const latestRetro = [...hist].reverse().find(h => h && h.author === 'RETROSPECTIVE');
+          if (latestRetro && typeof latestRetro.timestamp === 'number') {
+            lastRetroTs = latestRetro.timestamp;
+          }
         }
-        
-        ctx.setExpertInstructions(updatedInstructions, 'RETROSPECTIVE', `Ретроспективные корректировки: ${decision.expertModifications.slice(0, 100)}...`);
-        
-        ctx.logAgentExchange('EXPERT', 'RETROSPECTIVE', 
-          'Приняты адаптивные ретроспективные корректировки', 
-          `Экспертные инструкции обновлены: ${decision.expertModifications.slice(0, 100)}...`, 
-          'success'
-        );
+
+        const validation = validateExpertInstructionModification(decision.expertModifications, {
+          lastRetrospectiveUpdateAt: lastRetroTs,
+          nowTs
+        });
+
+        if (!validation.valid) {
+          console.warn(`[SELF-LEARNING GUARD] Rejected retrospective expertModifications write: ${validation.reason}`);
+          ctx.logAgentExchange(
+            'SELF_LEARNING_GUARD',
+            'EXPERT',
+            'Обновление экспертных инструкций отклонено',
+            `Причина: ${validation.reason}`,
+            'warning'
+          );
+        } else {
+          const globalSettings = ctx.getGlobalSettings();
+          let currentInstructions = globalSettings.aiExpertTraderInstructions || "";
+          const sectionHeader = "### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)";
+          const oldSectionHeader = "### 4. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)";
+
+          let updatedInstructions = "";
+          const targetHeader = currentInstructions.includes(sectionHeader) ? sectionHeader : (currentInstructions.includes(oldSectionHeader) ? oldSectionHeader : null);
+          if (targetHeader) {
+            const parts = currentInstructions.split(targetHeader);
+            const afterHeader = parts[1] || "";
+            const nextSectionIdx = afterHeader.search(/\n###\s+/);
+            const tail = nextSectionIdx !== -1 ? afterHeader.substring(nextSectionIdx) : "";
+            updatedInstructions = parts[0] + sectionHeader + "\n" + decision.expertModifications.trim() + (tail ? "\n\n" + tail.trimStart() : "");
+          } else {
+            updatedInstructions = currentInstructions.trim() + "\n\n" + sectionHeader + "\n" + decision.expertModifications.trim();
+          }
+
+          ctx.setExpertInstructions(updatedInstructions, 'RETROSPECTIVE', `Ретроспективные корректировки: ${decision.expertModifications.slice(0, 100)}...`);
+          if (ctx.setLastRetrospectiveUpdateAt) {
+            ctx.setLastRetrospectiveUpdateAt(nowTs);
+          }
+
+          ctx.logAgentExchange('EXPERT', 'RETROSPECTIVE',
+            'Приняты адаптивные ретроспективные корректировки',
+            `Экспертные инструкции обновлены: ${decision.expertModifications.slice(0, 100)}...`,
+            'success'
+          );
+        }
       }
       
       const optimizerSummary = {

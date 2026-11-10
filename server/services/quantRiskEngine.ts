@@ -206,32 +206,66 @@ export function calculateConfidenceProbability(
   symbol: string,
   currentPrice: number,
   volume: number,
-  ctx: QuantRiskEngineContext
+  ctx: QuantRiskEngineContext,
+  side?: 'LONG' | 'SHORT'
 ): { p: number; features: number[] } {
   const globalTrueOHLCV = ctx.getGlobalTrueOHLCV();
   const indicators = globalTrueOHLCV[symbol];
   if (!indicators) return { p: 0.5, features: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
 
-  const x1 = indicators.is48hBreakout || 0;
-  const x2 = (indicators.rsi1h || 50) - 50;
-  const x3 = ((indicators.macdHistogram || 0) / (currentPrice || 1)) * 100;
-  const x4 = indicators.ema50 ? ((currentPrice - indicators.ema50) / indicators.ema50) * 100 : 0;
-  const x5 = indicators.ema200 ? ((currentPrice - indicators.ema200) / indicators.ema200) * 100 : 0;
+  const isLong = side === 'LONG';
 
+  // x1: 48h Extremum Breakout
+  const x1 = isLong
+    ? (indicators.is48hBreakoutLow !== undefined ? indicators.is48hBreakoutLow : (indicators.is48hBreakout || 0))
+    : (indicators.is48hBreakout || 0);
+
+  // x2: RSI Deviation from 50 (positive supports position direction)
+  const x2 = isLong
+    ? 50 - (indicators.rsi1h || 50)
+    : (indicators.rsi1h || 50) - 50;
+
+  // x3: MACD Histogram (% of price)
+  const macdPct = ((indicators.macdHistogram || 0) / (currentPrice || 1)) * 100;
+  const x3 = isLong ? -macdPct : macdPct;
+
+  // x4: Distance to EMA50 (%)
+  const ema50Dist = indicators.ema50 ? ((currentPrice - indicators.ema50) / indicators.ema50) * 100 : 0;
+  const x4 = isLong ? -ema50Dist : ema50Dist;
+
+  // x5: Distance to EMA200 (%)
+  const ema200Dist = indicators.ema200 ? ((currentPrice - indicators.ema200) / indicators.ema200) * 100 : 0;
+  const x5 = isLong ? -ema200Dist : ema200Dist;
+
+  // x6: Hourly volume spike (symmetric)
   const globalCcxtTickers = ctx.getGlobalCcxtTickers();
   const activeEx = DEFAULT_EXCHANGE;
   const ticker = (globalCcxtTickers && findTickerInMap(symbol, globalCcxtTickers[activeEx])) || {};
   const avgHourlyVol = (ticker.quoteVolume || 0) / 24;
   const x6 = (volume > avgHourlyVol * 1.5) ? 1 : 0;
 
+  // x7: Order Book Imbalance (positive supports position direction)
   const orderBookImbalance = ctx.getOrderBookImbalance();
   const ob = orderBookImbalance[symbol] || { imbalance: 0 };
-  const x7 = (ob.imbalance || 0) / 100;
+  const rawObImbalance = (ob.imbalance || 0) / 100;
+  const x7 = isLong ? -rawObImbalance : rawObImbalance;
 
-  const x8 = indicators.wicks?.topPct || 0;
-  const x9 = (indicators.isLiquiditySweep || indicators.isLiquiditySweep1h || indicators.isLiquiditySweep5m) ? 1 : 0;
-  const x10 = indicators.vwap ? ((currentPrice - indicators.vwap) / indicators.vwap) * 100 : 0;
-  const x11 = indicators.psarStatus === 'BEARISH' ? 1 : -1;
+  // x8: Rejection Wick (top wick for short, bottom wick for long)
+  const x8 = isLong ? (indicators.wicks?.bottomPct || 0) : (indicators.wicks?.topPct || 0);
+
+  // x9: Liquidity Sweep
+  const isSweepShort = (indicators.isLiquiditySweep || indicators.isLiquiditySweep1h || indicators.isLiquiditySweep5m) ? 1 : 0;
+  const isSweepLong = (indicators.isLiquiditySweepLow || indicators.isLiquiditySweepLow1h || indicators.isLiquiditySweepLow5m) ? 1 : 0;
+  const x9 = isLong ? isSweepLong : isSweepShort;
+
+  // x10: Distance to VWAP (%)
+  const vwapDist = indicators.vwap ? ((currentPrice - indicators.vwap) / indicators.vwap) * 100 : 0;
+  const x10 = isLong ? -vwapDist : vwapDist;
+
+  // x11: Parabolic SAR Status (1 = supports trade direction)
+  const x11 = isLong
+    ? (indicators.psarStatus === 'BULLISH' ? 1 : (indicators.psarStatus === 'BEARISH' ? -1 : 0))
+    : (indicators.psarStatus === 'BEARISH' ? 1 : -1);
 
   const modelWeights = ctx.getModelWeights();
   const z = (modelWeights.beta0 ?? 0) +
@@ -265,9 +299,10 @@ export function calculateConfidenceProbability(
         }
       }
 
+      const rawRsiForFilter = indicators.rsi1h !== undefined ? indicators.rsi1h : 50;
       const structMatch = matchesStructuredFilter(
         rule,
-        x2 + 50,
+        rawRsiForFilter,
         x6 > 0 ? 2 : 1,
         marketPulse.bias,
         indicators.volatility || 10,

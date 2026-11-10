@@ -23,6 +23,7 @@ export type CloseReasonCode =
   | 'MANUAL'
   | 'EXCHANGE_FILLED'
   | 'FORCED_RESET'
+  | 'STALE_UNPRICED'
   | 'UNKNOWN';
 
 export interface TradeAuditFields {
@@ -87,7 +88,9 @@ export function inferCloseReasonCode(trade: any): CloseReasonCode {
 
   const reasonStr = `${trade.closeReason || ''} ${trade.closeReasonText || ''} ${trade.exitReason || ''} ${trade.aiEvaluation || ''} ${trade.learnedRule || ''} ${trade.notes || ''} ${trade.feedback || ''} ${trade.aiAdvice || ''}`.toUpperCase();
 
+  if (reasonStr.includes('STALE_UNPRICED') || (reasonStr.includes('STALE') && (reasonStr.includes('CLEANUP') || reasonStr.includes('UNPRICED') || reasonStr.includes('GHOST')))) return 'STALE_UNPRICED';
   if (reasonStr.includes('FORCED_RESET') || reasonStr.includes('СМЕНЕ ВИРТУАЛЬНОГО БАЛАНСА') || trade.isForcedReset === true) return 'FORCED_RESET';
+  if (trade.closePriceSource === 'ENTRY_FALLBACK') return 'STALE_UNPRICED';
   if (reasonStr.includes('TAKE_PROFIT') || reasonStr.includes('TAKE PROFIT') || reasonStr.includes('TP_HIT') || reasonStr.includes('ТЕЙК') || reasonStr.includes('ПРОФИТ')) return 'TAKE_PROFIT';
   if (reasonStr.includes('PARTIAL') || reasonStr.includes('MULTI_TP')) return 'MULTI_TP_PARTIAL';
   if (reasonStr.includes('STOP_LOSS') || reasonStr.includes('STOP LOSS') || reasonStr.includes('SL_HIT') || reasonStr.includes('СТОП') || reasonStr.includes('ЛОСС')) return 'STOP_LOSS';
@@ -99,6 +102,7 @@ export function inferCloseReasonCode(trade: any): CloseReasonCode {
   if (reasonStr.includes('EMERGENCY') || reasonStr.includes('HARD_STOP') || reasonStr.includes('ЛИКВИДАЦИ')) return 'EMERGENCY_HARD_STOP';
   if (reasonStr.includes('MANUAL') || reasonStr.includes('РУЧН')) return 'MANUAL';
   if (reasonStr.includes('EXCHANGE')) return 'EXCHANGE_FILLED';
+  if (typeof trade.closePrice === 'number' && typeof trade.entryPrice === 'number' && trade.closePrice === trade.entryPrice && (!trade.pnl || trade.pnl === 0) && (trade.status === 'CLOSED' || !!trade.closeTime)) return 'STALE_UNPRICED';
 
   // Numerical PnL inference fallback
   if (typeof trade.pnl === 'number' || typeof trade.pnlPercent === 'number' || typeof trade.realizedPnl === 'number') {

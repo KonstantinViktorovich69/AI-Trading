@@ -5,7 +5,7 @@ export interface TickerSyncContext {
   getRestBlockedExchanges: () => Set<string>;
   getGlobalCcxtTickers: () => Record<string, Record<string, any>>;
   getWsTickers: () => { Weex: Record<string, any> };
-  getApiHealth: () => Record<string, { latency: number; status: 'online' | 'degraded' | 'offline'; lastCheck: number }>;
+  getApiHealth: () => Record<string, { latency: number; status: 'online' | 'degraded' | 'offline'; lastCheck: number; lastSuccessfulSyncAt?: number }>;
   safeRedisSet?: (key: string, val: string, mode?: string, duration?: number) => void;
   updateSignalsCache: () => void;
   updateTrueOHLCV: () => void;
@@ -232,11 +232,19 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
             }
           }
           
+          const liveCount = _tickers ? Object.keys(_tickers).length : 0;
+          const prevSyncAt = apiHealth[exName]?.lastSuccessfulSyncAt;
           const latency = Date.now() - startTime;
-          apiHealth[exName] = { latency, status: count > 0 ? (latency > 2000 ? 'degraded' : 'online') : 'offline', lastCheck: Date.now() };
+          apiHealth[exName] = {
+            latency,
+            status: count > 0 ? (latency > 2000 ? 'degraded' : 'online') : 'offline',
+            lastCheck: Date.now(),
+            lastSuccessfulSyncAt: liveCount > 0 ? Date.now() : prevSyncAt
+          };
         } catch (e) {
           console.error(`[ERROR] Critical error in ${exName} fetch:`, e);
-          apiHealth[exName] = { latency: 0, status: 'offline', lastCheck: Date.now() };
+          const prevSyncAt = apiHealth[exName]?.lastSuccessfulSyncAt;
+          apiHealth[exName] = { latency: 0, status: 'offline', lastCheck: Date.now(), lastSuccessfulSyncAt: prevSyncAt };
         }
       }));
     }

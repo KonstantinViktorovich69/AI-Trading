@@ -4,7 +4,8 @@
 import fs from 'fs';
 import path from 'path';
 
-export const DEFAULT_OWNER_ID = "polyakovats3110@gmail.com";
+import { DEFAULT_OWNER_ID, OWNER_ID, getOwnerId } from '../config/owner.ts';
+export { DEFAULT_OWNER_ID, OWNER_ID, getOwnerId };
 
 export const SEED_SYMBOLS_DATA = [
   { symbol: 'DUSDT', basePrice: 0.042 },

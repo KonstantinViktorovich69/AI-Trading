@@ -20,7 +20,17 @@ export interface SettingsRouterContext {
   runAiGeneration: (params: any) => Promise<any>;
 }
 
-const FORBIDDEN_AI_SETTINGS_KEYS = ['exchangeApiConfig', 'telegramBots', 'tradingMode'];
+const FORBIDDEN_AI_SETTINGS_KEYS = [
+  'exchangeApiConfig',
+  'telegramBots',
+  'tradingMode',
+  'realTradingEvidenceGateEnabled',
+  'evidenceGateOverride',
+  'evidenceGateMinTrades',
+  'evidenceGateMinDays',
+  'evidenceGateMaxDrawdownPct',
+  'staleDataPauseSec'
+];
 
 export function sanitizeAiSettingsUpdate(updates: any, sourceLabel: string): any {
   if (!updates || typeof updates !== 'object') return updates;
@@ -254,6 +264,61 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     }
     if (req.body.sessionAdaptiveScoreBoost !== undefined) {
       globalSettings.sessionAdaptiveScoreBoost = !!req.body.sessionAdaptiveScoreBoost;
+    }
+    if (req.body.costModel !== undefined && typeof req.body.costModel === 'object') {
+      globalSettings.costModel = {
+        feeRatePerSide: typeof req.body.costModel.feeRatePerSide === 'number' ? req.body.costModel.feeRatePerSide : 0.0006,
+        slippageRoundTrip: typeof req.body.costModel.slippageRoundTrip === 'number' ? req.body.costModel.slippageRoundTrip : 0.0004,
+        version: 2
+      };
+    }
+    if (req.body.slippageTierModelEnabled !== undefined) {
+      globalSettings.slippageTierModelEnabled = !!req.body.slippageTierModelEnabled;
+    }
+    if (req.body.strictLiquidityGate !== undefined) {
+      globalSettings.strictLiquidityGate = !!req.body.strictLiquidityGate;
+    }
+    if (req.body.allowBrowserAiPoller !== undefined) {
+      globalSettings.allowBrowserAiPoller = !!req.body.allowBrowserAiPoller;
+    }
+    if (req.body.realTradingEvidenceGateEnabled !== undefined) {
+      globalSettings.realTradingEvidenceGateEnabled = !!req.body.realTradingEvidenceGateEnabled;
+    }
+    if (req.body.evidenceGateOverride !== undefined) {
+      globalSettings.evidenceGateOverride = !!req.body.evidenceGateOverride;
+    }
+    if (req.body.evidenceGateMinTrades !== undefined) {
+      const v = Number(req.body.evidenceGateMinTrades);
+      if (Number.isFinite(v) && v >= 20) globalSettings.evidenceGateMinTrades = Math.round(v);
+    }
+    if (req.body.evidenceGateMinDays !== undefined) {
+      const v = Number(req.body.evidenceGateMinDays);
+      if (Number.isFinite(v) && v >= 1) globalSettings.evidenceGateMinDays = Number(v.toFixed(1));
+    }
+    if (req.body.evidenceGateMaxDrawdownPct !== undefined) {
+      const v = Number(req.body.evidenceGateMaxDrawdownPct);
+      if (Number.isFinite(v) && v >= 1 && v <= 100) globalSettings.evidenceGateMaxDrawdownPct = Number(v.toFixed(1));
+    }
+    if (req.body.staleDataPauseSec !== undefined) {
+      const v = Number(req.body.staleDataPauseSec);
+      if (Number.isFinite(v) && v >= 0) globalSettings.staleDataPauseSec = Math.round(v);
+    }
+    const exitFields = [
+      'exitTrailingTriggerPct', 'exitTrailingDistancePct', 'exitEnableTrailingStop',
+      'exitMinPttpActivationNetPnlPct', 'exitMinPttpPeakNetPnlPct', 'exitPttpTrailingDropPct',
+      'exitBypassProfitFloorForPrimaryTp', 'exitBypassProfitFloorForMultiTp',
+      'exitMinNormalAutoCloseNetPnlPct', 'exitTimeoutProfitHours', 'exitMinTimeoutProfitNetPnlPct',
+      'exitEnableStagnationTimeout', 'exitMaxStagnationPnlPct',
+      'trailingStopTriggerPnlPct', 'trailingStopDistancePct', 'enableTrailingStop',
+      'minPttpActivationNetPnlPct', 'minPttpPeakNetPnlPct', 'pttpTrailingDropPct',
+      'bypassProfitFloorForPrimaryTp', 'bypassProfitFloorForMultiTp',
+      'minNormalAutoCloseNetPnlPct', 'timeoutProfitHours', 'minTimeoutProfitNetPnlPct',
+      'enableStagnationTimeout', 'maxStagnationPnlPct', 'maxLifetimeHours', 'allowEmergencyMaxLifetime'
+    ];
+    for (const f of exitFields) {
+      if (req.body[f] !== undefined) {
+        globalSettings[f] = req.body[f];
+      }
     }
 
     ctx.saveSettings();

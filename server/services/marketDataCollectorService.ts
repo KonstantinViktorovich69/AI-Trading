@@ -440,7 +440,8 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
                 hasFvg5mBelow,
                 pointA5m,
                 pointB5m,
-                adx15m: GLOBAL_ADX[symbol.split(':')[0].replace('/', '')] || 25
+                adx15m: GLOBAL_ADX[symbol.split(':')[0].replace('/', '')] || 25,
+                updatedAt: Date.now()
             };
           }
         } catch (e: any) {

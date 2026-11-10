@@ -30,8 +30,9 @@ export function netReturnPct(t: any): number {
     const rawPct = isLong
       ? ((t.closePrice - t.entryPrice) / t.entryPrice) * 100
       : ((t.entryPrice - t.closePrice) / t.entryPrice) * 100;
-    // Minus model 0.10% round-turn fee
-    return rawPct - 0.10;
+    // Minus model round-turn fee (0.16% if costModelVersion === 2, else 0.10%)
+    const feeCostPct = t.costModelVersion === 2 ? 0.16 : 0.10;
+    return rawPct - feeCostPct;
   }
 
   if (typeof t.pnlPercent === 'number' && leverage > 0) {
@@ -74,9 +75,9 @@ export function isCleanLearningTrade(t: any): boolean {
     return false;
   }
 
-  // 6. Close reason checks: exclude manual closures and system resets
+  // 6. Close reason checks: exclude manual closures, system resets, and unpriced stale closures
   const reasonCode = t.closeReasonCode || inferCloseReasonCode(t);
-  if (reasonCode === 'MANUAL' || reasonCode === 'FORCED_RESET') {
+  if (reasonCode === 'MANUAL' || reasonCode === 'FORCED_RESET' || reasonCode === 'STALE_UNPRICED' || t.closePriceSource === 'ENTRY_FALLBACK') {
     return false;
   }
 

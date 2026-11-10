@@ -1,6 +1,7 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import { LoginGate } from './components/LoginGate.tsx';
 import './index.css';
 
 // Fix for "ResizeObserver loop completed with undelivered notifications" and transient network errors
@@ -47,6 +48,8 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <LoginGate>
+      <App />
+    </LoginGate>
   </StrictMode>,
 );

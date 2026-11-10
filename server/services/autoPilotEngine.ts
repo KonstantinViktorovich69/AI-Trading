@@ -20,6 +20,7 @@ import { getCellVerdict } from './learningCellService.ts';
 import { computeQuantFeaturesV2 } from './quantFeaturesV2.ts';
 import { calculateProbabilityV2IfAccepted } from './quantModelV2.ts';
 import { evaluateSessionFilter } from './sessionTradingService.ts';
+import { evaluateEvidenceGate } from './evidenceGate.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -57,7 +58,10 @@ export interface AutoPilotEngineDependencies {
   getLossStreakSizeDampening: (trades: any[]) => number;
   getWallAdjustedTp: (symbol: string, isSell: boolean, entry: number, target: number) => number;
   getAiKnowledgeBase?: () => any[];
-  calculateConfidenceProbability?: (symbol: string, currentPrice: number, volume: number) => { p: number; features: number[] };
+  calculateConfidenceProbability?: (symbol: string, currentPrice: number, volume: number, side?: 'LONG' | 'SHORT') => { p: number; features: number[] };
+  getApiHealth?: () => Record<string, any>;
+  getTickerTimestamp?: () => number | undefined;
+  getBtcOhlcvTimestamp?: () => number | undefined;
 }
 
 export interface CandidateQueueOptions {
@@ -125,7 +129,14 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
     if (!globalSettings.isAutopilotEnabled) {
       return;
     }
-    if (isEntryPaused(undefined, { getGlobalTrueOhlcv: deps.getGlobalTrueOhlcv, getGlobalSettings: deps.getGlobalSettings }).paused) {
+    if (isEntryPaused(undefined, {
+      getGlobalTrueOhlcv: deps.getGlobalTrueOhlcv,
+      getGlobalSettings: deps.getGlobalSettings,
+      getGlobalCcxtTickers: deps.getGlobalCcxtTickers,
+      getApiHealth: deps.getApiHealth,
+      getTickerTimestamp: deps.getTickerTimestamp,
+      getBtcOhlcvTimestamp: deps.getBtcOhlcvTimestamp
+    }).paused) {
       incFunnel('autopilot', 'entry_paused');
       return;
     }
@@ -360,28 +371,66 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             finalAiScore = Math.min(100, finalAiScore + kbEval.bonusScore);
         }
 
+        const isSellSignal = currentSig.signal && (currentSig.signal.includes('SELL') || currentSig.signal.includes('SHORT'));
+        const isBuySignal = currentSig.signal && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'));
+        const candidateSide: 'LONG' | 'SHORT' = isBuySignal ? 'LONG' : (isSellSignal ? 'SHORT' : (currentSig.side === 'LONG' ? 'LONG' : 'SHORT'));
+
         // --- КВАНТОВАЯ ЛОГИСТИЧЕСКАЯ РЕГРЕССИЯ (MODEL WEIGHTS BETA0..BETA11) ---
         let entryQuantP: number | undefined;
+        let shadowPSideAware: number | undefined;
+        let pAdjustmentWouldBeZero: boolean = false;
         let currentQuantFeatures: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        const modelSideAwareFeatures = (globalSettings as any).modelSideAwareFeatures === true;
+        const featuresVersion = modelSideAwareFeatures ? 2 : 1;
+
         if (deps.calculateConfidenceProbability) {
             try {
-                const quantProb = deps.calculateConfidenceProbability(symbol, price, currentSig.volume || 0);
-                if (quantProb && typeof quantProb.p === 'number') {
-                    entryQuantP = quantProb.p;
-                    if (Array.isArray(quantProb.features)) {
-                        currentQuantFeatures = quantProb.features;
+                // Всегда рассчитываем legacy (без side) и side-aware (с candidateSide)
+                const quantProbLegacy = deps.calculateConfidenceProbability(symbol, price, currentSig.volume || 0);
+                const quantProbSide = deps.calculateConfidenceProbability(symbol, price, currentSig.volume || 0, candidateSide);
+
+                shadowPSideAware = quantProbSide?.p;
+                const activeQuantProb = modelSideAwareFeatures ? quantProbSide : quantProbLegacy;
+
+                if (activeQuantProb && typeof activeQuantProb.p === 'number') {
+                    entryQuantP = activeQuantProb.p;
+                    if (Array.isArray(activeQuantProb.features)) {
+                        currentQuantFeatures = activeQuantProb.features;
                         currentSig.features = currentQuantFeatures;
                     }
-                    const probDiff = quantProb.p - 0.5;
-                    const probAdjustment = Math.round(probDiff * 24); // -12 до +12 пунктов
+
+                    // T3.3: Проверка зрелости модели (requireModelMaturity, default false)
+                    const closedTrades = deps.getVirtualTrades ? deps.getVirtualTrades() : [];
+                    const modelMinSamplesForAdjustment = Number((globalSettings as any).modelMinSamplesForAdjustment) || 100;
+                    const matureTradesCount = closedTrades.filter((t: any) => 
+                        t.status === 'CLOSED' && 
+                        (t.featuresVersion === 2 || (t.featuresVersion === undefined && t.side === 'SHORT')) && 
+                        Array.isArray(t.features) && t.features.length > 0
+                    ).length;
+                    const isModelMature = matureTradesCount >= modelMinSamplesForAdjustment;
+                    const requireModelMaturity = (globalSettings as any).requireModelMaturity === true;
+
+                    if (!isModelMature) {
+                        pAdjustmentWouldBeZero = true;
+                    }
+
+                    const probDiff = activeQuantProb.p - 0.5;
+                    let probAdjustment = Math.round(probDiff * 24); // -12 до +12 пунктов
+
+                    if (requireModelMaturity && !isModelMature) {
+                        probAdjustment = 0;
+                        console.log(`[QUANT LOGISTIC MODEL] ${symbol}: Model immature (${matureTradesCount}/${modelMinSamplesForAdjustment} samples), pAdjustment reset to 0`);
+                    }
+
                     if (probAdjustment !== 0) {
                         const scoreBefore = finalAiScore;
                         finalAiScore = Math.max(0, Math.min(100, finalAiScore + probAdjustment));
-                        console.log(`[QUANT LOGISTIC MODEL] ${symbol}: p=${(quantProb.p * 100).toFixed(1)}% -> AI Score adjusted ${scoreBefore} -> ${finalAiScore} (${probAdjustment > 0 ? '+' : ''}${probAdjustment} pts)`);
+                        console.log(`[QUANT LOGISTIC MODEL] ${symbol}: p=${(activeQuantProb.p * 100).toFixed(1)}% (sideAware=${modelSideAwareFeatures}) -> AI Score adjusted ${scoreBefore} -> ${finalAiScore} (${probAdjustment > 0 ? '+' : ''}${probAdjustment} pts)`);
                     }
-                    if (quantProb.p < 0.32) {
+
+                    if (activeQuantProb.p < 0.32) {
                         try { incFunnel('quant_guard', 'win_prob_below_32pct', symbol); } catch {}
-                        console.log(`[QUANT LOGISTIC GUARD] Skipping entry for ${symbol}: Win probability ${(quantProb.p * 100).toFixed(1)}% is below 32% safety threshold.`);
+                        console.log(`[QUANT LOGISTIC GUARD] Skipping entry for ${symbol}: Win probability ${(activeQuantProb.p * 100).toFixed(1)}% is below 32% safety threshold.`);
                         continue;
                     }
                 }
@@ -389,9 +438,6 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                 // Non-blocking graceful fallback
             }
         }
-
-        const isSellSignal = currentSig.signal && (currentSig.signal.includes('SELL') || currentSig.signal.includes('SHORT'));
-        const isBuySignal = currentSig.signal && (currentSig.signal.includes('BUY') || currentSig.signal.includes('LONG'));
 
         // --- STRICT SIGNAL QUALITY & PATTERN FILTER ---
         const rawPatternName = currentSig.matchedPattern || currentSig.patternName || currentSig.type || currentSig.pattern || '';
@@ -563,6 +609,17 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         // ЛЕГАСИ-ЛОГИКА: ранее отсекались монеты с volume24h < 200000 при volumeSpike < 1.8, что блокировало качественные сетапы с объемами 50k-200k.
         const volume24h = Number(currentSig.volume24h) || Number(currentSig.volume) || 0;
         const volumeSpike = Number(currentSig.volumeSpike) || 0;
+        const isVolumeSpike4x = volumeSpike >= 4.0;
+        const isStrictLiquidityOk = volume24h >= 50000 || (volume24h >= 25000 && isVolumeSpike4x);
+        const wouldBlockStrictLiquidity = !isStrictLiquidityOk;
+        const strictLiquidityGate = !!(globalSettings as any)?.strictLiquidityGate;
+
+        if (strictLiquidityGate && wouldBlockStrictLiquidity) {
+            try { incFunnel('shield_volume', 'strict_liquidity_blocked', symbol); } catch {}
+            console.log(`[AUTOPILOT STRICT LIQUIDITY] Blocked ${symbol}: volume24h $${volume24h} < $50,000 without 4x spike at >= $25k`);
+            continue;
+        }
+
         if (volume24h > 0 && volume24h < 50000 && volumeSpike < 4.0) {
             try { incFunnel('shield_volume', 'low_volume_stagnant_coin', symbol); } catch {}
             continue; // Ignore low-volume stagnant coins without volume spike
@@ -995,6 +1052,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
                         if (autoEntryRes.executed && autoEntryRes.trade) {
                             autoEntryRes.trade.features = currentQuantFeatures;
+                            autoEntryRes.trade.featuresVersion = featuresVersion;
                             try {
                                 const qfV2 = computeQuantFeaturesV2({
                                     symbol,
@@ -1010,6 +1068,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                     indicatorsSource: currentSig.decisionTrace?.metadata?.indicatorsSource ?? null,
                                     dataQuality: currentSig.dataQuality || (currentSig.decisionTrace?.metadata?.dataQuality ?? 'REAL'),
                                     estimatedFields: currentSig.estimatedFields || (currentSig.decisionTrace?.metadata?.estimatedFields ?? []),
+                                    featuresVersion,
                                     features: currentQuantFeatures,
                                     featuresHadIndicators: !!GLOBAL_TRUE_OHLCV[symbol],
                                     featuresV2: qfV2.features,
@@ -1022,6 +1081,8 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                     kbBonus: kbEval.bonusScore,
                                     quantP: entryQuantP ?? null,
                                     aiScoreFinal: finalAiScore,
+                                    volume24h,
+                                    volumeSpike,
                                     marketRegime,
                                     cellVerdict: currentCellVerdict ? {
                                         cellKey: currentCellVerdict.cellKey,
@@ -1033,7 +1094,10 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                     } : null,
                                     shadow: {
                                         regimeReal: (currentSig as any).shadowRegimeReal || (currentSig as any).regimeReal || (cacheSignals as any)?.shadowRegimeReal?.regime || (cacheSignals as any)?.regimeReal || null,
-                                        wouldBlockEstimatedFeatures
+                                        wouldBlockEstimatedFeatures,
+                                        pSideAware: shadowPSideAware ?? null,
+                                        pAdjustmentWouldBeZero,
+                                        strictLiquidityWouldBlock: wouldBlockStrictLiquidity
                                     }
                                 };
                             } catch {}
@@ -1260,6 +1324,14 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             const isOpeningInProgress = symbolsUndergoingRealOpen.has(normalizedSymbol);
 
             if (isRealScoreSatisfied && !isRealLimitReached && !isSameDirRealLimitReached && !existingRealAutoTrade && !recentlyClosedRealAuto && isEntryConf && !autopilotFailedSymbols.has(symbol.toUpperCase().trim()) && !isOpeningInProgress) {
+                const evidenceGate = evaluateEvidenceGate(virtualTrades, globalSettings);
+                if (!evidenceGate.passed) {
+                    incFunnel('autopilot', 'evidence_gate_blocked', symbol);
+                    console.log(`[REAL AUTOPILOT] Trade for ${symbol} blocked by ${evidenceGate.reason}`);
+                } else {
+                if (evidenceGate.overrideActive) {
+                    console.warn(`[EVIDENCE GATE OVERRIDE] Proceeding with real autopilot entry for ${symbol}: ${evidenceGate.reason}`);
+                }
                 symbolsUndergoingRealOpen.add(normalizedSymbol);
                 (async () => {
                     try {
@@ -1604,6 +1676,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                         symbolsUndergoingRealOpen.delete(normalizedSymbol);
                     }
                 })();
+                }
             }
         }
     }

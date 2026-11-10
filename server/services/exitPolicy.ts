@@ -1,4 +1,5 @@
 import type { CloseReasonCode } from './tradeSchema.ts';
+import type { CostModel } from './costModel.ts';
 
 export type ExitActionKind = 'HOLD' | 'MOVE_STOP' | 'PARTIAL_CLOSE' | 'FULL_CLOSE' | 'EMERGENCY_FULL_CLOSE';
 export type ExitDecisionKind = ExitActionKind;
@@ -57,6 +58,9 @@ export interface ExitPolicySettings {
   enableStagnationTimeout?: boolean;     // Default false; when true, closes trades that have stalled in flat/loss
   timeoutStagnationHours?: number;       // Default 3.5 hours
   maxStagnationPnlPct?: number;          // Default 1.0% (PnL threshold below which trade is considered stagnant)
+  estimatedFeePct?: number;
+  estimatedSlippagePct?: number;
+  costModel?: CostModel;
 }
 
 export interface ExitDecision {
@@ -77,7 +81,8 @@ export interface ExitDecision {
  */
 export function calculateNetPnlPct(
   trade: ExitTradeSnapshot,
-  market: ExitMarketSnapshot
+  market: ExitMarketSnapshot,
+  settings?: ExitPolicySettings
 ): { grossPnlPct: number; netPnlPct: number; peakNetPnlPct: number } {
   const entry = trade.entryPrice;
   const current = market.currentPrice;
@@ -94,7 +99,14 @@ export function calculateNetPnlPct(
 
   const grossPnlPct = priceChangeRatio * leverage * 100;
 
-  const totalFeePct = ((market.estimatedFeePct || 0.0006) * 2 + (market.estimatedSlippagePct || 0.0004)) * leverage * 100;
+  const feeRate = market.estimatedFeePct !== undefined
+    ? market.estimatedFeePct
+    : (settings?.estimatedFeePct ?? (settings?.costModel ? settings.costModel.feeRatePerSide : 0.0006));
+  const slippage = market.estimatedSlippagePct !== undefined
+    ? market.estimatedSlippagePct
+    : (settings?.estimatedSlippagePct ?? (settings?.costModel ? settings.costModel.slippageRoundTrip : 0.0004));
+
+  const totalFeePct = (feeRate * 2 + slippage) * leverage * 100;
   const netPnlPct = grossPnlPct - totalFeePct;
 
   // Calculate peak net PnL
@@ -134,7 +146,7 @@ function _evaluateExitPolicyInternal(
   settings: ExitPolicySettings = {}
 ): ExitDecision {
   const currentTime = market.currentTime || Date.now();
-  const { grossPnlPct, netPnlPct, peakNetPnlPct } = calculateNetPnlPct(trade, market);
+  const { grossPnlPct, netPnlPct, peakNetPnlPct } = calculateNetPnlPct(trade, market, settings);
 
   const minNormalAutoCloseThreshold = settings.minNormalAutoCloseNetPnlPct ?? 4.0;
   const minPttpActivation = settings.minPttpActivationNetPnlPct ?? 12.0;

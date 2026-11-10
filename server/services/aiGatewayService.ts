@@ -31,10 +31,37 @@ export class AiGatewayService {
   private currentAiQueue: Promise<any> = Promise.resolve();
   private cachedMarketNews: { text: string; timestamp: number } | null = null;
   private _aiFallbackCount: number = 0;
+  private fallbackTimestamps: number[] = [];
+  private lastSuccessAt: number | null = null;
   private options: AiGatewayOptions;
 
   constructor(options: AiGatewayOptions = {}) {
     this.options = options;
+  }
+
+  private recordFallbackEvent(nowTs = Date.now()): void {
+    this._aiFallbackCount++;
+    this.fallbackTimestamps.push(nowTs);
+    const cutoff = nowTs - 3600 * 1000;
+    while (this.fallbackTimestamps.length > 0 && this.fallbackTimestamps[0] < cutoff) {
+      this.fallbackTimestamps.shift();
+    }
+  }
+
+  public recordSuccessEvent(nowTs = Date.now()): void {
+    this.lastSuccessAt = nowTs;
+  }
+
+  public getLastSuccessAt(): number | null {
+    return this.lastSuccessAt;
+  }
+
+  public getAiFallbackCountLastHour(nowTs = Date.now()): number {
+    const cutoff = nowTs - 3600 * 1000;
+    while (this.fallbackTimestamps.length > 0 && this.fallbackTimestamps[0] < cutoff) {
+      this.fallbackTimestamps.shift();
+    }
+    return this.fallbackTimestamps.length;
   }
 
   public get aiFallbackCount(): number {
@@ -47,6 +74,8 @@ export class AiGatewayService {
 
   public resetAiFallbackCount(): void {
     this._aiFallbackCount = 0;
+    this.fallbackTimestamps = [];
+    this.lastSuccessAt = null;
   }
 
   public getPendingAiTasks(): Map<string, PendingAiTask> {
@@ -100,7 +129,7 @@ export class AiGatewayService {
       setTimeout(() => {
         if (this.pendingAiTasks.has(id)) {
           this.pendingAiTasks.delete(id);
-          this._aiFallbackCount++;
+          this.recordFallbackEvent();
           console.log(`[AI Router] Task ${id} timed out on frontend. Returning static fallback JSON.`);
           let defaultFallback = JSON.stringify({
             rationale: "Бот запрашивал AI, но вкладка браузера закрыта или не отвечает.",
@@ -157,7 +186,7 @@ export class AiGatewayService {
   }
 
   public getStaticServerSideAiFallback(params: any, errorMsg: string): { text: string } {
-    this._aiFallbackCount++;
+    this.recordFallbackEvent();
     const promptString = JSON.stringify(params.contents || "");
     let text = "[]";
 
@@ -323,6 +352,7 @@ export class AiGatewayService {
           if (resp.ok) {
             const data = await resp.json();
             const text = data.choices?.[0]?.message?.content || "";
+            this.recordSuccessEvent();
             return { text };
           } else {
             const errBody = await resp.text();
@@ -368,6 +398,7 @@ export class AiGatewayService {
               throw primaryErr;
             }
           }
+          this.recordSuccessEvent();
           return { text: response?.text || "" };
         } catch (geminiErr: any) {
           const errMsg = geminiErr?.message || String(geminiErr);

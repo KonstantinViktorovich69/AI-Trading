@@ -101,17 +101,53 @@ export function cleanSymbol(sym: string): string {
   return normalizeSymbol(sym);
 }
 
-export function getUnifiedTradeClosePnl(side: string, entryPrice: number, closePrice: number, amount: number, leverage: number) {
+import type { CostModel } from './services/costModel.ts';
+
+export function getUnifiedTradeClosePnl(
+  side: string,
+  entryPrice: number,
+  closePrice: number,
+  amount: number,
+  leverage: number,
+  costModel?: CostModel
+) {
   const unleveragedPct = side === 'SHORT'
     ? ((entryPrice - closePrice) / entryPrice) * 100
     : ((closePrice - entryPrice) / entryPrice) * 100;
   const leveragedPct = unleveragedPct * leverage;
   const rawPnlUsd = amount * (leveragedPct / 100);
+
+  if (costModel) {
+    const feeUsd = amount * leverage * (costModel.feeRatePerSide * 2);
+    const slippageUsd = amount * leverage * costModel.slippageRoundTrip;
+    const totalCostUsd = feeUsd + slippageUsd;
+    const pnlUsd = rawPnlUsd - totalCostUsd;
+    const pnlPercent = amount > 0
+      ? (pnlUsd / amount) * 100
+      : leveragedPct - (costModel.feeRatePerSide * 2 + costModel.slippageRoundTrip) * leverage * 100;
+    return {
+      pnlUsd,
+      feeUsd,
+      slippageUsd,
+      grossPnlUsd: rawPnlUsd,
+      leveragedPct,
+      pnlPercent,
+      costModelVersion: costModel.version || 2
+    };
+  }
+
   // Unified fee: 0.1% round-turn (0.1% * leverage on margin balance)
   const feeUsd = amount * leverage * 0.001;
   const pnlUsd = rawPnlUsd - feeUsd;
   const pnlPercent = amount > 0 ? (pnlUsd / amount) * 100 : leveragedPct;
-  return { pnlUsd, feeUsd, leveragedPct, pnlPercent };
+  return {
+    pnlUsd,
+    feeUsd,
+    slippageUsd: 0,
+    grossPnlUsd: rawPnlUsd,
+    leveragedPct,
+    pnlPercent
+  };
 }
 
 export function calculateKelly(aiScore: number, rewardToRisk: number = 2.0): number {

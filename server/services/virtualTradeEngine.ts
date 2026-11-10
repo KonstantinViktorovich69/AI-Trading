@@ -1,5 +1,6 @@
 import { evaluateExitPolicy, type ExitPolicySettings } from './exitPolicy.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
+import { getCostModel } from './costModel.ts';
 import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
 import { getOtePendingCandidates, processOtePendingQueue } from './oteVirtualQueue.ts';
@@ -49,32 +50,43 @@ export interface VirtualTradeEngineDependencies {
   runAiGeneration: (params: any) => Promise<{ text?: string }>;
   fetchGapCandles?: (exchange: any, symbol: string, fromTs: number, toTs: number) => Promise<GapCandleResult>;
   getPublicExchange?: () => any;
+  getApiHealth?: () => Record<string, any>;
 }
 
 let lastWeekCheckTime = 0;
 let lastRealDrawdownCheckTime = 0;
 
 export function buildExitPolicyConfig(globalSettings: any, trade: any): ExitPolicySettings {
-  return {
-    minNormalAutoCloseNetPnlPct: 6.0,
-    minPttpActivationNetPnlPct: 12.0,
-    minPttpPeakNetPnlPct: 18.0,
-    pttpTrailingDropPct: 35.0,
-    maxLifetimeHours: (globalSettings as any).maxLifetimeHours ?? 24,
-    allowEmergencyMaxLifetime: (globalSettings as any).allowEmergencyMaxLifetime ?? true,
-    timeoutProfitHours: 18,
-    minTimeoutProfitNetPnlPct: 6.0,
-    enableStagnationTimeout: true,
-    timeoutStagnationHours: (globalSettings as any).timeoutStagnationHours ?? 8.0,
-    maxStagnationPnlPct: 0.5,
+  const s = globalSettings || {};
+  const cfg: ExitPolicySettings = {
+    minNormalAutoCloseNetPnlPct: s.minNormalAutoCloseNetPnlPct ?? s.exitMinNormalAutoCloseNetPnlPct ?? 6.0,
+    minPttpActivationNetPnlPct: s.minPttpActivationNetPnlPct ?? s.exitMinPttpActivationNetPnlPct ?? 12.0,
+    minPttpPeakNetPnlPct: s.minPttpPeakNetPnlPct ?? s.exitMinPttpPeakNetPnlPct ?? 18.0,
+    pttpTrailingDropPct: s.pttpTrailingDropPct ?? s.exitPttpTrailingDropPct ?? 35.0,
+    maxLifetimeHours: s.maxLifetimeHours ?? s.exitMaxLifetimeHours ?? 24,
+    allowEmergencyMaxLifetime: s.allowEmergencyMaxLifetime ?? s.exitAllowEmergencyMaxLifetime ?? true,
+    timeoutProfitHours: s.timeoutProfitHours ?? s.exitTimeoutProfitHours ?? 18,
+    minTimeoutProfitNetPnlPct: s.minTimeoutProfitNetPnlPct ?? s.exitMinTimeoutProfitNetPnlPct ?? 6.0,
+    enableStagnationTimeout: s.enableStagnationTimeout ?? s.exitEnableStagnationTimeout ?? true,
+    timeoutStagnationHours: s.timeoutStagnationHours ?? s.exitTimeoutStagnationHours ?? 8.0,
+    maxStagnationPnlPct: s.maxStagnationPnlPct ?? s.exitMaxStagnationPnlPct ?? 0.5,
     enableMultiTp: trade.isMultiTp !== false,
     multiTpTargets: trade.tpStages,
-    bypassProfitFloorForMultiTp: true,
-    bypassProfitFloorForPrimaryTp: true,
-    enableTrailingStop: true,
-    trailingStopTriggerPnlPct: 14.0,
-    trailingStopDistancePct: 3.0
+    bypassProfitFloorForMultiTp: s.bypassProfitFloorForMultiTp ?? s.exitBypassProfitFloorForMultiTp ?? true,
+    bypassProfitFloorForPrimaryTp: s.bypassProfitFloorForPrimaryTp ?? s.exitBypassProfitFloorForPrimaryTp ?? true,
+    enableTrailingStop: s.enableTrailingStop ?? s.exitEnableTrailingStop ?? true,
+    trailingStopTriggerPnlPct: s.trailingStopTriggerPnlPct ?? s.exitTrailingTriggerPct ?? 14.0,
+    trailingStopDistancePct: s.trailingStopDistancePct ?? s.exitTrailingDistancePct ?? 3.0
   };
+
+  if (s.costModel !== undefined || s.estimatedFeePct !== undefined) {
+    const costModel = getCostModel(s);
+    cfg.estimatedFeePct = costModel.feeRatePerSide;
+    cfg.estimatedSlippagePct = costModel.slippageRoundTrip;
+    cfg.costModel = costModel;
+  }
+
+  return cfg;
 }
 
 /**
@@ -105,7 +117,12 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     const result = processOtePendingQueue(currentPrices);
     for (const candidate of result.filled) {
       try {
-        if (isEntryPaused(undefined, { getGlobalTrueOhlcv: deps.getGlobalTrueOhlcv, getGlobalSettings: deps.getGlobalSettings }).paused) {
+        if (isEntryPaused(undefined, {
+          getGlobalTrueOhlcv: deps.getGlobalTrueOhlcv,
+          getGlobalSettings: deps.getGlobalSettings,
+          getGlobalCcxtTickers: deps.getGlobalCcxtTickers,
+          getApiHealth: deps.getApiHealth
+        }).paused) {
           console.log(`[OTE PAUSED GUARD] Dropping candidate ${candidate.id} execution: entry paused`);
           try { incFunnel('ote', 'fill_dropped_paused'); } catch {}
           continue;
@@ -370,6 +387,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     }
 
     // Canonical Deterministic Exit Policy Evaluation
+    const exitPolicyConfig = buildExitPolicyConfig(globalSettings, trade);
     const canonicalExitDecision = evaluateExitPolicy(
       {
         id: String(trade.id),
@@ -392,9 +410,11 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         currentPrice,
         bid: currentPrice * 0.9995,
         ask: currentPrice * 1.0005,
+        estimatedFeePct: exitPolicyConfig.estimatedFeePct,
+        estimatedSlippagePct: exitPolicyConfig.estimatedSlippagePct,
         currentTime: Date.now()
       },
-      buildExitPolicyConfig(globalSettings, trade)
+      exitPolicyConfig
     );
 
     if ((canonicalExitDecision.kind === 'FULL_CLOSE' || canonicalExitDecision.kind === 'EMERGENCY_FULL_CLOSE') && !shouldClose) {
@@ -832,6 +852,15 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         }
       }
 
+      if (!finalClosePrice || finalClosePrice <= 0) {
+        finalClosePrice = trade.entryPrice;
+        trade.closePriceSource = 'ENTRY_FALLBACK';
+        trade.closeReasonCode = 'STALE_UNPRICED';
+      } else if (finalClosePrice === trade.entryPrice && staleSeen) {
+        trade.closePriceSource = 'ENTRY_FALLBACK';
+        trade.closeReasonCode = 'STALE_UNPRICED';
+      }
+
       trade.status = 'CLOSED';
       if (!trade.isReal && gapOutcome && gapOutcome.terminal) {
         trade.closeTime = gapOutcome.terminal.eventTime;
@@ -846,7 +875,11 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       if (!trade.history) trade.history = [];
       trade.history.push({ time: Date.now(), type: 'CLOSE', price: finalClosePrice, amount: trade.amount });
 
+      const costModel = getCostModel(globalSettings);
       let totalPnlUsd = 0;
+      let totalGrossPnlUsd = 0;
+      let totalFeeUsd = 0;
+      let totalSlippageUsd = 0;
       let initialTradeAmount = trade.initialAmount || trade.amount;
       if (!trade.initialAmount) {
         trade.initialAmount = initialTradeAmount;
@@ -854,8 +887,11 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
 
       trade.history.forEach((h: any) => {
         if (h.type === 'CLOSE') {
-          const { pnlUsd } = getUnifiedTradeClosePnl(trade.side, trade.entryPrice, h.price, h.amount, trade.leverage);
-          totalPnlUsd += pnlUsd;
+          const res = getUnifiedTradeClosePnl(trade.side, trade.entryPrice, h.price, h.amount, trade.leverage, costModel);
+          totalPnlUsd += res.pnlUsd;
+          totalGrossPnlUsd += (res.grossPnlUsd ?? 0);
+          totalFeeUsd += (res.feeUsd ?? 0);
+          totalSlippageUsd += (res.slippageUsd ?? 0);
         }
       });
 
@@ -863,6 +899,10 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
 
       trade.pnl = totalPnlUsd;
       trade.pnlPercent = totalPnlPercent;
+      trade.grossPnlUsd = totalGrossPnlUsd;
+      trade.feeUsd = totalFeeUsd;
+      trade.slippageUsd = totalSlippageUsd;
+      trade.costModelVersion = costModel.version || 2;
       (trade as any).outcome = totalPnlPercent > 0 ? 1 : 0;
 
       if (!(trade as any).isAutoLearning && !trade.isReal) {

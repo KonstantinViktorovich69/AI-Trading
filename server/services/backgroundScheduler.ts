@@ -12,6 +12,7 @@ export interface BackgroundSchedulerContext {
   runAutopilotAndVirtualTradeEntry?: () => Promise<void>;
   syncWorkerStateToMain?: () => void;
   sendSettingsToWorker?: () => void;
+  writeDailyEvidenceSnapshot?: () => void;
 }
 
 export function recordMarketHistory(ctx: BackgroundSchedulerContext, now = Date.now()): void {
@@ -142,6 +143,24 @@ export class BackgroundSchedulerService {
           }
         }, 10000);
         this.intervals.push(settingsSyncTimer);
+      }
+
+      if (this.ctx.writeDailyEvidenceSnapshot) {
+        let lastSnapshotDateUtc = '';
+        const runSnapshotIfNewDay = () => {
+          try {
+            const todayUtc = new Date().toISOString().split('T')[0];
+            if (todayUtc !== lastSnapshotDateUtc) {
+              this.ctx.writeDailyEvidenceSnapshot?.();
+              lastSnapshotDateUtc = todayUtc;
+            }
+          } catch (err) {
+            console.error('[SCHEDULER] Error writing daily evidence snapshot:', err);
+          }
+        };
+        const evidenceTimer = setInterval(runSnapshotIfNewDay, 60 * 60 * 1000);
+        evidenceTimer.unref?.();
+        this.intervals.push(evidenceTimer);
       }
     }
   }

@@ -77,15 +77,18 @@ import { matchesStructuredFilter as serviceMatchesStructuredFilter, calculateCon
 import { readLocalDB as serviceReadLocalDB, writeLocalDB as serviceWriteLocalDB, getCachedDB as serviceGetCachedDB, flushDB as serviceFlushDB, requestDBSave as serviceRequestDBSave, syncToFirebase as serviceSyncToFirebase, createLocalBackup as serviceCreateLocalBackup, saveTradeToDB as serviceSaveTradeToDB, saveKnowledgeToDB as serviceSaveKnowledgeToDB, deleteKnowledgeFromDB as serviceDeleteKnowledgeFromDB, saveBalanceToDB as serviceSaveBalanceToDB, handleFirestoreError as serviceHandleFirestoreError, withFirestoreTimeout, type DbStorageContext } from './server/services/dbStorageService.ts';
 import { serviceLoadStateFromDB, type DbStartupSyncContext } from './server/services/dbStartupSync.ts';
 import { trainQuantModel as serviceTrainQuantModel, type QuantModelTrainerContext } from './server/services/quantModelTrainer.ts';
-import { manageActiveTrades } from './server/services/virtualTradeEngine.ts';
+import { manageActiveTrades, buildExitPolicyConfig } from './server/services/virtualTradeEngine.ts';
 import { aiGatewayService, AiGatewayService, pendingAiTasks, pendingWorkerAiTasks, getInternalServerGeminiClient, addAndQueueFrontendTask, getStaticServerSideAiFallback, runAiGeneration } from './server/services/aiOrchestrator.ts';
 export { aiGatewayService, AiGatewayService };
 import { ensureHistoricalDataSeeded, ADVANCED_RULES } from './server/db/seedData.ts';
+import { OWNER_ID } from './server/config/owner.ts';
 import { runAiExpertTraderLoop as serviceRunAiExpertTraderLoop, executeRuleBasedTradeFallback as serviceExecuteRuleBasedTradeFallback } from './server/services/expertAdvisorService.ts';
 import { runAutopilotAndVirtualTradeEntry as serviceRunAutopilotAndVirtualTradeEntry } from './server/services/autoPilotEngine.ts';
 import { createRetrospectiveEngine } from './server/services/retrospectiveEngine.ts';
 import { type KnowledgeRule, DEFAULT_KNOWLEDGE_BASE, DEFAULT_BASELINE_EXPERT_INSTRUCTIONS, WEEX_API_SUPPORTED_BASES, isWeexApiSupported, formatFuturesSymbol, enrichExchangeError } from './server/data/defaultStrategyKnowledge.ts';
 import { systemMetricsCollector } from './server/services/systemMetricsCollector.ts';
+import { buildEvidenceReport } from './server/services/evidenceReport.ts';
+import { getAllLearningCells } from './server/services/learningCellService.ts';
 
 // Global error handlers with Sentry integration registered at the very start of lifecycle
 process.on('uncaughtException', (err) => {
@@ -239,7 +242,6 @@ const db = admin.apps.length > 0
 if (db) {
   db.settings({ ignoreUndefinedProperties: true });
 }
-const OWNER_ID = "polyakovats3110@gmail.com";
 
 // --- EVENT STREAM HUB (STEP 1 DECOMPOSITION) ---
 const eventStreamHub = new EventStreamHub({
@@ -285,7 +287,7 @@ interface Ticker {
 interface CoinHistory { price: number; volume: number; timestamp: number; quoteVolume?: number; }
 
 // --- GLOBAL STATE ---
-const apiHealth: Record<string, { latency: number, status: 'online' | 'offline' | 'degraded', lastCheck: number }> = {};
+const apiHealth: Record<string, { latency: number, status: 'online' | 'offline' | 'degraded', lastCheck: number, lastSuccessfulSyncAt?: number }> = {};
 const GLOBAL_CCXT_TICKERS: Record<string, Record<string, any>> = {};
 const GLOBAL_DERIVATIVES: any = { fundingRates: {} };
 let isFetchingGlobalTickers = false;
@@ -461,8 +463,8 @@ function releaseExecutionLock(symbol: string) {
 }
 
 // 2.5. Унифицированный расчет PnL и комиссии для закрытия сделки
-function getUnifiedTradeClosePnl(side: string, entryPrice: number, closePrice: number, amount: number, leverage: number) {
-  return quantGetUnifiedTradeClosePnl(side, entryPrice, closePrice, amount, leverage);
+function getUnifiedTradeClosePnl(side: string, entryPrice: number, closePrice: number, amount: number, leverage: number, costModel?: any) {
+  return quantGetUnifiedTradeClosePnl(side, entryPrice, closePrice, amount, leverage, costModel);
 }
 
 let aiKnowledgeBase: KnowledgeRule[] = [...DEFAULT_KNOWLEDGE_BASE];
@@ -695,7 +697,8 @@ const tradeManagerService = new TradeManagerService({
   getStartOfWeekBalance: () => startOfWeekBalance,
   setStartOfWeekBalance: (val: number) => { startOfWeekBalance = val; },
   getIsCircuitBreakerActive: () => isCircuitBreakerActive,
-  setIsCircuitBreakerActive: (val: boolean) => { isCircuitBreakerActive = val; }
+  setIsCircuitBreakerActive: (val: boolean) => { isCircuitBreakerActive = val; },
+  getApiHealth: () => apiHealth
 }, {
   virtualBalance,
   startOfDayBalance,
@@ -885,8 +888,8 @@ if (isMainThread) {
   setTimeout(updateMarketPulse, 15000); // Delayed start
 }
 
-function calculateConfidenceProbability(symbol: string, currentPrice: number, volume: number): { p: number, features: number[] } {
-  return serviceCalculateConfidenceProbability(symbol, currentPrice, volume, getQuantRiskEngineContext());
+function calculateConfidenceProbability(symbol: string, currentPrice: number, volume: number, side?: 'LONG' | 'SHORT'): { p: number, features: number[] } {
+  return serviceCalculateConfidenceProbability(symbol, currentPrice, volume, getQuantRiskEngineContext(), side);
 }
 
 function calculateKelly(aiScore: number, rewardToRisk: number = 2.0): number {
@@ -1256,7 +1259,8 @@ const autopilotEngineService = new AutopilotEngineService({
   runAiGeneration: (params: any) => runAiGeneration(params),
   getAtomicStoreRevision: () => getAtomicStoreRevision(),
   getWallAdjustedTp: (symbol: string, isSell: boolean, entry: number, target: number) => getWallAdjustedTp(symbol, isSell, entry, target),
-  calculateConfidenceProbability: (symbol: string, currentPrice: number, volume: number) => calculateConfidenceProbability(symbol, currentPrice, volume)
+  calculateConfidenceProbability: (symbol: string, currentPrice: number, volume: number, side?: 'LONG' | 'SHORT') => calculateConfidenceProbability(symbol, currentPrice, volume, side),
+  getApiHealth: () => apiHealth
 });
 
 async function runAutopilotAndVirtualTradeEntry() {
@@ -1292,7 +1296,10 @@ const backgroundSchedulerCtx: BackgroundSchedulerContext = {
   getGlobalFundingHistory: () => GLOBAL_FUNDING_HISTORY,
   manageTradesServerSide: () => manageTradesServerSide(),
   runAiExpertTraderLoop: () => runAiExpertTraderLoop(),
-  runAutopilotAndVirtualTradeEntry: () => runAutopilotAndVirtualTradeEntry()
+  runAutopilotAndVirtualTradeEntry: () => runAutopilotAndVirtualTradeEntry(),
+  writeDailyEvidenceSnapshot: () => {
+    buildEvidenceReport(virtualTrades, globalSettings, getAllLearningCells(), { writeSnapshot: true });
+  }
 };
 
 const backgroundSchedulerService = new BackgroundSchedulerService(backgroundSchedulerCtx);
@@ -1405,7 +1412,7 @@ const realTradeContext: RealTradeRouterContext = {
   sendTelegramTestMessage: (botToken: string, chatId: string) => sendTelegramTestMessage(botToken, chatId),
   enrichExchangeError: (error: any) => enrichExchangeError(error),
   getCcxtClient: (config: any) => getCcxtClient(config),
-  getUnifiedTradeClosePnl: (side: string, entryPrice: number, closePrice: number, amount: number, leverage: number) => getUnifiedTradeClosePnl(side, entryPrice, closePrice, amount, leverage),
+  getUnifiedTradeClosePnl: (side: string, entryPrice: number, closePrice: number, amount: number, leverage: number, costModel?: any) => getUnifiedTradeClosePnl(side, entryPrice, closePrice, amount, leverage, costModel),
   findTickerInMap: (sym: string, map: any) => findTickerInMap(sym, map),
   getWsTickers: () => wsTickers,
   getGlobalCcxtTickers: () => GLOBAL_CCXT_TICKERS,
@@ -1416,7 +1423,9 @@ const realTradeContext: RealTradeRouterContext = {
   isRealTradingAllowed: () => isRealTradingAllowed(),
   executeRealOpenOnExchange: (symbol: string, side: string, amount: number, leverage: number, stopLoss?: number, takeProfit?: number) => executeRealOpenOnExchange(symbol, side, amount, leverage, stopLoss, takeProfit),
   executeWithRetry: <T>(fn: () => Promise<T>, opName?: string, retries?: number, delay?: number) => executeWithRetry(fn, opName, retries, delay),
-  formatFuturesSymbol: (symbol: string, exchange?: string) => formatFuturesSymbol(symbol, exchange)
+  formatFuturesSymbol: (symbol: string, exchange?: string) => formatFuturesSymbol(symbol, exchange),
+  getGlobalTrueOhlcv: () => GLOBAL_TRUE_OHLCV,
+  getApiHealth: () => apiHealth
 };
 
 const log400 = (path: string, error: string) => {
@@ -1572,7 +1581,7 @@ const paperTradeContext = {
   acquireExecutionLock: (sym: string) => acquireExecutionLock(sym),
   releaseExecutionLock: (sym: string) => releaseExecutionLock(sym),
   executeRealOpenOnExchange: (symbol: string, side: string, amount: number, leverage: number, stopLoss?: number, takeProfit?: number) => executeRealOpenOnExchange(symbol, side, amount, leverage, stopLoss, takeProfit),
-  getUnifiedTradeClosePnl: (side: string, entryPrice: number, closePrice: number, amount: number, leverage: number) => getUnifiedTradeClosePnl(side, entryPrice, closePrice, amount, leverage),
+  getUnifiedTradeClosePnl: (side: string, entryPrice: number, closePrice: number, amount: number, leverage: number, costModel?: any) => getUnifiedTradeClosePnl(side, entryPrice, closePrice, amount, leverage, costModel),
   getExchangeLink: (exchange: string, symbol: string) => getExchangeLink(exchange, symbol),
   getTradingAdvice: (side: string, mode: string) => getTradingAdvice(side, mode),
   getChartImageHtml: (symbol: string) => getChartImageHtml(symbol),
@@ -1580,7 +1589,9 @@ const paperTradeContext = {
   streamEmitter: streamEmitter,
   log400: (route: string, msg: string) => log400(route, msg),
   getAiKnowledgeBase: () => aiKnowledgeBase,
-  saveKnowledgeDB: (rule: any) => saveKnowledgeDB(rule)
+  saveKnowledgeDB: (rule: any) => saveKnowledgeDB(rule),
+  getGlobalTrueOhlcv: () => GLOBAL_TRUE_OHLCV,
+  getApiHealth: () => apiHealth
 };
 
 const knowledgeContext: KnowledgeRouterContext = {
@@ -1662,7 +1673,20 @@ const systemContext: SystemRouterContext = {
     return {
       weexLatencyMs
     };
-  }
+  },
+  getGlobalCcxtTickers: () => GLOBAL_CCXT_TICKERS,
+  getGlobalTrueOhlcv: () => GLOBAL_TRUE_OHLCV,
+  getApiHealth: () => apiHealth,
+  getAiGatewayHealth: () => ({
+    geminiKeyConfigured: Boolean(process.env.GEMINI_API_KEY),
+    deepseekKeyConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
+    serverKeyConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY),
+    lastSuccessAt: aiGatewayService.getLastSuccessAt(),
+    aiFallbackCountTotal: aiGatewayService.getAiFallbackCount(),
+    aiFallbackCountLastHour: aiGatewayService.getAiFallbackCountLastHour()
+  }),
+  setExpertInstructions: (instructions: string, source: string, reason?: string) => setExpertInstructions(instructions, source as any, reason),
+  saveSettings: () => saveSettings()
 };
 
 const debugContext: DebugRouterContext = {
@@ -1705,14 +1729,18 @@ export const app = createExpressApp({
 
 async function startServer() {
   if (isMainThread) {
-    const PORT = 3000;
+    const PORT = parseInt(process.env.PORT || '3000', 10);
+    const defaultHost = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
+    const HOST = process.env.HOST || defaultHost;
+    const authMode = getAuthMode();
+    const isAuthEnabled = authMode !== 'disabled';
 
     // Immediately setup Vite / static files middleware so the app frontend responds instantly
     const httpServer = http.createServer(app);
     await setupStaticAndViteMiddleware(app, undefined, httpServer);
 
-    const server = httpServer.listen(PORT, "0.0.0.0", () => {
-      console.log("[SERVER] Quantum Scalping Server running on http://localhost:" + PORT);
+    const server = httpServer.listen(PORT, HOST, () => {
+      console.log(`[SERVER] Quantum Scalping Server running on http://${HOST}:${PORT} (Host: ${HOST}, Auth: ${isAuthEnabled ? 'ENABLED (' + authMode + ')' : 'DISABLED'})`);
     });
 
     server.on('error', (err: any) => {
@@ -1742,6 +1770,13 @@ async function startServer() {
     }
 
     backgroundSchedulerService.start();
+
+    try {
+      const effectiveExit = buildExitPolicyConfig(globalSettings, { isMultiTp: true, tpStages: [] });
+      console.log('[EXIT-POLICY] effective:', JSON.stringify(effectiveExit));
+    } catch (e) {
+      console.warn('[EXIT-POLICY] Failed to log effective config at start:', e);
+    }
 
     const gracefulShutdown = async (signal: string) => {
       console.log(`[SERVER] 🛑 Received ${signal}. Executing graceful state flush before shutdown...`);

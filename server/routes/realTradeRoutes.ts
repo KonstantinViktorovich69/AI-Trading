@@ -2,6 +2,8 @@ import express from 'express';
 import type { Request, Response, Router } from 'express';
 import ccxt from 'ccxt';
 import { normalizeExchangeId, DEFAULT_EXCHANGE } from '../services/activeExchange.ts';
+import { isEntryPaused } from '../services/entryGate.ts';
+import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
 
 export interface RealTradeRouterContext {
   getGlobalSettings: () => any;
@@ -23,6 +25,8 @@ export interface RealTradeRouterContext {
   executeRealOpenOnExchange?: (symbol: string, side: string, amount: number, leverage: number, stopLoss?: number, takeProfit?: number) => Promise<any>;
   executeWithRetry?: <T>(fn: () => Promise<T>, opName?: string, retries?: number, delay?: number) => Promise<T>;
   formatFuturesSymbol?: (symbol: string, exchange?: string) => string;
+  getGlobalTrueOhlcv?: () => Record<string, any>;
+  getApiHealth?: () => Record<string, any>;
 }
 
 export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
@@ -47,9 +51,39 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
       return res.status(400).json({ success: false, error: 'Symbol and amount are required' });
     }
 
+    // T7.5: Stale market data check before real order entry
+    const pauseStatus = isEntryPaused(undefined, {
+      getGlobalTrueOhlcv: ctx.getGlobalTrueOhlcv,
+      getGlobalSettings: () => ctx.getGlobalSettings(),
+      getGlobalCcxtTickers: ctx.getGlobalCcxtTickers,
+      getApiHealth: ctx.getApiHealth
+    });
+    if (pauseStatus.paused && pauseStatus.reason?.startsWith('stale_data')) {
+      return res.status(503).json({
+        success: false,
+        error: `Real trading paused due to stale market data: ${pauseStatus.reason}`
+      });
+    }
+
     // Жесткое ограничение для реальной торговли: не более 6 открытых сделок и не более 3 в одном направлении
-    const openRealTrades = ctx.getVirtualTrades().filter(t => t.status === 'OPEN' && t.isReal);
+    const allTrades = ctx.getVirtualTrades();
+    const openRealTrades = allTrades.filter(t => t.status === 'OPEN' && t.isReal);
     const globalSettings = ctx.getGlobalSettings();
+
+    // T7.1: Evidence Gate for real trading orders
+    const evidenceGate = evaluateEvidenceGate(allTrades, globalSettings);
+    if (!evidenceGate.passed) {
+      console.log(`[REAL TRADE ROUTE] Blocked manual real open for ${symbol}: ${evidenceGate.reason}`);
+      return res.status(403).json({
+        success: false,
+        error: evidenceGate.reason,
+        evidenceGate
+      });
+    }
+    if (evidenceGate.overrideActive) {
+      console.warn(`[EVIDENCE GATE OVERRIDE] Proceeding with manual real open for ${symbol}: ${evidenceGate.reason}`);
+    }
+
     const maxRealAllowed = Math.min(6, globalSettings?.maxActivePositionsReal ?? 6);
     if (openRealTrades.length >= maxRealAllowed) {
       return res.status(400).json({

@@ -39,7 +39,10 @@ export interface AutopilotEngineServiceDependencies {
   runAiGeneration: (params: any) => Promise<{ text?: string }>;
   getAtomicStoreRevision?: () => number;
   getWallAdjustedTp: (symbol: string, isSell: boolean, entry: number, target: number) => number;
-  calculateConfidenceProbability?: (symbol: string, currentPrice: number, volume: number) => { p: number; features: number[] };
+  calculateConfidenceProbability?: (symbol: string, currentPrice: number, volume: number, side?: 'LONG' | 'SHORT') => { p: number; features: number[] };
+  getApiHealth?: () => Record<string, any>;
+  getTickerTimestamp?: () => number | undefined;
+  getBtcOhlcvTimestamp?: () => number | undefined;
 }
 
 export class AutopilotEngineService {
@@ -100,7 +103,10 @@ export class AutopilotEngineService {
       getLossStreakSizeDampening: (trades: any[]) => getLossStreakSizeDampening(trades),
       getWallAdjustedTp: this.deps.getWallAdjustedTp,
       getAiKnowledgeBase: this.deps.getAiKnowledgeBase,
-      calculateConfidenceProbability: this.deps.calculateConfidenceProbability
+      calculateConfidenceProbability: this.deps.calculateConfidenceProbability,
+      getApiHealth: this.deps.getApiHealth,
+      getTickerTimestamp: this.deps.getTickerTimestamp,
+      getBtcOhlcvTimestamp: this.deps.getBtcOhlcvTimestamp
     };
 
     await runAutopilotAndVirtualTradeEntry(autopilotDeps);

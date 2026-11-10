@@ -1,4 +1,5 @@
 import { Worker } from 'worker_threads';
+import { clipModelWeight } from './quantModelTrainer.ts';
 
 export interface RetrospectiveEngineContext {
   getCachedDB: () => any;
@@ -124,6 +125,13 @@ export function createRetrospectiveEngine(ctx: RetrospectiveEngineContext) {
         trade.incrementalLearned = true; // помечаем как обработанную, чтобы не пытаться снова
         return;
       }
+
+      // T3.2: В обучение берем только side-aware сделки или старые SHORT
+      const isLegacyLong = trade.side === 'LONG' && trade.featuresVersion !== 2;
+      if (isLegacyLong) {
+        trade.incrementalLearned = true;
+        return;
+      }
       trade.incrementalLearned = true;
 
       // Incremental reinforcement step
@@ -156,10 +164,20 @@ export function createRetrospectiveEngine(ctx: RetrospectiveEngineContext) {
         weights[j] -= learningRate * (gradient + regularization);
       }
 
+      // T3.3: Ограничение весов MODEL_WEIGHT_ABS_MAX
       ctx.setModelWeights({
-        beta0: weights[0], beta1: weights[1], beta2: weights[2], beta3: weights[3],
-        beta4: weights[4], beta5: weights[5], beta6: weights[6], beta7: weights[7],
-        beta8: weights[8], beta9: weights[9], beta10: weights[10], beta11: weights[11]
+        beta0: clipModelWeight(weights[0], 'beta0'),
+        beta1: clipModelWeight(weights[1], 'beta1'),
+        beta2: clipModelWeight(weights[2], 'beta2'),
+        beta3: clipModelWeight(weights[3], 'beta3'),
+        beta4: clipModelWeight(weights[4], 'beta4'),
+        beta5: clipModelWeight(weights[5], 'beta5'),
+        beta6: clipModelWeight(weights[6], 'beta6'),
+        beta7: clipModelWeight(weights[7], 'beta7'),
+        beta8: clipModelWeight(weights[8], 'beta8'),
+        beta9: clipModelWeight(weights[9], 'beta9'),
+        beta10: clipModelWeight(weights[10], 'beta10'),
+        beta11: clipModelWeight(weights[11], 'beta11')
       });
 
       console.log(`[INCREMENTAL LEARNING] Applied instant self-correction for ${trade.symbol}. Win/Loss Weight: ${pnlWeight.toFixed(2)}. Outcome: ${y === 1 ? 'WIN' : 'LOSS'}.`);

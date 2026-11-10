@@ -106,6 +106,10 @@ export function getRecordedGaps(): DowntimeGap[] {
   return downtimeGaps;
 }
 
+export function getLastLoopTickTimes(): Record<'watchdog' | 'autopilot' | 'heartbeat', number> {
+  return { ...lastTickTimes };
+}
+
 export function recordGap(
   kind: GapKind,
   from: number,

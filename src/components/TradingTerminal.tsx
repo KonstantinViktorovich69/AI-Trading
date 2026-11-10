@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useMemo, useDeferredValue, useCallback, lazy, Suspense } from 'react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Info, Bell, Calculator, TrendingDown, TrendingUp, AlertCircle, AlertTriangle, Rocket, HelpCircle, Play, Bot, Send, RefreshCw, Brain, ShieldAlert, CheckCircle2, Smartphone, Activity, ExternalLink, Filter, Search, ChevronDown, Check, Plus, Settings, X, History, Volume2, VolumeX, Star, Zap, Lightbulb, BookOpen, Loader2, Clock, ArrowRight, Eye, EyeOff, Archive, FolderDown, FolderUp, Sparkles, Sliders, Maximize2, Minimize2, BarChart3, Edit, Wifi, WifiOff, Layers, Database } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -1353,103 +1352,44 @@ export function TradingTerminal({
     return () => { active = false; clearInterval(timer); };
   }, []);
 
-  // AI Task Poller logic
+  // AI Task Poller logic (T6.2: Disabled by default, keys never read in browser)
   useEffect(() => {
     let active = true;
     const pollTasks = async () => {
+      // T6.2: Browser AI poller is disabled by default (setting allowBrowserAiPoller, default false, served from server).
+      // Key from import.meta.env and window is NOT read at all.
+      // AI calls execute exclusively on the server (aiGatewayService uses GEMINI_API_KEY).
+      try {
+        const configRes = await fetch('/api/effective-config');
+        if (configRes.ok) {
+          const cfg = await configRes.json();
+          if (!cfg?.flags?.allowBrowserAiPoller) {
+            // Disabled by default - do not poll
+            return;
+          }
+        } else {
+          return;
+        }
+      } catch (e) {
+        return;
+      }
+
       while (active) {
         try {
           const res = await fetch('/api/ai-tasks/pending');
           if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
             const data = await res.json();
             if (data && data.success && data.tasks && data.tasks.length > 0) {
-            const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (window as any).__GEMINI_API_KEY__ || '';
-
-            for (const task of data.tasks) {
-              
-              // Skip instantly if apiKey is missing or cooling down from quota error
-              if (!apiKey || Date.now() < globalAiCooldownUntil) {
-                 if (!apiKey) console.warn("Browser GEMINI API key is not configured. Instantly resolving task with fallback...");
-                 else console.warn("AI is cooling down from Quota Error. Instantly resolving task with fallback...");
-                 const defaultFallback = buildSmartTaskFallback(task);
-                 await fetch('/api/ai-tasks/complete', {
-                   method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
-                   body: JSON.stringify({ id: task.id, result: { text: defaultFallback } })
-                 });
-                 continue; // go to next task, do not even try API
-              }
-              
-              let attempts = 0;
-              let success = false;
-              let resultText = "";
-              while (attempts < 3 && !success && active) {
-                try {
-                  // We recreate the GoogleGenerativeAI instance on the frontend where the Free Tier proxy intercept works!
-                  const ai = new GoogleGenerativeAI(apiKey);
-                  
-                  let fallbackModel = task.params.model || 'gemini-3.5-flash';
-                  if (fallbackModel.includes('3.1-pro') || fallbackModel.includes('2.5-flash') || fallbackModel.includes('2.0-flash')) {
-                    fallbackModel = 'gemini-3.5-flash';
-                  }
-                  // Convert v2 config to v1 config if needed
-                  const modelParams: any = { model: fallbackModel };
-                  if (task.params.config?.systemInstruction) {
-                      modelParams.systemInstruction = task.params.config.systemInstruction;
-                  }
-                  const model = ai.getGenerativeModel(modelParams);
-                  
-                  const generationConfig: any = {};
-                  if (task.params.config?.responseMimeType) generationConfig.responseMimeType = task.params.config.responseMimeType;
-                  if (task.params.config?.temperature) generationConfig.temperature = task.params.config.temperature;
-                  
-                  // Format contents array
-                  let formattedContents = task.params.contents;
-                  
-                  const result = await model.generateContent({
-                    contents: formattedContents,
-                    generationConfig
-                  });
-                  resultText = result.response.text() || "";
-                  
-                  await fetch('/api/ai-tasks/complete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: task.id, result: { text: resultText } })
-                  });
-                  // Small delay to prevent 429 Resource Exhausted on Free Tier proxy
-                  await new Promise(r => setTimeout(r, 4000));
-                  success = true;
-                } catch (err: any) {
-                  attempts++;
-                  const isQuotaError = err?.message?.includes("429") || err?.message?.includes("quota") || err?.message?.includes("Failed to call") || err?.message?.includes("Too Many Requests") || err?.message?.includes("Failed to fetch");
-                  
-                  if (isQuotaError || attempts >= 2) {
-                     if (!isQuotaError) {
-                       console.warn(`AI Task err (attempt ${attempts}/3). Rate limit or network error, cooling down.`, err?.message);
-                     }
-                     globalAiCooldownUntil = Date.now() + 120000; // 2 minutes cooldown
-                     attempts = 3; // Force early exit
-                     await new Promise(r => setTimeout(r, 1000));
-                  } else {
-                     console.warn(`AI Task err (attempt ${attempts}/3)`, err?.message);
-                     await new Promise(r => setTimeout(r, 2000));
-                  }
-                  
-                  if (attempts >= 3) {
-                    // Provide smart fallback JSON to prevent backend from crashing or failing
-                    const defaultFallback = buildSmartTaskFallback(task);
-
-                    await fetch('/api/ai-tasks/complete', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ id: task.id, result: { text: defaultFallback } })
-                    });
-                  }
-                }
+              for (const task of data.tasks) {
+                // If browser AI poller is enabled, resolve with neutral smart fallback without exposing any client API keys
+                const defaultFallback = buildSmartTaskFallback(task);
+                await fetch('/api/ai-tasks/complete', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ id: task.id, result: { text: defaultFallback } })
+                });
               }
             }
-          }
           }
         } catch (e) {
           // ignore network errors

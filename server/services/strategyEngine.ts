@@ -62,6 +62,9 @@ export interface StrategyContext {
   committeeScore?: number;
   isCommitteeApproved?: boolean;
   tradeIntent?: TradeIntent;
+  volumeSpike?: number;
+  isVolumeSpike4x?: boolean;
+  strictLiquidityGate?: boolean;
 }
 
 export type StrategyMarketInput = StrategyContext;
@@ -159,10 +162,18 @@ export function evaluateStrategySignal(ctx: StrategyContext): SignalDecision {
     };
   }
 
-  // Gate 3: Liquidity Safety (Hard Gate: min volume $50,000 unless extreme move >15%)
-  const isLiquidityOk = ctx.volume24h >= 50000 || Math.abs(ctx.change24h) >= 15;
+  // Gate 3: Liquidity Safety (Hard Gate: min volume $50,000 unless extreme move >15% or 4x volume spike at >=$25k)
+  const vol24h = Number(ctx.volume24h) || 0;
+  const chg24h = Number(ctx.change24h) || 0;
+  const isVolumeSpike4x = (typeof ctx.volumeSpike === 'number' && ctx.volumeSpike >= 4.0) || ctx.isVolumeSpike4x === true;
+  
+  const isStrictLiquidityOk = vol24h >= 50000 || (vol24h >= 25000 && isVolumeSpike4x);
+  const isLegacyLiquidityOk = vol24h >= 50000 || Math.abs(chg24h) >= 15;
+  const isLiquidityOk = ctx.strictLiquidityGate ? isStrictLiquidityOk : isLegacyLiquidityOk;
+
   gateDiagnostics.liquiditySafety = isLiquidityOk;
   gateDiagnostics.volumeGate = isLiquidityOk;
+  gateDiagnostics.strictLiquidityWouldBlock = !isStrictLiquidityOk;
 
   if (!isLiquidityOk) {
     return {
@@ -173,7 +184,9 @@ export function evaluateStrategySignal(ctx: StrategyContext): SignalDecision {
       strategyVersion: CANONICAL_STRATEGY_VERSION,
       signalId,
       matchedRuleIds: [],
-      reason: `Объем 24ч меньше лимита ликвидности ($${ctx.volume24h.toLocaleString()} < $50,000)`,
+      reason: ctx.strictLiquidityGate
+        ? `Строгий лимит ликвидности: объем $${vol24h.toLocaleString()} < $50,000 без 4x всплеска объёма (при мин. $25,000)`
+        : `Объем 24ч меньше лимита ликвидности ($${vol24h.toLocaleString()} < $50,000)`,
       dataCompleteness: 'COMPLETE',
       rejectionReason: 'LOW_LIQUIDITY',
       scoreBonus: 0,

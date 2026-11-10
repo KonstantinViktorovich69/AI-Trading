@@ -2,6 +2,9 @@ import express from 'express';
 import type { Request, Response, Router } from 'express';
 import { DirectionalMemoryAnalyticsService } from '../services/directionalMemoryAnalyticsService.ts';
 import { SignalPerformanceAnalyticsService } from '../services/signalPerformanceAnalyticsService.ts';
+import { getCostModel } from '../services/costModel.ts';
+import { isEntryPaused } from '../services/entryGate.ts';
+import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
 
 export interface PaperTradeRouterContext {
   getVirtualTrades: () => any[];
@@ -30,7 +33,7 @@ export interface PaperTradeRouterContext {
   acquireExecutionLock: (sym: string) => boolean;
   releaseExecutionLock: (sym: string) => void;
   executeRealOpenOnExchange: (symbol: string, side: string, amount: number, leverage: number, stopLoss?: number, takeProfit?: number) => Promise<any>;
-  getUnifiedTradeClosePnl: (side: string, entryPrice: number, closePrice: number, amount: number, leverage: number) => { pnlUsd: number; feeUsd: number };
+  getUnifiedTradeClosePnl: (side: string, entryPrice: number, closePrice: number, amount: number, leverage: number, costModel?: any) => { pnlUsd: number; feeUsd?: number; slippageUsd?: number; grossPnlUsd?: number; costModelVersion?: number };
   getExchangeLink: (exchange: string, symbol: string) => string;
   getTradingAdvice: (side: string, mode: string) => string;
   getChartImageHtml: (symbol: string) => string;
@@ -39,6 +42,8 @@ export interface PaperTradeRouterContext {
   log400: (route: string, msg: string) => void;
   getAiKnowledgeBase?: () => any[];
   saveKnowledgeDB?: (rule: any) => Promise<void> | void;
+  getGlobalTrueOhlcv?: () => Record<string, any>;
+  getApiHealth?: () => Record<string, any>;
 }
 
 export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
@@ -299,6 +304,20 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
     if (isBtcShockLock && isReal) {
       return res.status(400).json({ success: false, error: 'Торговля приостановлена: зафиксирован резкий импульс BTC (Режим тишины). Входы заблокированы на 15 минут.' });
     }
+
+    // T7.5: Stale data pause applies to new virtual and real entries
+    const entryPauseStatus = isEntryPaused(undefined, {
+      getGlobalTrueOhlcv: ctx.getGlobalTrueOhlcv,
+      getGlobalSettings: () => ctx.getGlobalSettings(),
+      getGlobalCcxtTickers: ctx.getGlobalCcxtTickers,
+      getApiHealth: ctx.getApiHealth
+    });
+    if (entryPauseStatus.paused && entryPauseStatus.reason?.startsWith('stale_data')) {
+      return res.status(503).json({
+        success: false,
+        error: `Новые входы приостановлены из-за устаревших рыночных данных: ${entryPauseStatus.reason}`
+      });
+    }
     
     if (!symbol) {
       ctx.log400('/api/paper-trade/open', 'Missing required field: symbol');
@@ -408,6 +427,20 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
       
       let finalEntryPrice = entryPrice;
       if (isReal) {
+        // T7.1: Evidence Gate for real trading entries (virtual entries bypass this)
+        const evidenceGate = evaluateEvidenceGate(virtualTrades, globalSettings);
+        if (!evidenceGate.passed) {
+          console.log(`[REAL TRADE ROUTE] Blocked paper-trade isReal open for ${symbol}: ${evidenceGate.reason}`);
+          return res.status(403).json({
+            success: false,
+            error: evidenceGate.reason,
+            evidenceGate
+          });
+        }
+        if (evidenceGate.overrideActive) {
+          console.warn(`[EVIDENCE GATE OVERRIDE] Proceeding with real open for ${symbol}: ${evidenceGate.reason}`);
+        }
+
         const config = ctx.getGlobalSettings().exchangeApiConfig;
         if (config && config.isEnabled) {
            console.log(`[REAL MANUAL OPEN] Triggering live position open for ${symbol} on exchange ${exchange}...`);
@@ -674,6 +707,7 @@ function handleTradeClose(req: Request, res: Response, ctx: PaperTradeRouterCont
   const finalClosePrice = closePrice || 0;
   let actualClosePrice = finalClosePrice;
 
+  let isUnpricedFallback = false;
   if (actualClosePrice <= 0) {
     const globalCcxt = ctx.getGlobalCcxtTickers() || {};
     const weexTickers = (globalCcxt as any)?.['weex'] || {};
@@ -684,6 +718,7 @@ function handleTradeClose(req: Request, res: Response, ctx: PaperTradeRouterCont
        ctx.log400('/api/paper-trade/close', `Close price missing for ${trade.symbol}, using fallback: ${fallbackPrice}`);
     } else {
        actualClosePrice = trade.entryPrice;
+       isUnpricedFallback = true;
        ctx.log400('/api/paper-trade/close', `Close price is invalid for ${trade.symbol}: ${closePrice}. Falling back to entryPrice ${trade.entryPrice}`);
     }
   }
@@ -691,6 +726,10 @@ function handleTradeClose(req: Request, res: Response, ctx: PaperTradeRouterCont
   trade.status = 'CLOSED'; 
   trade.closeTime = Date.now(); 
   trade.closePrice = actualClosePrice; 
+  if (isUnpricedFallback) {
+    trade.closePriceSource = 'ENTRY_FALLBACK';
+    trade.closeReasonCode = 'STALE_UNPRICED';
+  }
   trade.feedback = feedback; 
   trade.notes = notes;
   
@@ -699,10 +738,15 @@ function handleTradeClose(req: Request, res: Response, ctx: PaperTradeRouterCont
   
   trade.history.push({ time: Date.now(), type: 'CLOSE', price: actualClosePrice, amount: trade.amount });
   
-  const { pnlUsd } = ctx.getUnifiedTradeClosePnl(trade.side, trade.entryPrice, actualClosePrice, trade.amount, trade.leverage);
+  const costModel = getCostModel(ctx.getGlobalSettings ? ctx.getGlobalSettings() : undefined);
+  const { pnlUsd, grossPnlUsd, feeUsd, slippageUsd } = ctx.getUnifiedTradeClosePnl(trade.side, trade.entryPrice, actualClosePrice, trade.amount, trade.leverage, costModel);
   
   trade.pnl = pnlUsd;
   trade.pnlPercent = (trade.pnl / trade.amount) * 100;
+  trade.grossPnlUsd = grossPnlUsd;
+  trade.feeUsd = feeUsd;
+  trade.slippageUsd = slippageUsd;
+  trade.costModelVersion = costModel.version || 2;
   (trade as any).outcome = trade.pnlPercent > 0 ? 1 : 0;
   if (!(trade as any).isAutoLearning && !trade.isReal) {
     const tradeMargin = (trade as any).margin || (trade as any).initialMargin || (trade.amount ? trade.amount / (trade.leverage || 1) : 0);

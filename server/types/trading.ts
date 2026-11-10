@@ -97,6 +97,13 @@ export interface TradePosition {
   closeTime?: number;
   marketRegime?: MarketRegime;
   decisionTrace?: DecisionTrace;
+  featuresVersion?: number;
+  features?: number[];
+  entryDiagnostics?: any;
+  costModelVersion?: number;
+  grossPnlUsd?: number;
+  feeUsd?: number;
+  slippageUsd?: number;
   history?: Array<{
     timestamp: number;
     type: string;

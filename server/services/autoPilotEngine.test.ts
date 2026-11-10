@@ -354,7 +354,9 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
           allowedTradingDirections: 'BOTH',
           maxActivePositionsReal: 6,
           maxSameDirectionPositions: 3,
-          isCommitteeConsensusCheckEnabled: false
+          isCommitteeConsensusCheckEnabled: false,
+          // Explicit opt-out in this unit test so it isolates OTE option forwarding without 150 historical trades
+          realTradingEvidenceGateEnabled: false
         }),
         getGlobalTrueOhlcv: () => ({
           'BTCUSDT': { localLow5m: 90, localHigh5m: 100 },
@@ -410,7 +412,8 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
           allowedTradingDirections: 'BOTH',
           maxActivePositionsReal: 6,
           maxSameDirectionPositions: 3,
-          isCommitteeConsensusCheckEnabled: false
+          isCommitteeConsensusCheckEnabled: false,
+          realTradingEvidenceGateEnabled: false
         }),
         getGlobalTrueOhlcv: () => ({
           'ETH/USDT': { localLow5m: 90, localHigh5m: 100 }
@@ -459,7 +462,8 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
           allowedTradingDirections: 'BOTH',
           maxActivePositionsReal: 6,
           maxSameDirectionPositions: 3,
-          isCommitteeConsensusCheckEnabled: false
+          isCommitteeConsensusCheckEnabled: false,
+          realTradingEvidenceGateEnabled: false
         }),
         getGlobalTrueOhlcv: () => ({
           // Both high and low equal to price => range = 0 => isValid = false
@@ -485,6 +489,52 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
       expect(executeRealOpenOnExchange).toHaveBeenCalledTimes(1);
       const callArgs = executeRealOpenOnExchange.mock.calls[0];
       expect(callArgs.length).toBe(4);
+    });
+
+    it('blocks real autopilot entry under default Evidence Gate when clean trades are insufficient', async () => {
+      const mockSignals = [
+        { rawSymbol: 'ADA/USDT', signal: 'LONG', aiScore: 98, price: 1.0, type: 'SAR', volumeSpike: 2.0, volume24h: 500000 }
+      ];
+
+      const executeRealOpenOnExchange = vi.fn().mockResolvedValue({ success: true, entryPrice: 1.0 });
+      const executeMainRealAutoEntry = vi.fn(async (params, options) => {
+        await options.executionPort.executeRealOpenOnExchange(params.symbol, params.side, params.calculatedAmount, params.leverage);
+        return { executed: true, status: 'OPEN', trade: { id: 'RT-BLOCKED', symbol: params.symbol } };
+      });
+
+      const { deps } = createMockAutopilotDeps({
+        getGlobalSettings: () => ({
+          isAutopilotEnabled: true,
+          tradingMode: 'real',
+          tradingExecutionMode: 'auto',
+          autopilotAggressiveness: 'aggressive',
+          exchangeApiConfig: { isEnabled: true, apiKey: 'test_key', secret: 'test_sec', exchange: 'weex' },
+          allowedTradingDirections: 'BOTH',
+          maxActivePositionsReal: 6,
+          maxSameDirectionPositions: 3,
+          isCommitteeConsensusCheckEnabled: false
+        }),
+        getGlobalTrueOhlcv: () => ({
+          'ADA/USDT': { localLow5m: 0.95, localHigh5m: 1.05 }
+        }),
+        executeRealOpenOnExchange,
+        executeMainRealAutoEntry,
+        fetchCachedRealBalance: vi.fn().mockResolvedValue({ USDT: { total: 500, free: 500 } }),
+        getCcxtClient: vi.fn().mockReturnValue({}),
+        isCircuitBreakerActive: () => false,
+        getCacheSignals: () => ({
+          data: mockSignals,
+          lastUpdated: Date.now(),
+          marketRegime: 'RANGING',
+          marketHealth: 80,
+          btcTrend24h: 0.5
+        })
+      });
+
+      await runAutopilotAndVirtualTradeEntry(deps);
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(executeRealOpenOnExchange).not.toHaveBeenCalled();
     });
 
     it('queues candidate into oteVirtualQueue when isOteEntryEnabled is true and OTE zone is valid on virtual path', async () => {
@@ -798,6 +848,152 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
         await runAutopilotAndVirtualTradeEntry(deps);
 
         expect(virtualTrades).toHaveLength(0);
+      });
+    });
+
+    describe('4. T3.1 & T3.3: modelSideAwareFeatures & requireModelMaturity', () => {
+      const longSignal = {
+        id: 'sig_long_v2',
+        symbol: 'ADA/USDT',
+        signal: 'BUY',
+        price: 0.5,
+        exchange: 'weex',
+        aiScore: 80,
+        volatility: 2.0,
+        volumeSpike: 2.0,
+        volume24h: 500000,
+        matchedPattern: 'Reversal from Dump',
+        dataQuality: 'REAL',
+        estimatedFields: []
+      };
+
+      it('when modelSideAwareFeatures is false (default): writes featuresVersion 1 and logs pSideAware in shadow', async () => {
+        const virtualTrades: any[] = [];
+        const { deps } = createMockAutopilotDeps({
+          getGlobalSettings: () => ({
+            isAutopilotEnabled: true,
+            tradingMode: 'virtual',
+            tradingExecutionMode: 'auto',
+            autopilotAggressiveness: 'aggressive',
+            allowedTradingDirections: 'BOTH',
+            maxActivePositionsVirtual: 6,
+            maxSameDirectionPositions: 3,
+            virtualBalance: 1000,
+            isCommitteeConsensusCheckEnabled: false,
+            modelSideAwareFeatures: false // Default
+          }),
+          calculateConfidenceProbability: vi.fn((_sym, _price, _vol, side) => {
+            if (side === 'LONG') {
+              return { p: 0.72, features: [1, 25, 0, 0, 0, 1, 0, 0.4, 1, 0, 1] };
+            }
+            return { p: 0.45, features: [1, -25, 0, 0, 0, 1, 0, 0.1, 0, 0, -1] }; // legacy inverted
+          }),
+          getVirtualTrades: () => virtualTrades,
+          pushVirtualTrade: (t: any) => {
+            virtualTrades.push(t);
+          },
+          getCacheSignals: () => ({
+            data: [longSignal],
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING_FLAT',
+            marketHealth: 80,
+            btcTrend24h: 0.0
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+
+        expect(virtualTrades).toHaveLength(1);
+        const opened = virtualTrades[0];
+        expect(opened.featuresVersion).toBe(1);
+        expect(opened.entryDiagnostics.featuresVersion).toBe(1);
+        expect(opened.entryDiagnostics.quantP).toBe(0.45); // legacy
+        expect(opened.entryDiagnostics.shadow.pSideAware).toBe(0.72); // side aware shadow
+      });
+
+      it('when modelSideAwareFeatures is true: writes featuresVersion 2 and uses side-aware probability', async () => {
+        const virtualTrades: any[] = [];
+        const { deps } = createMockAutopilotDeps({
+          getGlobalSettings: () => ({
+            isAutopilotEnabled: true,
+            tradingMode: 'virtual',
+            tradingExecutionMode: 'auto',
+            autopilotAggressiveness: 'aggressive',
+            allowedTradingDirections: 'BOTH',
+            maxActivePositionsVirtual: 6,
+            maxSameDirectionPositions: 3,
+            virtualBalance: 1000,
+            isCommitteeConsensusCheckEnabled: false,
+            modelSideAwareFeatures: true // Activated
+          }),
+          calculateConfidenceProbability: vi.fn((_sym, _price, _vol, side) => {
+            if (side === 'LONG') {
+              return { p: 0.75, features: [1, 28, 0, 0, 0, 1, 0, 0.5, 1, 0, 1] };
+            }
+            return { p: 0.40, features: [1, -28, 0, 0, 0, 1, 0, 0.1, 0, 0, -1] };
+          }),
+          getVirtualTrades: () => virtualTrades,
+          pushVirtualTrade: (t: any) => {
+            virtualTrades.push(t);
+          },
+          getCacheSignals: () => ({
+            data: [longSignal],
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING_FLAT',
+            marketHealth: 80,
+            btcTrend24h: 0.0
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+
+        expect(virtualTrades).toHaveLength(1);
+        const opened = virtualTrades[0];
+        expect(opened.featuresVersion).toBe(2);
+        expect(opened.entryDiagnostics.featuresVersion).toBe(2);
+        expect(opened.entryDiagnostics.quantP).toBe(0.75); // side aware used
+      });
+
+      it('when requireModelMaturity is true and samples < 100: pAdjustment is 0', async () => {
+        const virtualTrades: any[] = [];
+        const { deps } = createMockAutopilotDeps({
+          getGlobalSettings: () => ({
+            isAutopilotEnabled: true,
+            tradingMode: 'virtual',
+            tradingExecutionMode: 'auto',
+            autopilotAggressiveness: 'aggressive',
+            allowedTradingDirections: 'BOTH',
+            maxActivePositionsVirtual: 6,
+            maxSameDirectionPositions: 3,
+            virtualBalance: 1000,
+            isCommitteeConsensusCheckEnabled: false,
+            requireModelMaturity: true,
+            modelMinSamplesForAdjustment: 100
+          }),
+          calculateConfidenceProbability: vi.fn(() => ({
+            p: 0.85, // probDiff = +0.35 -> would normally adjust by +8 pts
+            features: [1, 20, 0, 0, 0, 1, 0, 0.4, 1, 0, 1]
+          })),
+          getVirtualTrades: () => virtualTrades, // 0 mature closed trades
+          pushVirtualTrade: (t: any) => {
+            virtualTrades.push(t);
+          },
+          getCacheSignals: () => ({
+            data: [{ ...longSignal, aiScore: 75 }],
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING_FLAT',
+            marketHealth: 80,
+            btcTrend24h: 0.0
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+
+        expect(virtualTrades).toHaveLength(1);
+        const opened = virtualTrades[0];
+        // Score should NOT have been adjusted by +8 points because model is immature
+        expect(opened.entryDiagnostics.aiScoreFinal).toBe(75);
+        expect(opened.entryDiagnostics.shadow.pAdjustmentWouldBeZero).toBe(true);
       });
     });
   });

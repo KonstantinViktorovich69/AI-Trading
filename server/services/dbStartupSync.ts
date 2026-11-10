@@ -358,14 +358,16 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
     const now = Date.now();
     virtualTrades.forEach(t => {
       if (t.status === 'OPEN' && (now - t.openTime > 48 * 60 * 60 * 1000)) {
+         const hasCurrentPrice = typeof t.currentPrice === 'number' && t.currentPrice > 0 && t.currentPrice !== t.entryPrice;
+         const fallbackClosePrice = hasCurrentPrice ? t.currentPrice : t.entryPrice;
+         const isUnpriced = !hasCurrentPrice || fallbackClosePrice === t.entryPrice;
          t.status = 'CLOSED';
-         t.closeReason = 'System Cleanup (Stale/Ghost)';
+         t.closeReason = isUnpriced ? 'System Cleanup (Stale/Unpriced)' : 'System Cleanup (Stale/Ghost)';
          t.isSystemCleanup = true;
          t.isForcedReset = true;
-         t.closeReasonCode = 'FORCED_RESET';
+         t.closeReasonCode = isUnpriced ? 'STALE_UNPRICED' : 'FORCED_RESET';
+         t.closePriceSource = isUnpriced ? 'ENTRY_FALLBACK' : 'LAST_KNOWN';
          t.closeTime = now;
-         
-         const fallbackClosePrice = t.currentPrice || t.entryPrice;
          t.closePrice = fallbackClosePrice;
          
          const unleveragedPct = t.side === 'SHORT'

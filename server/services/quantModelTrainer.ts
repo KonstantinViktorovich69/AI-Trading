@@ -32,6 +32,28 @@ export interface QuantModelTrainerContext {
   deadZonePct?: number;
 }
 
+// DEAD_ZONE_PNL_PCT: Filter out trades with minimal PnL to train on clear winning/losing setups.
+// NOTE: This filter biases the sample towards extreme outcomes, which is a known selection constraint.
+export const DEFAULT_DEAD_ZONE_PNL_PCT = 0.05;
+
+// MAX_TRAINING_TRADES_WINDOW: Rolling window size of most recent closed trades to train on.
+export const MAX_TRAINING_TRADES_WINDOW = 500;
+
+// MODEL_WEIGHT_ABS_MAX: Strict safety ceiling on beta weights to prevent runaway divergence.
+export const MODEL_WEIGHT_ABS_MAX = 5.0;
+
+export function clipModelWeight(val: number, name: string): number {
+  if (val > MODEL_WEIGHT_ABS_MAX) {
+    console.log(`[MODEL] weight clipped: ${name} ${val.toFixed(4)} -> ${MODEL_WEIGHT_ABS_MAX}`);
+    return MODEL_WEIGHT_ABS_MAX;
+  }
+  if (val < -MODEL_WEIGHT_ABS_MAX) {
+    console.log(`[MODEL] weight clipped: ${name} ${val.toFixed(4)} -> -${MODEL_WEIGHT_ABS_MAX}`);
+    return -MODEL_WEIGHT_ABS_MAX;
+  }
+  return val;
+}
+
 export function runRetrainWorker(
   trainData: any[],
   valData: any[],
@@ -132,7 +154,7 @@ export async function trainQuantModel(context: QuantModelTrainerContext): Promis
   
   try {
     const virtualTrades = context.getVirtualTrades();
-    const deadZone = context.deadZonePct ?? 0.05;
+    const deadZone = context.deadZonePct ?? DEFAULT_DEAD_ZONE_PNL_PCT;
     const closedTrades = virtualTrades.filter(t => {
       if (t.status !== 'CLOSED' || t.gapAffected) return false;
       const outcome = (t as any).outcome !== undefined 
@@ -147,47 +169,54 @@ export async function trainQuantModel(context: QuantModelTrainerContext): Promis
       return;
     }
 
-    // Advanced: Train-Validation Split (80% / 20%) to avoid overfitting
-    // Shuffle and split dataset
-    const rawDataset = closedTrades
+    // T3.2: Честный отбор сделок без синтетической фабрикации
+    const closedEligibleTrades = closedTrades
       .filter(t => Math.abs((t as any).pnlPercent || 0) >= deadZone)
-      .slice(-500)
-      .map(t => {
-        let features = Array.isArray((t as any).features) && (t as any).features.length > 0
-          ? [...(t as any).features]
-          : null;
-        if (!features) {
-          const isShort = t.side === 'SHORT';
-          const score = Number(t.signalAiScore) || 70;
-          const pnlPct = Number(t.pnlPercent) || 0;
-          const maxPnl = Number(t.maxReachedPnl) || pnlPct;
-          const notes = String(t.notes || t.closeReason || '');
+      .slice(-MAX_TRAINING_TRADES_WINDOW);
 
-          const x1 = (score > 85 || notes.includes('пробой')) ? 1 : 0;
-          const x2 = isShort ? Math.min(35, Math.max(-35, (score - 60) * 1.5)) : Math.min(35, Math.max(-35, (40 - score) * 1.5));
-          const x3 = isShort ? -0.5 : 0.5;
-          const x4 = isShort ? Math.max(1, (maxPnl * 0.3)) : Math.min(-1, -(maxPnl * 0.3));
-          const x5 = isShort ? Math.max(2, (maxPnl * 0.5)) : Math.min(-2, -(maxPnl * 0.5));
-          const x6 = (score >= 75 || notes.includes('объем')) ? 1 : 0;
-          const x7 = isShort ? 0.65 : 0.35;
-          const x8 = (score > 80 || notes.includes('шпиль') || notes.includes('фитил')) ? 0.35 : 0.15;
-          const x9 = (score > 82 || notes.includes('ликвидн') || notes.includes('sweep')) ? 1 : 0;
-          const x10 = isShort ? 1.2 : -1.2;
-          const x11 = isShort ? 1 : -1;
-          features = [x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11];
-          (t as any).features = features;
-        }
-        while (features.length < 11) {
-          features.push(0);
-        }
-        return {
-          x: [1, ...features],
-          y: (t as any).outcome,
-          w: Math.max(Math.abs((t as any).pnlPercent || 1), 1)
-        };
+    let skippedNoFeatures = 0;
+    let skippedLegacyLong = 0;
+    let usedCount = 0;
+
+    const rawDataset: Array<{ x: number[]; y: number; w: number }> = [];
+
+    for (const t of closedEligibleTrades) {
+      const hasFeatures = Array.isArray((t as any).features) && (t as any).features.length > 0;
+      if (!hasFeatures) {
+        skippedNoFeatures++;
+        continue;
+      }
+
+      // В обучение берем только side-aware сделки или старые SHORT (старые SHORT совпадают с новой моделью).
+      // Исключаем старые LONG сделки без featuresVersion === 2, так как их признаки были инвертированы под SHORT.
+      const isLegacyLong = t.side === 'LONG' && (t as any).featuresVersion !== 2;
+      if (isLegacyLong) {
+        skippedLegacyLong++;
+        continue;
+      }
+
+      const features = [...(t as any).features];
+      while (features.length < 11) {
+        features.push(0);
+      }
+
+      rawDataset.push({
+        x: [1, ...features],
+        y: (t as any).outcome,
+        w: Math.max(Math.abs((t as any).pnlPercent || 1), 1)
       });
+      usedCount++;
+    }
+
+    console.log(`[TRAINER] used=${usedCount} skippedNoFeatures=${skippedNoFeatures} skippedLegacyLong=${skippedLegacyLong}`);
+
+    if (rawDataset.length < 10) {
+      console.log(`[TRAINER] Insufficient valid feature samples for training (${rawDataset.length} < 10). Skipping.`);
+      modelStatus.isTrainingActive = false;
+      return;
+    }
     
-    // Simple deterministic pseudo-random split
+    // Train-Validation Split (80% / 20%)
     const trainData: typeof rawDataset = [];
     const valData: typeof rawDataset = [];
     rawDataset.forEach((item, index) => {
@@ -197,6 +226,10 @@ export async function trainQuantModel(context: QuantModelTrainerContext): Promis
         trainData.push(item);
       }
     });
+
+    if (valData.length === 0 && trainData.length > 0) {
+      valData.push(trainData.pop()!);
+    }
 
     const modelWeights = context.getModelWeights();
     let weights = [
@@ -281,11 +314,19 @@ export async function trainQuantModel(context: QuantModelTrainerContext): Promis
 
     if (bestValLoss > currentValLoss && isFinite(currentValLoss)) {
       console.warn(`[MODEL] Retraining skipped: New validation loss (${bestValLoss.toFixed(4)}) is worse than current validation loss (${currentValLoss.toFixed(4)}). Retaining current weights.`);
-    } else {
       const updatedWeights: QuantModelWeights = {
-        beta0: bestWeights[0], beta1: bestWeights[1], beta2: bestWeights[2], beta3: bestWeights[3],
-        beta4: bestWeights[4], beta5: bestWeights[5], beta6: bestWeights[6], beta7: bestWeights[7],
-        beta8: bestWeights[8], beta9: bestWeights[9], beta10: bestWeights[10], beta11: bestWeights[11]
+        beta0: clipModelWeight(bestWeights[0], 'beta0'),
+        beta1: clipModelWeight(bestWeights[1], 'beta1'),
+        beta2: clipModelWeight(bestWeights[2], 'beta2'),
+        beta3: clipModelWeight(bestWeights[3], 'beta3'),
+        beta4: clipModelWeight(bestWeights[4], 'beta4'),
+        beta5: clipModelWeight(bestWeights[5], 'beta5'),
+        beta6: clipModelWeight(bestWeights[6], 'beta6'),
+        beta7: clipModelWeight(bestWeights[7], 'beta7'),
+        beta8: clipModelWeight(bestWeights[8], 'beta8'),
+        beta9: clipModelWeight(bestWeights[9], 'beta9'),
+        beta10: clipModelWeight(bestWeights[10], 'beta10'),
+        beta11: clipModelWeight(bestWeights[11], 'beta11')
       };
       context.setModelWeights(updatedWeights);
       console.log(`[MODEL] Retraining complete. Validation loss improved from ${currentValLoss.toFixed(4)} to ${bestValLoss.toFixed(4)}.`);

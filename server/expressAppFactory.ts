@@ -3,6 +3,7 @@ import type { Express } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { authMiddleware } from './middleware/auth.ts';
+import { createAuthRouter } from './routes/authRoutes.ts';
 import { createRealTradeRouter, type RealTradeRouterContext } from './routes/realTradeRoutes.ts';
 import { createMarketRouter, type MarketRouterContext } from './routes/marketRoutes.ts';
 import { createStreamRouter, type StreamRouterContext } from './routes/streamRoutes.ts';
@@ -63,6 +64,7 @@ export function createExpressApp(contexts: ExpressAppFactoryContexts): Express {
   });
 
   // Mount API Routers
+  app.use('/api/auth', createAuthRouter());
   app.use('/api', createRealTradeRouter(contexts.realTradeContext));
   app.use('/api', createMarketRouter(contexts.marketContext));
   app.use('/api', createStreamRouter(contexts.streamContext));
