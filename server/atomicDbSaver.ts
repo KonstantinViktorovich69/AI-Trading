@@ -348,6 +348,8 @@ export class AtomicStateStore {
   private lastGoldenCopyTime: number = 0;
 
   private maintainGoldenCopy(data: any): void {
+    if (process.env.NODE_ENV === 'test' || process.env.VITEST !== undefined) return;
+    if (path.resolve(path.dirname(this.filePath)) !== path.resolve(process.cwd())) return;
     const now = Date.now();
     if (now - this.lastGoldenCopyTime < 60000) return; // Throttle to max once per minute
 

@@ -418,12 +418,15 @@ export class SettingsManager {
 
       atomicWriteJson(this.settingsFile, dataToSave);
 
-      // Periodically update golden copy in data/known_good for disaster recovery
-      try {
-        const kgDir = path.join(process.cwd(), 'data', 'known_good');
-        if (!fs.existsSync(kgDir)) fs.mkdirSync(kgDir, { recursive: true });
-        fs.writeFileSync(path.join(kgDir, 'known-good-settings-copy'), JSON.stringify(dataToSave, null, 2), 'utf-8');
-      } catch {}
+      // Periodically update golden copy in data/known_good for disaster recovery (never from tests/custom temp paths)
+      const isTestOrCustomPath = Boolean(this.ctx.settingsFilePath) || process.env.NODE_ENV === 'test' || process.env.VITEST !== undefined;
+      if (!isTestOrCustomPath) {
+        try {
+          const kgDir = path.join(process.cwd(), 'data', 'known_good');
+          if (!fs.existsSync(kgDir)) fs.mkdirSync(kgDir, { recursive: true });
+          fs.writeFileSync(path.join(kgDir, 'known-good-settings-copy'), JSON.stringify(dataToSave, null, 2), 'utf-8');
+        } catch {}
+      }
 
       const dbData = this.ctx.getCachedDB();
       if (dbData) {

@@ -4,6 +4,7 @@ import ccxt from 'ccxt';
 import { normalizeExchangeId, DEFAULT_EXCHANGE } from '../services/activeExchange.ts';
 import { isEntryPaused } from '../services/entryGate.ts';
 import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
+import { getCostModel } from '../services/costModel.ts';
 
 export interface RealTradeRouterContext {
   getGlobalSettings: () => any;
@@ -13,7 +14,7 @@ export interface RealTradeRouterContext {
   sendTelegramTestMessage: (botToken: string, chatId: string) => Promise<{ success: boolean; error?: string }>;
   enrichExchangeError: (error: any) => string;
   getCcxtClient: (config: any) => any;
-  getUnifiedTradeClosePnl: (side: string, entryPrice: number, closePrice: number, amount: number, leverage: number) => { pnlUsd: number; pnlPercent: number };
+  getUnifiedTradeClosePnl: (side: string, entryPrice: number, closePrice: number, amount: number, leverage: number, costModel?: any) => { pnlUsd: number; pnlPercent?: number; feeUsd?: number; slippageUsd?: number; grossPnlUsd?: number; costModelVersion?: number };
   findTickerInMap: (sym: string, map: any) => any;
   getWsTickers: () => Record<string, any>;
   getGlobalCcxtTickers: () => Record<string, any>;
@@ -538,7 +539,11 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
               dbTrade.history.push({ time: Date.now(), type: 'CLOSE', price: clPrice, amount: dbTrade.amount });
             }
 
+            const costModel = getCostModel(ctx.getGlobalSettings ? ctx.getGlobalSettings() : undefined);
             let totalPnlUsd = 0;
+            let totalGrossPnlUsd = 0;
+            let totalFeeUsd = 0;
+            let totalSlippageUsd = 0;
             const initialTradeAmount = dbTrade.initialAmount || dbTrade.amount;
             if (!dbTrade.initialAmount) {
               dbTrade.initialAmount = initialTradeAmount;
@@ -546,14 +551,21 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
 
             dbTrade.history.forEach((h: any) => {
               if (h.type === 'CLOSE') {
-                const { pnlUsd } = ctx.getUnifiedTradeClosePnl(dbTrade.side, dbTrade.entryPrice, h.price, h.amount, dbTrade.leverage);
-                totalPnlUsd += pnlUsd;
+                const res = ctx.getUnifiedTradeClosePnl(dbTrade.side, dbTrade.entryPrice, h.price, h.amount, dbTrade.leverage, costModel);
+                totalPnlUsd += res.pnlUsd;
+                totalGrossPnlUsd += (res.grossPnlUsd ?? 0);
+                totalFeeUsd += (res.feeUsd ?? 0);
+                totalSlippageUsd += (res.slippageUsd ?? 0);
               }
             });
 
             const totalPnlPercent = initialTradeAmount > 0 ? (totalPnlUsd / initialTradeAmount) * 100 : 0;
             dbTrade.pnlPercent = totalPnlPercent;
             dbTrade.pnl = totalPnlUsd;
+            dbTrade.grossPnlUsd = totalGrossPnlUsd;
+            dbTrade.feeUsd = totalFeeUsd;
+            dbTrade.slippageUsd = totalSlippageUsd;
+            dbTrade.costModelVersion = costModel.version || 2;
             dbTrade.feedback = totalPnlPercent > 0 ? 'SUCCESS' : (totalPnlPercent === 0 ? 'BREAKEVEN' : 'FAILED');
             dbTrade.closeReason = 'Закрыто внешне на бирже вручную или по ордеру СЛ/ТП';
             dbTrade.notes = dbTrade.closeReason;

@@ -144,6 +144,65 @@ describe('Phase 7 — Self-control & Real Trading Protection (T7.1 - T7.6)', () 
       expect(res.passed).toBe(false);
     });
 
+    it('blocks when ONLY minTradesOk fails (all other 3 conditions pass)', () => {
+      // 100 clean winning trades spanning 20 days (~4.8h apart)
+      const trades = Array.from({ length: 100 }, (_, i) =>
+        makeCleanTrade(i, i % 5 === 0 ? -0.3 : 1.2, {
+          openTime: Date.UTC(2026, 2, 1) + i * 4.8 * 3600 * 1000,
+          closeTime: Date.UTC(2026, 2, 1) + i * 4.8 * 3600 * 1000 + 30 * 60 * 1000
+        })
+      );
+      const res = evaluateEvidenceGate(trades, createDefaultGlobalSettings());
+      expect(res.checks.minTradesOk).toBe(false);
+      expect(res.checks.minDaysOk).toBe(true);
+      expect(res.checks.ciPositiveOk).toBe(true);
+      expect(res.checks.maxDrawdownOk).toBe(true);
+      expect(res.passed).toBe(false);
+    });
+
+    it('blocks when ONLY minDaysOk fails (all other 3 conditions pass)', () => {
+      // 160 clean winning trades compressed into 5 days (~45m apart)
+      const trades = Array.from({ length: 160 }, (_, i) =>
+        makeCleanTrade(i, i % 5 === 0 ? -0.3 : 1.2, {
+          openTime: Date.UTC(2026, 2, 1) + i * 45 * 60 * 1000,
+          closeTime: Date.UTC(2026, 2, 1) + i * 45 * 60 * 1000 + 15 * 60 * 1000
+        })
+      );
+      const res = evaluateEvidenceGate(trades, createDefaultGlobalSettings());
+      expect(res.checks.minTradesOk).toBe(true);
+      expect(res.checks.minDaysOk).toBe(false);
+      expect(res.checks.ciPositiveOk).toBe(true);
+      expect(res.checks.maxDrawdownOk).toBe(true);
+      expect(res.passed).toBe(false);
+    });
+
+    it('blocks when ONLY ciPositiveOk fails (all other 3 conditions pass)', () => {
+      // 160 trades spanning 16.6 days alternating +0.1 and -0.1 => zero/negative CI95.lo, maxDD ~0.1% <= 15%
+      const trades = Array.from({ length: 160 }, (_, i) =>
+        makeCleanTrade(i, i % 2 === 0 ? 0.1 : -0.1)
+      );
+      const res = evaluateEvidenceGate(trades, createDefaultGlobalSettings());
+      expect(res.checks.minTradesOk).toBe(true);
+      expect(res.checks.minDaysOk).toBe(true);
+      expect(res.checks.ciPositiveOk).toBe(false);
+      expect(res.checks.maxDrawdownOk).toBe(true);
+      expect(res.passed).toBe(false);
+    });
+
+    it('blocks when ONLY maxDrawdownOk fails (all other 3 conditions pass)', () => {
+      // 200 trades spanning ~20.8 days: initial 20 losses of -1.0% create 20% drawdown (>15%), followed by 180 wins of +1.5%
+      const trades = Array.from({ length: 200 }, (_, i) =>
+        makeCleanTrade(i, i < 20 ? -1.0 : 1.5)
+      );
+      const res = evaluateEvidenceGate(trades, createDefaultGlobalSettings());
+      expect(res.checks.minTradesOk).toBe(true);
+      expect(res.checks.minDaysOk).toBe(true);
+      expect(res.checks.ciPositiveOk).toBe(true);
+      expect(res.checks.maxDrawdownOk).toBe(false);
+      expect(res.maxDrawdownPct).toBeGreaterThan(15);
+      expect(res.passed).toBe(false);
+    });
+
     it('blocks POST /api/real-trade/open (403) when evidence fails, allows virtual POST /api/paper-trade/open (200)', async () => {
       const prevRealFlag = process.env.ENABLE_REAL_TRADING;
       process.env.ENABLE_REAL_TRADING = 'true';
@@ -505,6 +564,72 @@ describe('Phase 7 — Self-control & Real Trading Protection (T7.1 - T7.6)', () 
         expect(body.success).toBe(true);
         expect(sm.getSettings().aiExpertTraderInstructions).toContain('Версия 2');
       });
+    });
+
+    it('accepts valid RETROSPECTIVE update and rejects forbidden marker, >600 length, and <24h cooldown via SettingsManager.setExpertInstructions', () => {
+      const tmpDir = makeTempDir('p7-retro-guard-');
+      const settingsPath = path.join(tmpDir, 'settings.json');
+      const dbPath = path.join(tmpDir, 'db.json');
+      const historyPath = path.join(tmpDir, 'expert_instructions_history.json');
+      const cachedDb: any = { aiExpertTraderInstructionsHistory: [] };
+
+      fs.writeFileSync(
+        settingsPath,
+        JSON.stringify(createDefaultGlobalSettings(DEFAULT_BASELINE_EXPERT_INSTRUCTIONS), null, 2),
+        'utf-8'
+      );
+
+      const sm = new SettingsManager({
+        settingsFilePath: settingsPath,
+        dbFilePath: dbPath,
+        expertHistoryFilePath: historyPath,
+        getCachedDB: () => cachedDb,
+        flushDB: vi.fn(async () => {})
+      });
+
+      const initial = sm.getSettings().aiExpertTraderInstructions;
+      const baseWithoutSec5 = initial.split('### 5. АДАПТИВНЫЕ')[0].trim();
+      const sec5Header = '### 5. АДАПТИВНЫЕ РЕТРОСПЕКТИВНЫЕ КОРРЕКТИРОВКИ (ОБНОВЛЯЮТСЯ ИИ-ОПТИМИЗАТОРОМ)';
+
+      // 1. Forbidden marker -> rejected
+      const forbiddenRes = sm.setExpertInstructions(
+        `${baseWithoutSec5}\n\n${sec5Header}\nНужно убрать стоп-лосс на всех монетах.`,
+        'RETROSPECTIVE',
+        'Forbidden marker'
+      );
+      expect(forbiddenRes.sanitized).toBe(true);
+      expect(forbiddenRes.reason).toContain('FORBIDDEN_MARKER');
+      expect(sm.getSettings().aiExpertTraderInstructions).toBe(initial);
+
+      // 2. Overly long (> 600 chars) -> rejected
+      const lengthRes = sm.setExpertInstructions(
+        `${baseWithoutSec5}\n\n${sec5Header}\n${'Б'.repeat(605)}`,
+        'RETROSPECTIVE',
+        'Length exceeded'
+      );
+      expect(lengthRes.sanitized).toBe(true);
+      expect(lengthRes.reason).toContain('LENGTH_EXCEEDED');
+      expect(sm.getSettings().aiExpertTraderInstructions).toBe(initial);
+
+      // 3. Valid concise update when cooldown is clear -> accepted
+      const validRes = sm.setExpertInstructions(
+        `${baseWithoutSec5}\n\n${sec5Header}\nУсилить фильтр объёма на ложных пробоях 15m.`,
+        'RETROSPECTIVE',
+        'Valid retrospective tuning'
+      );
+      expect(validRes.sanitized).toBe(false);
+      expect(sm.getSettings().aiExpertTraderInstructions).toContain('Усилить фильтр объёма на ложных пробоях 15m.');
+
+      // 4. Immediate follow-up within 24h -> rejected by cooldown
+      const afterValid = sm.getSettings().aiExpertTraderInstructions;
+      const cooldownRes = sm.setExpertInstructions(
+        `${baseWithoutSec5}\n\n${sec5Header}\nЕщё одна правка сразу следом.`,
+        'RETROSPECTIVE',
+        'Cooldown test'
+      );
+      expect(cooldownRes.sanitized).toBe(true);
+      expect(cooldownRes.reason).toContain('COOLDOWN_ACTIVE');
+      expect(sm.getSettings().aiExpertTraderInstructions).toBe(afterValid);
     });
 
     it('blocks autonomousKnowledgeRebalance when compressed below 30% of active rules and saves snapshot', async () => {

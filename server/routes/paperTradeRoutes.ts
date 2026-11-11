@@ -213,10 +213,15 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
         if (!trade.history) trade.history = [];
         trade.history.push({ time: Date.now(), type: 'CLOSE', price: actualClosePrice, amount: trade.amount });
 
-        const { pnlUsd } = ctx.getUnifiedTradeClosePnl(trade.side, trade.entryPrice, actualClosePrice, trade.amount, trade.leverage);
+        const costModel = getCostModel(ctx.getGlobalSettings ? ctx.getGlobalSettings() : undefined);
+        const { pnlUsd, grossPnlUsd, feeUsd, slippageUsd } = ctx.getUnifiedTradeClosePnl(trade.side, trade.entryPrice, actualClosePrice, trade.amount, trade.leverage, costModel);
 
         trade.pnl = pnlUsd;
         trade.pnlPercent = (trade.pnl / trade.amount) * 100;
+        trade.grossPnlUsd = grossPnlUsd;
+        trade.feeUsd = feeUsd;
+        trade.slippageUsd = slippageUsd;
+        trade.costModelVersion = costModel.version || 2;
         (trade as any).outcome = trade.pnlPercent > 0 ? 1 : 0;
 
         console.log(`[BALANCE UPDATE] Closing trade ID ${trade.id} (${trade.symbol}) at $${actualClosePrice}, PnL: $${pnlUsd.toFixed(2)} (${trade.pnlPercent.toFixed(2)}%)`);

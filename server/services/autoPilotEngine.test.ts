@@ -995,6 +995,56 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
         expect(opened.entryDiagnostics.aiScoreFinal).toBe(75);
         expect(opened.entryDiagnostics.shadow.pAdjustmentWouldBeZero).toBe(true);
       });
+
+      it('when requireModelMaturity is true and samples >= 100: pAdjustment IS applied', async () => {
+        const matureHistory = Array.from({ length: 100 }, (_, i) => ({
+          id: `mature_${i}`,
+          symbol: 'BTC/USDT',
+          side: 'LONG',
+          status: 'CLOSED',
+          featuresVersion: 2,
+          features: [1, 20, 0, 0, 0, 1, 0, 0.4, 1, 0, 1],
+          pnlPercent: 2.0
+        }));
+        const virtualTrades: any[] = [...matureHistory];
+        const { deps } = createMockAutopilotDeps({
+          getGlobalSettings: () => ({
+            isAutopilotEnabled: true,
+            tradingMode: 'virtual',
+            tradingExecutionMode: 'auto',
+            autopilotAggressiveness: 'aggressive',
+            allowedTradingDirections: 'BOTH',
+            maxActivePositionsVirtual: 6,
+            maxSameDirectionPositions: 3,
+            virtualBalance: 1000,
+            isCommitteeConsensusCheckEnabled: false,
+            requireModelMaturity: true,
+            modelMinSamplesForAdjustment: 100
+          }),
+          calculateConfidenceProbability: vi.fn(() => ({
+            p: 0.85, // probDiff = +0.35 -> adjusts +8 pts when model is mature
+            features: [1, 20, 0, 0, 0, 1, 0, 0.4, 1, 0, 1]
+          })),
+          getVirtualTrades: () => virtualTrades,
+          pushVirtualTrade: (t: any) => {
+            virtualTrades.push(t);
+          },
+          getCacheSignals: () => ({
+            data: [{ ...longSignal, aiScore: 75 }],
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING_FLAT',
+            marketHealth: 80,
+            btcTrend24h: 0.0
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+
+        const opened = virtualTrades.find(t => t.id && !String(t.id).startsWith('mature_'));
+        expect(opened).toBeDefined();
+        expect(opened.entryDiagnostics.aiScoreFinal).toBe(83);
+        expect(opened.entryDiagnostics.shadow.pAdjustmentWouldBeZero).toBe(false);
+      });
     });
   });
 });

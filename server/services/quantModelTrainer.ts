@@ -314,6 +314,7 @@ export async function trainQuantModel(context: QuantModelTrainerContext): Promis
 
     if (bestValLoss > currentValLoss && isFinite(currentValLoss)) {
       console.warn(`[MODEL] Retraining skipped: New validation loss (${bestValLoss.toFixed(4)}) is worse than current validation loss (${currentValLoss.toFixed(4)}). Retaining current weights.`);
+    } else {
       const updatedWeights: QuantModelWeights = {
         beta0: clipModelWeight(bestWeights[0], 'beta0'),
         beta1: clipModelWeight(bestWeights[1], 'beta1'),

@@ -2,12 +2,12 @@
   "settings": {
     "main": {
       "virtualBalance": 85.44,
-      "startOfDayBalance": 102.39,
-      "lastResetDate": "2026-11-10",
+      "startOfDayBalance": 101.84,
+      "lastResetDate": "2026-11-11",
       "startOfWeekBalance": 85.44,
       "lastWeekCheckTime": 1790150445705,
       "userId": "polyakovats3110@gmail.com",
-      "updatedAt": 1794316599335,
+      "updatedAt": 1794413575250,
       "virtualEquity": 101.84,
       "uiStatsResetTimestamp": 1791122286530
     },
@@ -26377,11 +26377,11 @@
         "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте.",
         "[Авто-Обучение | 1000PEPE/USDT:USDT | PnL 5.7%] При нейтральном тренде шортить только при подтвержденной перекупленности (RSI > 60), исключая затяжное зависание в боковике."
       ],
-      "lastAliveAt": 1794316599335,
+      "lastAliveAt": 1794413575250,
       "stalePriceSince": 1794316560011,
-      "lastAiCheck": 1794316547616,
+      "lastAiCheck": 1794413472627,
       "aiAdvice": "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
-      "maxReachedPnl": 0.5711373710373847,
+      "maxReachedPnl": 4.994086709037243,
       "userId": "polyakovats3110@gmail.com",
       "gapEvents": [
         {
@@ -26401,13 +26401,19 @@
           "kind": "STALE_FEED",
           "from": 1794315715429,
           "to": 1794316540910
+        },
+        {
+          "id": "gap_1794413153740_yg7vw",
+          "kind": "RESTART_GAP_ESTIMATED",
+          "from": 1794316599335,
+          "to": 1794413153740
         }
       ],
       "gapAffected": true,
       "gapFrom": 1794315715429,
-      "gapTo": 1794316540910,
-      "gapSec": 1702,
-      "gapReplayFrom": 1794315715429,
+      "gapTo": 1794413153740,
+      "gapSec": 98256,
+      "gapReplayFrom": 1794316599335,
       "gapReplayStatus": "DONE",
       "gapReplayAttempts": 0,
       "highestPrice": 0.1037,
@@ -26761,9 +26767,9 @@
         "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте.",
         "[Авто-Обучение | 1000PEPE/USDT:USDT | PnL 5.7%] При нейтральном тренде шортить только при подтвержденной перекупленности (RSI > 60), исключая затяжное зависание в боковике."
       ],
-      "lastAliveAt": 1794316599335,
+      "lastAliveAt": 1794413575250,
       "stalePriceSince": 1794316560011,
-      "lastAiCheck": 1794316547616,
+      "lastAiCheck": 1794413472627,
       "aiAdvice": "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
       "userId": "polyakovats3110@gmail.com",
       "gapEvents": [
@@ -26784,13 +26790,19 @@
           "kind": "STALE_FEED",
           "from": 1794315715429,
           "to": 1794316541909
+        },
+        {
+          "id": "gap_1794413153740_yg7vw",
+          "kind": "RESTART_GAP_ESTIMATED",
+          "from": 1794316599335,
+          "to": 1794413153740
         }
       ],
       "gapAffected": true,
       "gapFrom": 1794315715429,
-      "gapTo": 1794316541909,
-      "gapSec": 1703,
-      "gapReplayFrom": 1794315715429,
+      "gapTo": 1794413153740,
+      "gapSec": 98257,
+      "gapReplayFrom": 1794316599335,
       "gapReplayStatus": "DONE",
       "gapReplayAttempts": 0,
       "highestPrice": 0.2587,
@@ -27144,11 +27156,11 @@
         "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте.",
         "[Авто-Обучение | 1000PEPE/USDT:USDT | PnL 5.7%] При нейтральном тренде шортить только при подтвержденной перекупленности (RSI > 60), исключая затяжное зависание в боковике."
       ],
-      "lastAliveAt": 1794316599335,
+      "lastAliveAt": 1794413575250,
       "stalePriceSince": 1794316560011,
-      "lastAiCheck": 1794316547616,
+      "lastAiCheck": 1794413472627,
       "aiAdvice": "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
-      "maxReachedPnl": 0.9312111589487684,
+      "maxReachedPnl": 3.8144590987902074,
       "userId": "polyakovats3110@gmail.com",
       "gapEvents": [
         {
@@ -27168,13 +27180,19 @@
           "kind": "STALE_FEED",
           "from": 1794315715430,
           "to": 1794316541910
+        },
+        {
+          "id": "gap_1794413153740_yg7vw",
+          "kind": "RESTART_GAP_ESTIMATED",
+          "from": 1794316599335,
+          "to": 1794413153740
         }
       ],
       "gapAffected": true,
       "gapFrom": 1794315715430,
-      "gapTo": 1794316541910,
-      "gapSec": 1703,
-      "gapReplayFrom": 1794315715430,
+      "gapTo": 1794413153740,
+      "gapSec": 98257,
+      "gapReplayFrom": 1794316599335,
       "gapReplayStatus": "DONE",
       "gapReplayAttempts": 0,
       "highestPrice": 0.05146,
@@ -27189,7 +27207,7 @@
       "side": "SHORT",
       "action": "SELL",
       "entryPrice": 5.40466,
-      "amount": 2.9,
+      "amount": 0.86,
       "initialAmount": 2.9,
       "margin": 2.9,
       "initialMargin": 2.9,
@@ -27346,26 +27364,26 @@
           ]
         }
       },
-      "stopLoss": 5.45871,
+      "stopLoss": 5.28576,
       "takeProfit": 5.1074,
       "tpStages": [
         {
           "targetPrice": 5.31548,
           "targetPercent": 1.38,
           "closeRatio": 0.55,
-          "executed": false
+          "executed": true
         },
         {
           "targetPrice": 5.24117,
           "targetPercent": 2.75,
           "closeRatio": 0.25,
-          "executed": false
+          "executed": true
         },
         {
           "targetPrice": 5.16685,
           "targetPercent": 4.13,
           "closeRatio": 0.12,
-          "executed": false
+          "executed": true
         },
         {
           "targetPrice": 5.1074,
@@ -27427,6 +27445,24 @@
           "type": "OPEN",
           "price": 5.40466,
           "amount": 2.9
+        },
+        {
+          "time": 1794317400000,
+          "type": "CLOSE",
+          "price": 5.31548,
+          "amount": 1.59
+        },
+        {
+          "time": 1794317700000,
+          "type": "CLOSE",
+          "price": 5.24117,
+          "amount": 0.33
+        },
+        {
+          "time": 1794321000000,
+          "type": "CLOSE",
+          "price": 5.16685,
+          "amount": 0.12
         }
       ],
       "marketType": "FUTURES",
@@ -27528,11 +27564,11 @@
         "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте.",
         "[Авто-Обучение | 1000PEPE/USDT:USDT | PnL 5.7%] При нейтральном тренде шортить только при подтвержденной перекупленности (RSI > 60), исключая затяжное зависание в боковике."
       ],
-      "lastAliveAt": 1794316599335,
+      "lastAliveAt": 1794413575250,
       "stalePriceSince": 1794316560011,
-      "lastAiCheck": 1794316547616,
+      "lastAiCheck": 1794413472627,
       "aiAdvice": "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
-      "maxReachedPnl": 0.7275203250528252,
+      "maxReachedPnl": 7.4254439687232905,
       "userId": "polyakovats3110@gmail.com",
       "gapEvents": [
         {
@@ -27552,20 +27588,27 @@
           "kind": "STALE_FEED",
           "from": 1794315735448,
           "to": 1794316542909
+        },
+        {
+          "id": "gap_1794413153740_yg7vw",
+          "kind": "RESTART_GAP_ESTIMATED",
+          "from": 1794316599335,
+          "to": 1794413153740
         }
       ],
       "gapAffected": true,
       "gapFrom": 1794315735448,
-      "gapTo": 1794316542909,
-      "gapSec": 1664,
-      "gapReplayFrom": 1794315735448,
+      "gapTo": 1794413153740,
+      "gapSec": 98218,
+      "gapReplayFrom": 1794316599335,
       "gapReplayStatus": "DONE",
       "gapReplayAttempts": 0,
       "highestPrice": 5.385,
       "lowestPrice": 5.384,
       "maxReachedUnleveragedPnl": 0.38226271402825446,
       "gapReplayNoHit": true,
-      "slViolationSeconds": 0
+      "slViolationSeconds": 0,
+      "isProtected": true
     },
     {
       "id": "TR-1794316186204-A5",
@@ -27909,9 +27952,9 @@
       "matchedRuleTexts": [
         "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте."
       ],
-      "lastAliveAt": 1794316599335,
+      "lastAliveAt": 1794413575250,
       "stalePriceSince": 1794316560011,
-      "lastAiCheck": 1794316547616,
+      "lastAiCheck": 1794413472627,
       "aiAdvice": "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
       "userId": "polyakovats3110@gmail.com",
       "gapEvents": [
@@ -27932,13 +27975,19 @@
           "kind": "STALE_FEED",
           "from": 1794316191894,
           "to": 1794316542910
+        },
+        {
+          "id": "gap_1794413153740_yg7vw",
+          "kind": "RESTART_GAP_ESTIMATED",
+          "from": 1794316599335,
+          "to": 1794413153740
         }
       ],
       "gapAffected": true,
       "gapFrom": 1794316191894,
-      "gapTo": 1794316542910,
-      "gapSec": 751,
-      "gapReplayFrom": 1794316191894,
+      "gapTo": 1794413153740,
+      "gapSec": 97305,
+      "gapReplayFrom": 1794316599335,
       "gapReplayStatus": "DONE",
       "gapReplayAttempts": 0,
       "highestPrice": 0.04674,
@@ -36862,15 +36911,6 @@
   ],
   "agentExchangeLogs": [
     {
-      "id": "el_1792391341879_s318y",
-      "timestamp": 1792391341879,
-      "fromAgent": "EXPERT",
-      "toAgent": "RETROSPECTIVE",
-      "message": "Приняты адаптивные ретроспективные корректировки",
-      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
-      "type": "success"
-    },
-    {
       "id": "el_1792392291600_e08w8",
       "timestamp": 1792392291600,
       "fromAgent": "RETROSPECTIVE",
@@ -37760,11 +37800,20 @@
       "message": "Ретроспективное совещание завершено",
       "details": "Все агенты подтвердили стабильность торговых показателей и соответствие риск-лимитам.",
       "type": "success"
+    },
+    {
+      "id": "el_1794413464250_ofhd3",
+      "timestamp": 1794413464250,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "ALL",
+      "message": "Ретроспективное совещание завершено",
+      "details": "Все агенты подтвердили стабильность торговых показателей и соответствие риск-лимитам.",
+      "type": "success"
     }
   ],
   "aiCommitteeHistory": [],
-  "stateRevision": 1295074,
-  "updatedAt": 1794316599531,
+  "stateRevision": 1295138,
+  "updatedAt": 1794413575523,
   "aiExpertTraderInstructionsHistory": [
     {
       "id": "inst_1792223010329_4wtk3",
@@ -37908,44 +37957,12 @@
     }
   ],
   "optimizerSummary": {
-    "timestamp": 1794315897153,
+    "timestamp": 1794413464325,
     "winRate": 0,
     "summary": "ИИ недоступен, ретроспектива пропущена",
     "expertModifications": ""
   },
   "aiPerformanceReports": [
-    {
-      "id": "rep_1792372207103_2jlzg",
-      "timestamp": 1792372207103,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 28.26086956521739,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 25,
-          "count": 4,
-          "profitCount": 1,
-          "totalPnl": -0.5738947236118122
-        },
-        "week": {
-          "winRate": 28.26086956521739,
-          "count": 46,
-          "profitCount": 13,
-          "totalPnl": -5.507478248684062
-        },
-        "month": {
-          "winRate": 33.74083129584352,
-          "count": 409,
-          "profitCount": 138,
-          "totalPnl": -28.168915437011034
-        }
-      }
-    },
     {
       "id": "rep_1792373091933_fj9ni",
       "timestamp": 1792373091933,
@@ -39516,6 +39533,38 @@
           "count": 1,
           "profitCount": 0,
           "totalPnl": -0.5133209039437299
+        },
+        "week": {
+          "winRate": 44.44444444444444,
+          "count": 18,
+          "profitCount": 8,
+          "totalPnl": -0.510566485707474
+        },
+        "month": {
+          "winRate": 31.818181818181817,
+          "count": 66,
+          "profitCount": 21,
+          "totalPnl": -6.022024734391538
+        }
+      }
+    },
+    {
+      "id": "rep_1794413464325_m5jss",
+      "timestamp": 1794413464325,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 44.44444444444444,
+      "winRateAfter": 0,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Оптимизация пропущена из-за недоступности ИИ",
+      "impactAssessment": "Нейтрально",
+      "historicalSelfReview": "Пропущено",
+      "stats": {
+        "day": {
+          "winRate": 0,
+          "count": 0,
+          "profitCount": 0,
+          "totalPnl": 0
         },
         "week": {
           "winRate": 44.44444444444444,
