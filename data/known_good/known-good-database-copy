@@ -2,8 +2,8 @@
   "settings": {
     "main": {
       "virtualBalance": 82.37,
-      "startOfDayBalance": 101.84,
-      "lastResetDate": "2026-11-13",
+      "startOfDayBalance": 85.37,
+      "lastResetDate": "2026-11-14",
       "startOfWeekBalance": 82.37,
       "lastWeekCheckTime": 1790150445705,
       "userId": "polyakovats3110@gmail.com",
@@ -107,7 +107,9 @@
       "modelSideAwareFeatures": true,
       "requireModelMaturity": true,
       "modelMinSamplesForAdjustment": 100
-    }
+    },
+    "virtualBalance": 82.37,
+    "startOfDayBalance": 85.37
   },
   "trades": [
     {
@@ -29291,8 +29293,8 @@
     }
   ],
   "aiCommitteeHistory": [],
-  "stateRevision": 1295376,
-  "updatedAt": 1794600163892,
+  "stateRevision": 1295377,
+  "updatedAt": 1794657833598,
   "aiExpertTraderInstructionsHistory": [
     {
       "id": "inst_1792223010329_4wtk3",

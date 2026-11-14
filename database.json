@@ -2,12 +2,12 @@
   "settings": {
     "main": {
       "virtualBalance": 82.37,
-      "startOfDayBalance": 101.84,
-      "lastResetDate": "2026-11-13",
+      "startOfDayBalance": 85.37,
+      "lastResetDate": "2026-11-14",
       "startOfWeekBalance": 82.37,
       "lastWeekCheckTime": 1790150445705,
       "userId": "polyakovats3110@gmail.com",
-      "updatedAt": 1794600163891,
+      "updatedAt": 1794657833804,
       "virtualEquity": 85.37,
       "uiStatsResetTimestamp": 1791122286530
     },
@@ -107,7 +107,9 @@
       "modelSideAwareFeatures": true,
       "requireModelMaturity": true,
       "modelMinSamplesForAdjustment": 100
-    }
+    },
+    "virtualBalance": 82.37,
+    "startOfDayBalance": 85.37
   },
   "trades": [
     {
@@ -19464,14 +19466,20 @@
           "kind": "STALE_FEED",
           "from": 1794598260382,
           "to": 1794600006691
+        },
+        {
+          "id": "gap_1794649711483_3oys3",
+          "kind": "RESTART_GAP_ESTIMATED",
+          "from": 1794642511482,
+          "to": 1794649711483
         }
       ],
       "gapAffected": true,
       "gapFrom": 1794598260382,
-      "gapTo": 1794600006691,
-      "gapSec": 4151,
-      "gapReplayFrom": 1794598260382,
-      "gapReplayStatus": "DONE",
+      "gapTo": 1794649711483,
+      "gapSec": 11351,
+      "gapReplayFrom": 1794642511482,
+      "gapReplayStatus": "PENDING",
       "gapReplayAttempts": 0,
       "gapReplayNoHit": true
     }
@@ -29291,8 +29299,8 @@
     }
   ],
   "aiCommitteeHistory": [],
-  "stateRevision": 1295376,
-  "updatedAt": 1794600163892,
+  "stateRevision": 1295378,
+  "updatedAt": 1794657833805,
   "aiExpertTraderInstructionsHistory": [
     {
       "id": "inst_1792223010329_4wtk3",
