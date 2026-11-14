@@ -370,16 +370,31 @@ export class AiGatewayService {
       const ai = this.getInternalServerGeminiClient();
       if (ai) {
         try {
-          // ЛЕГАСИ-МОДЕЛЬ: 'gemini-3.7-flash' обновлена на актуальную 'gemini-3.8-flash'
-          const model = (params.model && !params.model.includes('gemini-3.7') && !params.model.includes('gemini-1.5') && !params.model.includes('gemini-2.0'))
-            ? params.model
-            : "gemini-3.8-flash";
+          const requestedModel = String(params.model || '');
+          const isLegacyModel = !requestedModel ||
+            requestedModel.includes('gemini-3.') ||
+            requestedModel.includes('gemini-1.5') ||
+            requestedModel.includes('gemini-2.0');
+          const model = isLegacyModel ? 'gemini-4-hydrogen' : requestedModel;
+
+          const sanitizeConfigForModel = (rawConfig: any, targetModel: string) => {
+            if (!rawConfig || typeof rawConfig !== 'object') return rawConfig;
+            if (!targetModel.startsWith('gemini-4')) return rawConfig;
+            const cloned = { ...rawConfig };
+            delete cloned.temperature;
+            delete cloned.topP;
+            delete cloned.topK;
+            delete cloned.candidateCount;
+            return Object.keys(cloned).length > 0 ? cloned : undefined;
+          };
+
+          const primaryConfig = sanitizeConfigForModel(params.config, model);
           let response: any;
           try {
             response = await ai.models.generateContent({
               model,
               contents: params.contents,
-              config: params.config
+              config: primaryConfig
             });
           } catch (primaryErr: any) {
             const primaryMsg = primaryErr?.message || String(primaryErr);
@@ -430,6 +445,8 @@ export class AiGatewayService {
           }
 
           const shouldCooldown = errMsg.includes('403') ||
+            errMsg.includes('404') ||
+            errMsg.includes('NOT_FOUND') ||
             errMsg.includes('PERMISSION_DENIED') ||
             errMsg.includes('denied access') ||
             errMsg.includes('429') ||

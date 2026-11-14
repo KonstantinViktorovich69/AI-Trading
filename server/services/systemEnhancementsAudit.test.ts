@@ -88,6 +88,15 @@ describe('System Enhancements & Bugfixes Audit', () => {
       expect(isTraditionalEquitySymbol('INTC')).toBe(true);
       expect(isTraditionalEquitySymbol('BIIB')).toBe(true);
       expect(isTraditionalEquitySymbol('HOOD')).toBe(true);
+      expect(isTraditionalEquitySymbol('SKHYNIX/USDT:USDT')).toBe(true);
+      expect(isTraditionalEquitySymbol('CVXSTOCK/USDT:USDT')).toBe(true);
+      expect(isTraditionalEquitySymbol('HK0992/USDT:USDT')).toBe(true);
+      expect(isTraditionalEquitySymbol('TSMC')).toBe(true);
+      expect(isTraditionalEquitySymbol('SQQQ')).toBe(true);
+      expect(isTraditionalEquitySymbol('CSOPSAMSUNG2L')).toBe(true);
+      expect(isTraditionalEquitySymbol('ORCL')).toBe(true);
+      expect(isTraditionalEquitySymbol('XAU/USDT:USDT')).toBe(true);
+      expect(isTraditionalEquitySymbol('EUR/USDT:USDT')).toBe(true);
     });
 
     it('correctly allows genuine crypto symbols', () => {
@@ -97,6 +106,12 @@ describe('System Enhancements & Bugfixes Audit', () => {
       expect(isTraditionalEquitySymbol('SOL/USDT:USDT')).toBe(false);
       expect(isTraditionalEquitySymbol('XRP/USDT:USDT')).toBe(false);
       expect(isTraditionalEquitySymbol('DOGE/USDT:USDT')).toBe(false);
+      expect(isTraditionalEquitySymbol('SPX/USDT:USDT')).toBe(false);
+      expect(isTraditionalEquitySymbol('CVX/USDT:USDT')).toBe(false);
+      expect(isTraditionalEquitySymbol('QNT/USDT:USDT')).toBe(false);
+      expect(isTraditionalEquitySymbol('ONDO/USDT:USDT')).toBe(false);
+      expect(isTraditionalEquitySymbol('XAI/USDT:USDT')).toBe(false);
+      expect(isTraditionalEquitySymbol('BB/USDT:USDT')).toBe(false);
     });
   });
 

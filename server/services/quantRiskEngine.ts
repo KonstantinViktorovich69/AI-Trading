@@ -1,5 +1,6 @@
 import { findTickerInMap } from '../utils/symbolUtils.ts';
 import { DEFAULT_EXCHANGE } from './activeExchange.ts';
+import { cleanSymbol, normalizeSymbol } from '../quant.ts';
 
 export interface StructuredFilterMatchResult {
   matched: boolean;
@@ -209,8 +210,17 @@ export function calculateConfidenceProbability(
   ctx: QuantRiskEngineContext,
   side?: 'LONG' | 'SHORT'
 ): { p: number; features: number[] } {
-  const globalTrueOHLCV = ctx.getGlobalTrueOHLCV();
-  const indicators = globalTrueOHLCV[symbol];
+  const globalTrueOHLCV = ctx.getGlobalTrueOHLCV() || {};
+  const candidateKeys = Array.from(
+    new Set([symbol, cleanSymbol(symbol), normalizeSymbol(symbol)].filter(Boolean))
+  );
+  let indicators: any = undefined;
+  for (const key of candidateKeys) {
+    if (globalTrueOHLCV[key]) {
+      indicators = globalTrueOHLCV[key];
+      break;
+    }
+  }
   if (!indicators) return { p: 0.5, features: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
 
   const isLong = side === 'LONG';
@@ -242,11 +252,18 @@ export function calculateConfidenceProbability(
   const activeEx = DEFAULT_EXCHANGE;
   const ticker = (globalCcxtTickers && findTickerInMap(symbol, globalCcxtTickers[activeEx])) || {};
   const avgHourlyVol = (ticker.quoteVolume || 0) / 24;
-  const x6 = (volume > avgHourlyVol * 1.5) ? 1 : 0;
+  const x6 = ((avgHourlyVol > 0 && volume > avgHourlyVol * 1.5) || (Number(indicators.volumeSpike) || 0) >= 1.5) ? 1 : 0;
 
   // x7: Order Book Imbalance (positive supports position direction)
-  const orderBookImbalance = ctx.getOrderBookImbalance();
-  const ob = orderBookImbalance[symbol] || { imbalance: 0 };
+  const orderBookImbalance = ctx.getOrderBookImbalance() || {};
+  let ob: any = undefined;
+  for (const key of candidateKeys) {
+    if (orderBookImbalance[key]) {
+      ob = orderBookImbalance[key];
+      break;
+    }
+  }
+  ob = ob || { imbalance: 0 };
   const rawObImbalance = (ob.imbalance || 0) / 100;
   const x7 = isLong ? -rawObImbalance : rawObImbalance;
 
@@ -288,7 +305,7 @@ export function calculateConfidenceProbability(
     const aiKnowledgeBase = ctx.getAiKnowledgeBase();
     const marketPulse = ctx.getMarketPulse();
     for (const rule of aiKnowledgeBase) {
-      if (!rule || !rule.filterIndicator || rule.filterIndicator === 'none') continue;
+      if (!rule || rule.isArchived || !rule.filterIndicator || rule.filterIndicator === 'none') continue;
 
       let isAssetSpecific = false;
       const symbolMatch = rule.text?.toLowerCase()?.match(/\[авто-обучение\s*\|\s*([a-z0-9\/:]+)\s*\|/);
@@ -300,15 +317,18 @@ export function calculateConfidenceProbability(
       }
 
       const rawRsiForFilter = indicators.rsi1h !== undefined ? indicators.rsi1h : 50;
+      const tickerHigh = Number(ticker.high || 0);
+      const tickerLow = Number(ticker.low || 0);
+      const estVolatility = tickerLow > 0 ? ((tickerHigh - tickerLow) / tickerLow) * 100 : 10;
       const structMatch = matchesStructuredFilter(
         rule,
         rawRsiForFilter,
-        x6 > 0 ? 2 : 1,
+        Number(indicators.volumeSpike) || (x6 > 0 ? 2 : 1),
         marketPulse.bias,
-        indicators.volatility || 10,
+        indicators.volatility ?? estVolatility,
         ob.imbalance,
         marketPulse.fomoIndex || 50,
-        indicators.change24h || 0
+        indicators.change24h ?? Number(ticker.percentage || 0)
       );
 
       if (structMatch.matched) {
@@ -388,9 +408,8 @@ export function evaluateKnowledgeBaseForSignal(
   for (const rule of aiKnowledgeBase) {
     if (!rule) continue;
 
-    // Smart retention: Do NOT discard penalty/warning rules just because isArchived=true!
+    if (rule.isArchived) continue;
     const isWarningRule = rule.filterAction === 'penalty' || rule.filterAction === 'block' || (rule.impact !== undefined && rule.impact < 0);
-    if (rule.isArchived && !isWarningRule) continue;
 
     let isAssetSpecific = false;
     let ruleSymbol: string | null = null;
@@ -508,7 +527,7 @@ export async function executeUpdateMarketPulse(ctx: QuantRiskEngineContext): Pro
     if (ctx.runAiGeneration && ctx.getMarketPulsePrompt) {
       const prompt = ctx.getMarketPulsePrompt(context, shortsSq, longsSq);
       const result = await ctx.runAiGeneration({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }
       });
@@ -571,7 +590,7 @@ export async function executeScrapeSocialSentiment(
     if (ctx.runAiGeneration && ctx.getSocialScraperPrompt) {
       const prompt = ctx.getSocialScraperPrompt(cleanSymbol, change, vol);
       const result = await ctx.runAiGeneration({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }
       });

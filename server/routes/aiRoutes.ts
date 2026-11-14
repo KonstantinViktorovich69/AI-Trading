@@ -6,6 +6,20 @@ import ccxt, { Exchange } from 'ccxt';
 import { MarketDataHubService, ensureExchangeMarket } from '../services/marketDataHubService.ts';
 import { isWeexApiSupported } from '../data/defaultStrategyKnowledge.ts';
 import { DEFAULT_EXCHANGE } from '../services/activeExchange.ts';
+import { evaluateStrategySignal } from '../services/strategyEngine.ts';
+import { getCostModel, roundTripCostPct } from '../services/costModel.ts';
+
+function formatPricePrecision(p: number): number {
+  if (!isFinite(p) || p <= 0) return 0;
+  const dec = p >= 100 ? 2 : p >= 1 ? 4 : p >= 0.01 ? 5 : p >= 0.0001 ? 6 : 8;
+  return Number(p.toFixed(dec));
+}
+
+function formatPriceStr(p: number): string {
+  if (!isFinite(p) || p <= 0) return '0';
+  const dec = p >= 100 ? 2 : p >= 1 ? 4 : p >= 0.01 ? 5 : p >= 0.0001 ? 6 : 8;
+  return p.toFixed(dec);
+}
 
 export interface AiRoutesContext {
   getGlobalSettings: () => any;
@@ -114,13 +128,11 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       );
 
       const response = await ctx.runAiGeneration({
+        model: 'gemini-4-hydrogen',
         contents: [
           { role: 'system', parts: [{ text: systemPrompt }] },
           { role: 'user', parts: [{ text: "Сгенерируй актуальный крипто-бюллетень Sentinel Shield в формате Markdown на русском языке." }] }
-        ],
-        config: {
-          temperature: 0.7
-        }
+        ]
       });
 
       const newsText = response?.text || "Ошибка генерации бюллетеня Sentinel Shield. Попробуйте обновить позже.";
@@ -237,11 +249,10 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       const rules = kb.filter(r => !r.isArchived).map(r => r.text).join('\n');
       const prompt = ctx.getCommitteePrompt(rules, JSON.stringify(data));
       const response = await ctx.runAiGeneration({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
-          responseMimeType: 'application/json',
-          temperature: 0.2
+          responseMimeType: 'application/json'
         }
       });
 
@@ -305,11 +316,10 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
           );
 
           const response = await ctx.runAiGeneration({
-            model: 'gemini-3.7-flash',
+            model: 'gemini-4-hydrogen',
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             config: {
-              responseMimeType: 'application/json',
-              temperature: 0.2
+              responseMimeType: 'application/json'
             }
           });
 
@@ -409,11 +419,10 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       const prompt = ctx.getSignalAnalysisPrompt(signalJson, rules);
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
-          responseMimeType: "application/json",
-          temperature: 0.2
+          responseMimeType: "application/json"
         }
       });
 
@@ -453,11 +462,10 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       let responseText = "";
       try {
         const response = await ctx.runAiGeneration({
-          model: "gemini-3.7-flash",
+          model: "gemini-4-hydrogen",
           contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],
           config: {
-            responseMimeType: "application/json",
-            temperature: 0.7
+            responseMimeType: "application/json"
           }
         });
         if (response && response.text) responseText = response.text;
@@ -523,64 +531,72 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
         }
       }
     } else if (trade.mode === 'AUTO' && action === 'DCA') {
-      const dcaAmount = trade.amount * 0.5;
-      const tradeLeverage = Math.max(1, Number(trade.leverage || 1));
-      const dcaMargin = Number((dcaAmount / tradeLeverage).toFixed(2));
-      const oldEntry = trade.entryPrice;
-      const currentCoins = trade.amount / oldEntry;
-      const newCoins = dcaAmount / currentPrice;
-      const totalMargin = trade.amount + dcaAmount;
-      const totalCoins = currentCoins + newCoins;
-      const newEntryPrice = totalMargin / totalCoins;
+      const globalSettings = ctx.getGlobalSettings ? ctx.getGlobalSettings() : {};
+      if (globalSettings?.isDcaEnabled === false) {
+        trade.aiAdvice = `Усреднение (DCA) отключено в настройках (isDcaEnabled=false). Позиция удержана.`;
+      } else {
+        const dcaAmount = trade.amount * 0.5;
+        const tradeLeverage = Math.max(1, Number(trade.leverage || 1));
+        const dcaMargin = Number((dcaAmount / tradeLeverage).toFixed(2));
+        const oldEntry = trade.entryPrice;
+        const currentCoins = trade.amount / oldEntry;
+        const newCoins = dcaAmount / currentPrice;
+        const totalNotional = trade.amount + dcaAmount;
+        const totalCoins = currentCoins + newCoins;
+        const newEntryPrice = totalNotional / totalCoins;
 
-      if (trade.takeProfit) {
-        trade.takeProfit = Number((newEntryPrice * (trade.takeProfit / oldEntry)).toFixed(5));
-      }
-      if (trade.stopLoss) {
-        trade.stopLoss = Number((newEntryPrice * (trade.stopLoss / oldEntry)).toFixed(5));
-      }
-      if (trade.tpStages) {
-        trade.tpStages.forEach((stage: any) => {
-          stage.targetPrice = Number((newEntryPrice * (stage.targetPrice / oldEntry)).toFixed(5));
-        });
-      }
+        // Read previous margin BEFORE mutating trade.amount so initial margin is never double-counted
+        const prevMargin = Number((trade as any).margin || (trade.amount / tradeLeverage));
 
-      trade.entryPrice = newEntryPrice;
-      trade.amount = totalMargin;
-      trade.margin = Number(((trade.margin || (trade.amount / tradeLeverage)) + dcaMargin).toFixed(2));
-      trade.initialMargin = trade.margin;
-      if (!trade.history) trade.history = [];
-      trade.history.push({ time: Date.now(), type: 'AVERAGE', price: currentPrice, amount: dcaAmount, margin: dcaMargin });
-      if (!(trade as any).isAutoLearning) {
-        ctx.setVirtualBalance(Number((ctx.getVirtualBalance() - dcaMargin).toFixed(2)));
-        ctx.saveBalanceDB();
-      }
-
-      const isRealLabel = trade.isReal ? "REAL" : "VIRTUAL";
-      ctx.logStructured(
-        'info',
-        'AUTOPILOT',
-        `AI Manager executed DCA (${isRealLabel}) for ${trade.symbol}. Added Margin: $${dcaAmount.toFixed(2)} USDT at price $${currentPrice.toFixed(5)}. New average entry: $${trade.entryPrice.toFixed(5)}.`,
-        trade.symbol,
-        { tradeId: trade.id, amount: dcaAmount, price: currentPrice, newEntry: trade.entryPrice, isReal: trade.isReal }
-      );
-      if (trade.isReal) {
-        ctx.sendTelegramMessage(`🤖 <b>AI Manager: Executed DCA (${trade.mode})</b>\n\nSymbol: ${trade.symbol}\nPrice: $${currentPrice}\nNew Entry: $${trade.entryPrice.toFixed(5)}\nNew TP: $${trade.takeProfit?.toFixed(5)}`);
-        trade.isExchangeSlTpSynced = false;
-        trade.needsSlTpSync = true;
-        ctx.saveTradeDB(trade);
-        ctx.setRealTradeSlTpOnExchange(trade.symbol, trade.side, trade.stopLoss, trade.takeProfit)
-          .then(success => {
-            if (success) {
-              trade.isExchangeSlTpSynced = true;
-              trade.needsSlTpSync = false;
-              ctx.saveTradeDB(trade);
-              console.log(`[AI UPDATE DCA REAL SL/TP SYNC] Inline sync succeeded for ${trade.symbol}`);
-            }
-          })
-          .catch(err => {
-            console.log(`[AI UPDATE DCA REAL SL/TP SYNC ERR]:`, err.message);
+        if (trade.takeProfit) {
+          trade.takeProfit = formatPricePrecision(newEntryPrice * (trade.takeProfit / oldEntry));
+        }
+        if (trade.stopLoss) {
+          trade.stopLoss = formatPricePrecision(newEntryPrice * (trade.stopLoss / oldEntry));
+        }
+        if (trade.tpStages) {
+          trade.tpStages.forEach((stage: any) => {
+            stage.targetPrice = formatPricePrecision(newEntryPrice * (stage.targetPrice / oldEntry));
           });
+        }
+
+        trade.entryPrice = formatPricePrecision(newEntryPrice);
+        trade.amount = totalNotional;
+        trade.margin = Number((prevMargin + dcaMargin).toFixed(2));
+        trade.initialMargin = trade.margin;
+        if (!trade.history) trade.history = [];
+        trade.history.push({ time: Date.now(), type: 'AVERAGE', price: currentPrice, amount: dcaAmount, margin: dcaMargin });
+        if (!trade.isReal && !(trade as any).isAutoLearning) {
+          ctx.setVirtualBalance(Number((ctx.getVirtualBalance() - dcaMargin).toFixed(2)));
+          ctx.saveBalanceDB();
+        }
+
+        const isRealLabel = trade.isReal ? "REAL" : "VIRTUAL";
+        ctx.logStructured(
+          'info',
+          'AUTOPILOT',
+          `AI Manager executed DCA (${isRealLabel}) for ${trade.symbol}. Added Notional: $${dcaAmount.toFixed(2)} USDT at price $${formatPriceStr(currentPrice)}. New average entry: $${formatPriceStr(trade.entryPrice)}.`,
+          trade.symbol,
+          { tradeId: trade.id, amount: dcaAmount, price: currentPrice, newEntry: trade.entryPrice, isReal: trade.isReal }
+        );
+        if (trade.isReal) {
+          ctx.sendTelegramMessage(`🤖 <b>AI Manager: Executed DCA (${trade.mode})</b>\n\nSymbol: ${trade.symbol}\nPrice: $${formatPriceStr(currentPrice)}\nNew Entry: $${formatPriceStr(trade.entryPrice)}\nNew TP: $${trade.takeProfit ? formatPriceStr(trade.takeProfit) : 'N/A'}`);
+          trade.isExchangeSlTpSynced = false;
+          trade.needsSlTpSync = true;
+          ctx.saveTradeDB(trade);
+          ctx.setRealTradeSlTpOnExchange(trade.symbol, trade.side, trade.stopLoss, trade.takeProfit)
+            .then(success => {
+              if (success) {
+                trade.isExchangeSlTpSynced = true;
+                trade.needsSlTpSync = false;
+                ctx.saveTradeDB(trade);
+                console.log(`[AI UPDATE DCA REAL SL/TP SYNC] Inline sync succeeded for ${trade.symbol}`);
+              }
+            })
+            .catch(err => {
+              console.log(`[AI UPDATE DCA REAL SL/TP SYNC ERR]:`, err.message);
+            });
+        }
       }
     } else if (trade.mode === 'AUTO' && action === 'UPDATE_SL' && newSl) {
       const oldSl = trade.stopLoss;
@@ -670,71 +686,197 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
     }
 
     try {
+      const globalSettings = ctx.getGlobalSettings ? ctx.getGlobalSettings() : {};
+      const costModel = getCostModel(globalSettings);
+      const roundTripCostRatio = roundTripCostPct(costModel); // e.g. 0.0016 (0.16% of notional)
+      const leverage = Math.max(1, Number(globalSettings?.defaultLeverage || 5));
+
       let totalTrades = 0;
       let totalWins = 0;
       let totalPnLPercent = 0;
-      let minPnL = 0;
+      let peakPnLPercent = 0;
+      let maxDrawdown = 0;
       let currentPnLPercent = 0;
 
       const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
       const activeExchanges: Record<string, Exchange> = {};
+      const globalRaw = ctx.getGlobalRawOHLCV?.() || {};
 
       for (const target of targets) {
-        let symbol = target.symbol;
-        const exchangeName = (target.exchange || DEFAULT_EXCHANGE).toLowerCase();
-
-        if (!symbol.includes('/')) symbol = symbol.replace('USDT', '/USDT');
+        let symbol = String(target.symbol || '');
+        if (!symbol) continue;
+        const exchangeName = (target.exchange || DEFAULT_EXCHANGE || 'weex').toLowerCase();
+        if (!symbol.includes('/')) symbol = symbol.replace(/USDT$/i, '/USDT');
+        const cleanSym = symbol.replace(/[\/:]/g, '').toUpperCase();
+        const baseSym = cleanSym.replace(/USDT$/, '');
 
         try {
-          if (!activeExchanges[exchangeName]) {
-            const exClass = (ccxt as any)[exchangeName];
-            if (exClass) {
-              activeExchanges[exchangeName] = new exClass({ enableRateLimit: true });
-            } else {
-              console.error(`Backtest: Exchange ${exchangeName} not found in CCXT`);
-              continue;
+          let ohlcv: any[][] | null = null;
+
+          // 1. Prefer cached candles in offline/test mode or if exchange is blocked
+          const cachedCandles = globalRaw[cleanSym]?.['1h'] || globalRaw[cleanSym]?.['15m'] || globalRaw[baseSym]?.['1h'] || globalRaw[baseSym]?.['15m'];
+          const offlineOnly = process.env.OFFLINE_MODE === '1' || process.env.TEST_MODE === '1';
+
+          if (offlineOnly && Array.isArray(cachedCandles) && cachedCandles.length >= 20) {
+            ohlcv = cachedCandles;
+          } else if (!offlineOnly) {
+            if (!activeExchanges[exchangeName]) {
+              const exClass = (ccxt as any)[exchangeName];
+              if (exClass) {
+                activeExchanges[exchangeName] = new exClass({
+                  enableRateLimit: true,
+                  timeout: 8000,
+                  headers: exchangeName === 'weex' ? MarketDataHubService.WEEX_HEADERS : undefined
+                });
+              }
+            }
+            const currentExchange = activeExchanges[exchangeName];
+            if (currentExchange) {
+              try {
+                const curSymbol = ctx.formatFuturesSymbol ? ctx.formatFuturesSymbol(symbol, exchangeName) : symbol;
+                ensureExchangeMarket(currentExchange, curSymbol);
+                ohlcv = await currentExchange.fetchOHLCV(curSymbol, '1h', since, 200);
+              } catch {
+                // Fallback to cached candles below if network fails
+              }
             }
           }
 
-          const currentExchange = activeExchanges[exchangeName];
-          const ohlcv = await currentExchange.fetchOHLCV(symbol, '1h', since, 200);
-          if (ohlcv.length < 20) continue;
+          if ((!ohlcv || ohlcv.length < 20) && Array.isArray(cachedCandles) && cachedCandles.length >= 20) {
+            ohlcv = cachedCandles;
+          }
+          if (!ohlcv || ohlcv.length < 20) continue;
 
-          const closes = ohlcv.map(candle => candle[4] as number);
+          const closes = ohlcv.map(c => Number(c[4]));
+          const highs = ohlcv.map(c => Number(c[2]));
+          const lows = ohlcv.map(c => Number(c[3]));
+          const opens = ohlcv.map(c => Number(c[1]));
+          const volumes = ohlcv.map(c => Number(c[5] || 0));
           const rsiValues = RSI.calculate({ values: closes, period: 14 });
 
-          let inPosition = false;
-          let entryPrice = 0;
+          let activeTrade: {
+            id: string;
+            side: 'LONG' | 'SHORT';
+            entryPrice: number;
+            stopLoss: number;
+            takeProfit: number;
+            highestPrice: number;
+            lowestPrice: number;
+            createdAt: number;
+          } | null = null;
 
-          for (let i = 14; i < closes.length; i++) {
-            const currentRSI = rsiValues[i - 14];
+          for (let i = 15; i < ohlcv.length; i++) {
             const price = closes[i];
+            const high = highs[i];
+            const low = lows[i];
+            const open = opens[i];
+            const barTime = Number(ohlcv[i][0] || Date.now());
+            const currentRSI = rsiValues[i - 14] ?? 50;
+            if (!isFinite(price) || price <= 0) continue;
 
-            if (!inPosition) {
-              const prevClose10 = closes[Math.max(0, i - 10)];
-              const pump = prevClose10 > 0 ? ((price - prevClose10) / prevClose10) * 100 : 0;
+            // Compute rolling VWAP & simple SAR proxy from recent 14 bars
+            let pvSum = 0;
+            let vSum = 0;
+            let rollHigh = high;
+            let rollLow = low;
+            for (let k = Math.max(0, i - 14); k <= i; k++) {
+              const tp = (highs[k] + lows[k] + closes[k]) / 3;
+              const vol = Math.max(1, volumes[k]);
+              pvSum += tp * vol;
+              vSum += vol;
+              if (highs[k] > rollHigh) rollHigh = highs[k];
+              if (lows[k] < rollLow) rollLow = lows[k];
+            }
+            const vwap = vSum > 0 ? pvSum / vSum : price;
+            const prevClose = closes[i - 1];
+            const sar = price < prevClose ? rollHigh : rollLow;
+            const lookbackIdx = Math.max(0, i - 10);
+            const change24h = closes[lookbackIdx] > 0 ? ((price - closes[lookbackIdx]) / closes[lookbackIdx]) * 100 : 0;
+            const avgVol = vSum / 15;
+            const barQuoteVol = Math.max(100000, volumes[i] * price * 24);
 
-              if (currentRSI > 75 && pump > 5) {
-                inPosition = true;
-                entryPrice = price;
+            if (!activeTrade) {
+              const decision = evaluateStrategySignal({
+                symbol: cleanSym,
+                marketType: 'FUTURES',
+                tradingMode: 'FUTURES',
+                price,
+                high,
+                low,
+                open,
+                vwap,
+                sar,
+                rsi: currentRSI,
+                change24h,
+                volume24h: barQuoteVol,
+                avgVolume: Math.max(50000, avgVol * price * 24),
+                bidSpreadPct: 0.0005,
+                fundingRate: 0.0001,
+                activeStrategy: globalSettings?.activeStrategy,
+                allowedDirections: globalSettings?.allowedTradingDirections || 'BOTH',
+                isAggressiveMode: globalSettings?.autopilotAggressiveness === 'aggressive'
+              });
+
+              if (decision.action !== 'NO_TRADE' && (decision.side === 'LONG' || decision.side === 'SHORT')) {
+                const slDist = 0.025;
+                const tpDist = 0.05;
+                activeTrade = {
+                  id: `bt_${cleanSym}_${i}`,
+                  side: decision.side,
+                  entryPrice: price,
+                  stopLoss: decision.side === 'LONG' ? price * (1 - slDist) : price * (1 + slDist),
+                  takeProfit: decision.side === 'LONG' ? price * (1 + tpDist) : price * (1 - tpDist),
+                  highestPrice: price,
+                  lowestPrice: price,
+                  createdAt: barTime
+                };
               }
             } else {
-              const currentDrop = ((entryPrice - price) / entryPrice) * 100;
-              const currentPumpFromEntry = ((price - entryPrice) / entryPrice) * 100;
+              if (high > activeTrade.highestPrice) activeTrade.highestPrice = high;
+              if (low < activeTrade.lowestPrice) activeTrade.lowestPrice = low;
 
-              if (currentDrop >= 3) {
+              const exitDecision = ctx.evaluateExitPolicy(
+                {
+                  id: activeTrade.id,
+                  symbol: cleanSym,
+                  side: activeTrade.side,
+                  entryPrice: activeTrade.entryPrice,
+                  currentPrice: price,
+                  amount: 100,
+                  leverage,
+                  stopLoss: activeTrade.stopLoss,
+                  takeProfit: activeTrade.takeProfit,
+                  highestPrice: activeTrade.highestPrice,
+                  lowestPrice: activeTrade.lowestPrice,
+                  createdAt: activeTrade.createdAt
+                },
+                {
+                  currentPrice: price,
+                  bid: price * (1 - 0.0002),
+                  ask: price * (1 + 0.0002),
+                  estimatedFeePct: costModel.feeRatePerSide,
+                  estimatedSlippagePct: costModel.slippageRoundTrip,
+                  currentTime: barTime
+                }
+              );
+
+              if (exitDecision.kind === 'FULL_CLOSE' || exitDecision.kind === 'EMERGENCY_FULL_CLOSE') {
+                const rawMovePct = activeTrade.side === 'LONG'
+                  ? ((price - activeTrade.entryPrice) / activeTrade.entryPrice) * 100
+                  : ((activeTrade.entryPrice - price) / activeTrade.entryPrice) * 100;
+                const netLeveragedPnlPct = (rawMovePct - roundTripCostRatio * 100) * leverage;
+
                 totalTrades++;
-                totalWins++;
-                totalPnLPercent += 3;
-                currentPnLPercent += 3;
-                inPosition = false;
-              } else if (currentPumpFromEntry >= 2) {
-                totalTrades++;
-                totalPnLPercent -= 2;
-                currentPnLPercent -= 2;
-                inPosition = false;
+                if (netLeveragedPnlPct > 0) totalWins++;
+                totalPnLPercent += netLeveragedPnlPct;
+                currentPnLPercent += netLeveragedPnlPct;
+                if (currentPnLPercent > peakPnLPercent) peakPnLPercent = currentPnLPercent;
+                const dd = peakPnLPercent - currentPnLPercent;
+                if (dd > maxDrawdown) maxDrawdown = dd;
+                activeTrade = null;
+              } else if (exitDecision.kind === 'MOVE_STOP' && typeof exitDecision.newStopLoss === 'number') {
+                activeTrade.stopLoss = exitDecision.newStopLoss;
               }
-              if (currentPnLPercent < minPnL) minPnL = currentPnLPercent;
             }
           }
         } catch (e) {
@@ -742,17 +884,13 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
         }
       }
 
-      const leverage = 5;
-      totalPnLPercent *= leverage;
-      minPnL *= leverage;
-
       res.json({
         success: true,
         results: {
           pnl: parseFloat(totalPnLPercent.toFixed(2)),
           winRate: totalTrades > 0 ? parseFloat(((totalWins / totalTrades) * 100).toFixed(2)) : 0,
           totalTrades,
-          maxDrawdown: parseFloat(Math.abs(minPnL).toFixed(2))
+          maxDrawdown: parseFloat(Math.abs(maxDrawdown).toFixed(2))
         }
       });
     } catch (error: any) {

@@ -35,20 +35,54 @@ export interface MarketSignalScannerContext {
 }
 
 /**
- * Традиционные фондовые токены/акции США, которые не должны сканироваться крипто-скальпером
+ * Традиционные фондовые токены/акции, ETF, индексы, сырьё и FX, которые не должны сканироваться крипто-скальпером
  */
 export const TRADITIONAL_EQUITY_SYMBOLS = new Set([
-  'DELL', 'AAL', 'PYPL', 'CRM', 'ALAB', 'MUU', 'POET', 'QNTX', 'RGTI', 'IONQ',
-  'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'GOOGL', 'META', 'AMD', 'INTC', 'COIN',
-  'MSTR', 'PLTR', 'BABA', 'UVXY', 'SPY', 'QQQ', 'SOXL', 'MSTU', 'NVDL',
-  'DKNG', 'HPE', 'BIIB', 'HOOD', 'UBER', 'DIS', 'NFLX', 'BA', 'NKE', 'MARA',
-  'RIOT', 'CLSK', 'LCID', 'RIVN', 'SOFI', 'SMCI', 'ARM', 'PANW', 'CRWD', 'MRVL', 'SNOW', 'SQ', 'ROKU',
-  'SAMSUNG', 'TWLO', 'RBLX', 'SONY', 'BIDU', 'JD', 'PDD', 'NIO', 'XPEV', 'LI', 'TSM', 'ASML', 'BILI'
+  // US & Global Tech / Hardware / Equities
+  'DELL', 'AAL', 'PYPL', 'PAYP', 'CRM', 'ALAB', 'MUU', 'MU', 'POET', 'QNTX', 'RGTI', 'IONQ',
+  'AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'GOOGL', 'GOOG', 'META', 'AMD', 'INTC', 'COIN',
+  'MSTR', 'STRC', 'PLTR', 'BABA', 'DKNG', 'HPE', 'BIIB', 'HOOD', 'UBER', 'DIS', 'NFLX', 'BA', 'NKE',
+  'MARA', 'RIOT', 'CLSK', 'CIFR', 'IREN', 'APLD', 'HUT', 'LCID', 'RIVN', 'SOFI', 'SMCI', 'ARM',
+  'PANW', 'CRWD', 'MRVL', 'SNOW', 'SQ', 'ROKU', 'TWLO', 'RBLX', 'SONY', 'BIDU', 'JD', 'PDD',
+  'NIO', 'XPEV', 'LI', 'TSM', 'TSMC', 'ASML', 'BILI', 'ORCL', 'AVGO', 'MA', 'KO', 'V', 'XOM',
+  'JPM', 'LLY', 'NVO', 'UNH', 'BLK', 'AMAT', 'AXON', 'HIMS', 'VLO', 'VRT', 'GEV', 'CRWV',
+  'RVMD', 'KOPN', 'VRTX', 'SKHYNIX', 'SKHY', 'SKSQUARE', 'SNDK', 'CEG', 'RKLB', 'LITE', 'BWXT',
+  'BRKB', 'HD', 'AMC', 'GE', 'ZM', 'ISRG', 'LRCX', 'OXY', 'SHOP', 'EBAY', 'FSLR', 'VST', 'APP',
+  'TER', 'FUTU', 'CMCSA', 'FCX', 'OUST', 'FLNC', 'NTAP', 'TEM', 'SLB', 'CIEN', 'ANET', 'DDOG',
+  'MDB', 'NET', 'OKTA', 'ZS', 'FTNT', 'CRML', 'RBRK', 'PATH', 'AEHR', 'AAOI', 'OKLO', 'SMR',
+  'ASTS', 'JOBY', 'GME', 'NOK', 'ADBE', 'ACN', 'NOW', 'TEAM', 'WDAY', 'AMGN', 'GILD', 'REGN',
+  'MRK', 'PFE', 'JNJ', 'AZN', 'DHR', 'TMO', 'CAH', 'MCK', 'VEEV', 'VKTX', 'TWST', 'CVS', 'WMT',
+  'COST', 'TGT', 'MCD', 'SBUX', 'CMG', 'LULU', 'MNST', 'PEP', 'MO', 'CSCO', 'IBM', 'TXN', 'MCHP',
+  'KLAC', 'CDNS', 'SNPS', 'MPWR', 'GFS', 'UMC', 'TSEM', 'AKAM', 'FLEX', 'GLW', 'ETN', 'ROK',
+  'EME', 'PWR', 'JCI', 'CAT', 'DE', 'LMT', 'UNP', 'DAL', 'CCL', 'ABNB', 'BKNG', 'MAR', 'HLT',
+  'AXP', 'BAC', 'GS', 'MS', 'COF', 'BX', 'KKR', 'IBKR', 'HSBC', 'ITUB', 'NU', 'FRHC', 'MELI',
+  'CVNA', 'DJT', 'RDDT', 'SPOT', 'FOXA', 'VZ', 'COP', 'DVN', 'PSX', 'MPC', 'EQT', 'NEM', 'HL',
+  'CDE', 'APH', 'CLS', 'DHI', 'INTU', 'GPRO', 'SHEL', 'LIN', 'APD', 'NXT', 'BLSH', 'FTAI',
+  'KMB', 'FLR', 'LWLG', 'PLD', 'AON', 'MSCI', 'HEI', 'ONDS', 'STONK',
+  // Asian Equities & Pre-IPO Corporate Tokens
+  'SAMSUNG', 'SAMSUNGEM', 'HYUNDAI', 'PANASONIC', 'LGELECTRONICS', 'LGENERGY', 'SKINNOV',
+  'HONHAI', 'KOKUSAI', 'MEDIATEK', 'LENOVO', 'NINTENDO', 'SOFTBANK', 'TOYOTA', 'HITACHI',
+  'MITSUBISHI', 'RENESAS', 'MURATA', 'FANUC', 'KEYENCE', 'SHINETSU', 'TAIYOYUDEN', 'FASTRETAIL',
+  'DISCO', 'LASERTEC', 'AJINOMOTO', 'TAKEDA', 'FURUKAWA', 'FUJIKURA', 'SUMIELEC', 'MUFG',
+  'RECRUIT', 'MEITUAN', 'XIAOMI', 'BYD', 'BABAHK', 'KUAISHOU', 'POPMART', 'WUXIBIO', 'GENSCRIPT',
+  'INNOVENT', 'AKESO', 'SUNAC', 'ANTA', 'NANYATECH', 'NANYAPLST', 'UNIMICRON', 'YAGEO',
+  'ALCHIP', 'LARGAN', 'BIZLINK', 'DELTAELEC', 'WINBOND', 'GLOBALWFR', 'ZHENDING', 'TWDELTA',
+  'HANWHAAERO', 'HANMI', 'DOOSENER', 'KBFIN', 'ANTHROPIC', 'OPENAI', 'UNITREE', 'ANDURIL',
+  'KALSHI', 'POLYMARKET',
+  // ETFs, Leveraged Equity Products, Indices, TradFi Commodities & FX
+  'UVXY', 'SPY', 'QQQ', 'SOXL', 'MSTU', 'NVDL', 'NVD', 'CONL', 'TSLL', 'GGLL', 'SOXS', 'SQQQ',
+  'TQQQ', 'TQQQX', 'IWM', 'DIA', 'VGT', 'VUG', 'IGV', 'XLK', 'XLE', 'XLU', 'XLV', 'XLI',
+  'XBI', 'IBB', 'ARKK', 'SOXX', 'URNM', 'SLX', 'EWJ', 'EWZ', 'EWZS', 'EWT', 'EIDO', 'INDA',
+  'IEFA', 'KORU', 'KOSPI', 'KODEX200', 'CSOPSAMSUNG2L', 'TMF', 'TLT', 'TBT', 'USO', 'GLD', 'SLV',
+  'US30', 'NAS100', 'GER40', 'HK50', 'USDEX', 'XAU', 'XAG', 'XPD', 'XAL', 'XNI', 'XPB', 'XZN',
+  'XCU', 'COPPER', 'NATGAS', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'BRL', 'USDBRL'
 ]);
 
 export function isTraditionalEquitySymbol(symbol: string): boolean {
   if (!symbol) return false;
   const base = symbol.split(':')[0].replace('/USDT', '').replace('USDT', '').replace(/[\/:]/g, '').toUpperCase();
+  if (!base) return false;
+  if (base.endsWith('STOCK') || /^HK\d{4}$/.test(base)) return true;
   return TRADITIONAL_EQUITY_SYMBOLS.has(base);
 }
 
@@ -311,10 +345,12 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
       const minVolumeRequired = 50000;
       const isVolumeQualified = volume >= minVolumeRequired || volumeSpike >= 4.0;
 
-      if (isVolumeQualified) {
+      // Только при наличии реальных OHLCV свечей разрешаем генерацию направленных паттернов.
+      // Монеты без полного набора OHLCV остаются NEUTRAL с dataQuality: 'ESTIMATED' и не торгуются по эвристикам тикера.
+      if (isVolumeQualified && hasRealOhlcv) {
         // --- SHORT PATTERNS ---
         // Слив монеты: требует реальных OHLCV, подтвержденного переключения SAR на вершине, импульса >= 7% и фитиля съема ликвидности
-        if (hasRealOhlcv && (change >= 7.0 || riseFromLow >= 8.0) && isSarBearishFlipped1m && volumeSpike >= 1.5 && (wicks.topPct >= 0.35 || dropFromRecentHigh >= 1.2)) {
+        if ((change >= 7.0 || riseFromLow >= 8.0) && isSarBearishFlipped1m && volumeSpike >= 1.5 && (wicks.topPct >= 0.35 || dropFromRecentHigh >= 1.2)) {
           matchedPattern = '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)';
           signalSide = 'SHORT';
           scoreBonus = 16;
@@ -349,7 +385,7 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
         }
         // --- LONG PATTERNS ---
         // Пролив монеты: требует реальных OHLCV, подтвержденного бычьего SAR, просадки <= -7% и фитиля откупа
-        else if (hasRealOhlcv && (change <= -7.0 || dropFromRecentHigh >= 8.0) && isSarBullishFlipped1m && volumeSpike >= 1.5 && (wicks.bottomPct >= 0.35 || riseFromLow >= 1.2)) {
+        else if ((change <= -7.0 || dropFromRecentHigh >= 8.0) && isSarBullishFlipped1m && volumeSpike >= 1.5 && (wicks.bottomPct >= 0.35 || riseFromLow >= 1.2)) {
           matchedPattern = '💥 ПРОЛИВ (SAR Bottom Reversal)';
           signalSide = 'LONG';
           scoreBonus = 16;
@@ -608,6 +644,7 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
           hasFvgAbove: !!cachedIndicators.hasFvgAbove
         },
         smartLimitTarget: signalSide === 'SHORT' ? tickerPrice * 1.002 : (signalSide === 'LONG' ? tickerPrice * 0.998 : tickerPrice),
+        volumeSpike,
         isLiquiditySweep: isLiquiditySweepConfirmed,
         timestamp: Date.now()
       });

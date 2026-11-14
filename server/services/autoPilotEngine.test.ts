@@ -1046,5 +1046,69 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
         expect(opened.entryDiagnostics.shadow.pAdjustmentWouldBeZero).toBe(false);
       });
     });
+
+    describe('5. Audit Regression Guards (OTE Deduplication & None/Flat Pattern Rejection)', () => {
+      it('does NOT queue duplicate OTE pending candidates for the same symbol on consecutive autopilot ticks', async () => {
+        clearOtePendingCandidates();
+        const mockSignals = [
+          { rawSymbol: 'BTC/USDT', signal: 'LONG', aiScore: 98, price: 100, type: 'SAR', volumeSpike: 2.0, volume24h: 500000 }
+        ];
+
+        const { deps } = createMockAutopilotDeps({
+          getGlobalSettings: () => ({
+            isAutopilotEnabled: true,
+            isOteEntryEnabled: true,
+            tradingMode: 'virtual',
+            tradingExecutionMode: 'auto',
+            autopilotAggressiveness: 'aggressive',
+            allowedTradingDirections: 'BOTH',
+            maxActivePositionsVirtual: 6,
+            maxSameDirectionPositions: 3,
+            isCommitteeConsensusCheckEnabled: false
+          }),
+          getGlobalTrueOhlcv: () => ({
+            'BTCUSDT': { localLow5m: 90, localHigh5m: 110 }
+          }),
+          isCircuitBreakerActive: () => false,
+          getCacheSignals: () => ({
+            data: mockSignals,
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING',
+            marketHealth: 80,
+            btcTrend24h: 0.5
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+        await runAutopilotAndVirtualTradeEntry(deps);
+
+        expect(getOtePendingCandidates()).toHaveLength(1);
+        clearOtePendingCandidates();
+      });
+
+      it('rejects signals with matchedPattern None or type Флэт even when 24h volume is high', async () => {
+        const executeMainVirtualAutoEntry = vi.fn(async (params) => ({
+          executed: true,
+          status: 'OPEN',
+          trade: { id: 'VT-SHOULD-NOT-OPEN', symbol: params.symbol }
+        }));
+
+        const { deps } = createMockAutopilotDeps({
+          executeMainVirtualAutoEntry,
+          getCacheSignals: () => ({
+            data: [
+              { rawSymbol: 'ETH/USDT', signal: 'SHORT', aiScore: 95, price: 3000, type: 'Флэт', matchedPattern: 'None', volumeSpike: 2.5, volume24h: 5000000 }
+            ],
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING',
+            marketHealth: 80,
+            btcTrend24h: 0.5
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+        expect(executeMainVirtualAutoEntry).not.toHaveBeenCalled();
+      });
+    });
   });
 });

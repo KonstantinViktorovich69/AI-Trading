@@ -181,7 +181,10 @@ export async function trainQuantModel(context: QuantModelTrainerContext): Promis
     const rawDataset: Array<{ x: number[]; y: number; w: number }> = [];
 
     for (const t of closedEligibleTrades) {
-      const hasFeatures = Array.isArray((t as any).features) && (t as any).features.length > 0;
+      const rawFeatures = (t as any).features;
+      const hasFeatures = Array.isArray(rawFeatures) &&
+        rawFeatures.length > 0 &&
+        rawFeatures.some((v: any) => typeof v === 'number' && Number.isFinite(v) && v !== 0);
       if (!hasFeatures) {
         skippedNoFeatures++;
         continue;
@@ -334,8 +337,12 @@ export async function trainQuantModel(context: QuantModelTrainerContext): Promis
     }
     
     // KILLER FEATURE 4: Knowledge Base Auto-Sync (Autonomous Multivariable Rule Generation)
-    // If we have enough profitable trades, synthesize diverse rules based on traits
-    const profitableTrades = closedTrades.filter(t => (t as any).outcome === 1);
+    // If we have enough profitable trades with valid non-zero features, synthesize diverse rules based on traits
+    const profitableTrades = closedTrades.filter(t =>
+      (t as any).outcome === 1 &&
+      Array.isArray((t as any).features) &&
+      (t as any).features.some((v: any) => typeof v === 'number' && Number.isFinite(v) && v !== 0)
+    );
     const aiKnowledgeBase = context.getAiKnowledgeBase();
     if (profitableTrades.length >= 15) {
       // 1. Analyze RSI feature: index 1 (rsi-50)

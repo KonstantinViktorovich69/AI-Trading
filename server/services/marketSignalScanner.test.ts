@@ -149,5 +149,32 @@ describe('marketSignalScanner', () => {
       expect(cachedSignals.data[0].matchedPattern).toContain('СЛИВ МОНЕТЫ');
       expect(cachedSignals.marketRegime).toBe('TREND_UP'); // btc change > 2.5
     });
+
+    it('keeps ESTIMATED ticker-only coins NEUTRAL instead of firing fake directional patterns', async () => {
+      const estContext: MarketSignalScannerContext = {
+        ...mockContext,
+        getGlobalTrueOHLCV: () => ({}),
+        getGlobalCcxtTickers: () => ({
+          weex: {
+            'DOGE/USDT:USDT': {
+              last: 0.15,
+              percentage: -12.0,
+              high: 0.18,
+              low: 0.145,
+              open: 0.17,
+              quoteVolume: 500000
+            }
+          }
+        })
+      };
+
+      await executeUpdateSignalsCache(estContext);
+
+      expect(cachedSignals).toBeDefined();
+      expect(cachedSignals.data).toHaveLength(1);
+      expect(cachedSignals.data[0].dataQuality).toBe('ESTIMATED');
+      expect(cachedSignals.data[0].signal).toBe('NEUTRAL');
+      expect(cachedSignals.data[0].matchedPattern).toBe('None');
+    });
   });
 });

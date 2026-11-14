@@ -599,11 +599,7 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
     }
   });
 
-  // POST /api/paper-trade/close
-  router.post('/api/paper-trade/close', (req: Request, res: Response) => {
-    handleTradeClose(req, res, ctx);
-  });
-  // Also handle without prefix if router is mounted at /api
+  // POST /api/paper-trade/close (router is mounted at /api)
   router.post('/paper-trade/close', (req: Request, res: Response) => {
     handleTradeClose(req, res, ctx);
   });

@@ -220,11 +220,10 @@ export function createRetrospectiveEngine(ctx: RetrospectiveEngineContext) {
       `;
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: retrospectivePrompt }] }],
         config: { 
-          responseMimeType: "application/json", 
-          temperature: 0.3
+          responseMimeType: "application/json"
         }
       });
 

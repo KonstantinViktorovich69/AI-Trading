@@ -74,11 +74,10 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       const prompt = ctx.getArchivistPrompt(currentRules, 0.35, 3);
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
-          temperature: 0.1,
           responseSchema: {
             type: Type.ARRAY,
             items: {
@@ -353,11 +352,10 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       );
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
-          temperature: 0.1,
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -611,11 +609,10 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       let rawDecision: any = null;
       try {
         const response = await ctx.runAiGeneration({
-          model: 'gemini-3.7-flash',
+          model: 'gemini-4-hydrogen',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
-            responseMimeType: "application/json",
-            temperature: 0.2
+            responseMimeType: "application/json"
           }
         });
         if (response && response.text) {

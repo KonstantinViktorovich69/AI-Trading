@@ -6,7 +6,7 @@ import { cn } from '../lib/utils';
 import { mergeTradesById as mergeTradesByIdHelper } from '../lib/mergeTrades';
 import { buildSmartTaskFallback } from '../lib/smartTaskFallback';
 
-const TradingChart = lazy(() => import('./TradingChart').then(m => ({ default: m.default || m.TradingChart })));
+import { TradingChart } from './TradingChart';
 const AnalyticsTab = lazy(() => import('./AnalyticsTab').then(m => ({ default: m.default || m.AnalyticsTab })));
 const SignalAnalyticsDashboard = lazy(() => import('./SignalAnalyticsDashboard').then(m => ({ default: m.default || m.SignalAnalyticsDashboard })));
 const FundingArbitragePanel = lazy(() => import('./FundingArbitragePanel').then(m => ({ default: m.default || m.FundingArbitragePanel })));

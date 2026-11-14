@@ -1,5 +1,5 @@
 import ccxt from 'ccxt';
-import { normalizeSymbol } from '../quant.ts';
+import { normalizeSymbol, cleanSymbol } from '../quant.ts';
 import { calculateKelly, calculateAdaptiveCloseRatios } from '../quant.ts';
 import { logStructured } from '../utils/logger.ts';
 import { executePaperTradeOpenTransaction, executePaperTradeCloseTransaction } from './paperTradeTransaction.ts';
@@ -9,7 +9,7 @@ import { createAutopilotTradeIntentFromScanner } from './autopilotIntentFactory.
 import { type AutoEntryExecutionPort } from './autoEntryService.ts';
 import { calculateStructuralStopLoss, calculateStructuralTpLadder } from './structuralExitLevels.ts';
 import { calculateOteEntryZone } from './oteEntryCalculator.ts';
-import { addOtePendingCandidate } from './oteVirtualQueue.ts';
+import { addOtePendingCandidate, getOtePendingCandidates } from './oteVirtualQueue.ts';
 import { isTraditionalEquitySymbol } from './marketSignalScanner.ts';
 import { isPatternBlacklisted } from './signalEngine.ts';
 import { SignalPerformanceAnalyticsService } from './signalPerformanceAnalyticsService.ts';
@@ -338,12 +338,13 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         // --- КВАНТОВОЕ АВТО-ОБУЧЕНИЕ: ПРОВЕРКА ПРАВИЛ БАЗЫ ЗНАНИЙ ---
         const aiKnowledgeBase = deps.getAiKnowledgeBase ? deps.getAiKnowledgeBase() : [];
         const currentMarketPulse = deps.getGlobalMarketPulse ? deps.getGlobalMarketPulse() : { bias: 0 };
-        const kbDedupeCapEnabled = (globalSettings as any).kbDedupeCap === true;
+        const kbDedupeCapEnabled = (globalSettings as any).kbDedupeCap !== false;
+        const resolvedVolumeSpike = Number(currentSig.volumeSpike ?? currentSig?.indicators?.volumeSpike) || 0;
         const kbEval = evaluateKnowledgeBaseForSignal(
             symbol,
             {
                 rsi: currentSig.rsi !== undefined ? Number(currentSig.rsi) : (currentSig?.indicators?.rsi1h !== undefined ? Number(currentSig.indicators.rsi1h) : undefined),
-                volumeSpike: Number(currentSig.volumeSpike) || undefined,
+                volumeSpike: resolvedVolumeSpike || undefined,
                 bias: currentMarketPulse?.bias,
                 volatility,
                 imbalance: orderBookImbalance[normalizeSymbol(symbol)]?.imbalance,
@@ -405,7 +406,9 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                     const matureTradesCount = closedTrades.filter((t: any) => 
                         t.status === 'CLOSED' && 
                         (t.featuresVersion === 2 || (t.featuresVersion === undefined && t.side === 'SHORT')) && 
-                        Array.isArray(t.features) && t.features.length > 0
+                        Array.isArray(t.features) &&
+                        t.features.length > 0 &&
+                        t.features.some((v: any) => typeof v === 'number' && Number.isFinite(v) && v !== 0)
                     ).length;
                     const isModelMature = matureTradesCount >= modelMinSamplesForAdjustment;
                     const requireModelMaturity = (globalSettings as any).requireModelMaturity === true;
@@ -514,16 +517,21 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
         // Disallow entries into unclassified / low-conviction signals lacking volume spike or verified core pattern
         const sigType = (currentSig.type || currentSig.sctoPattern || currentSig.pattern || '').toUpperCase();
-        const hasVerifiedPattern = sigType.includes('SAR') || sigType.includes('SPIRE') || sigType.includes('WICK') || 
+        const isExplicitNoneOrFlat = rawPatternName === 'None' || sigType === 'ФЛЭТ' || sigType === 'NONE' || sigType === 'FLAT';
+        const hasVerifiedPattern = !isExplicitNoneOrFlat && (
+                                   sigType.includes('SAR') || sigType.includes('SPIRE') || sigType.includes('WICK') || 
                                    sigType.includes('BOS') || sigType.includes('PUMP') || sigType.includes('PARABOLIC') || 
                                    sigType.includes('STAGNATION') || sigType.includes('РЕВЕРС') || sigType.includes('РЕТЕСТ') ||
                                    sigType.includes('LIQUIDITY') || sigType.includes('SWEEP') || sigType.includes('ИДЕАЛЬНЫЙ') ||
-                                   (Array.isArray(currentSig.matchedRuleIds) && currentSig.matchedRuleIds.length > 0);
-        const hasVolumeConfirmation = (Number(currentSig.volumeSpike) || 0) >= 1.3 || (Number(currentSig.volume24h) || Number(currentSig.volume) || 0) >= 200000;
+                                   sigType.includes('EXHAUSTION') || sigType.includes('CLIMAX') || sigType.includes('BREAKOUT') ||
+                                   sigType.includes('OVERBOUGHT') || sigType.includes('OVERSOLD') || sigType.includes('DUMP') ||
+                                   sigType.includes('СЛИВ') || sigType.includes('ПРОЛИВ') ||
+                                   (Array.isArray(currentSig.matchedRuleIds) && currentSig.matchedRuleIds.length > 0));
+        const hasVolumeConfirmation = resolvedVolumeSpike >= 1.3 || (Number(currentSig.volume24h) || Number(currentSig.volume) || 0) >= 200000;
         
-        if (!hasVerifiedPattern && !hasVolumeConfirmation && finalAiScore < 88) {
-            try { incFunnel('no_verified_pattern', 'unclassified_stagnant_signal', symbol); } catch {}
-            continue; // Skip unclassified stagnant signals to protect win-rate
+        if (isExplicitNoneOrFlat || (!hasVerifiedPattern && !hasVolumeConfirmation && finalAiScore < 88)) {
+            try { incFunnel('no_verified_pattern', isExplicitNoneOrFlat ? 'none_or_flat_pattern' : 'unclassified_stagnant_signal', symbol); } catch {}
+            continue; // Skip unclassified or None/Flat signals to protect win-rate
         }
 
         // --- HARD BLOCK ON CONSENSUS REJECT & STRATEGY CHECKLIST ---
@@ -608,7 +616,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         // Согласно правилу RULE[AGENTS_md]: Фильтрация мусора: Игнорировать монеты с объемом < 50,000$ (если нет аномального всплеска > 4x).
         // ЛЕГАСИ-ЛОГИКА: ранее отсекались монеты с volume24h < 200000 при volumeSpike < 1.8, что блокировало качественные сетапы с объемами 50k-200k.
         const volume24h = Number(currentSig.volume24h) || Number(currentSig.volume) || 0;
-        const volumeSpike = Number(currentSig.volumeSpike) || 0;
+        const volumeSpike = resolvedVolumeSpike;
         const isVolumeSpike4x = volumeSpike >= 4.0;
         const isStrictLiquidityOk = volume24h >= 50000 || (volume24h >= 25000 && isVolumeSpike4x);
         const wouldBlockStrictLiquidity = !isStrictLiquidityOk;
@@ -630,7 +638,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         if (isBuySignalCheck) {
             // 1. Игнорировать лонги при глубоком проливе цены под VWAP (> 0.8% ниже VWAP) без подтвержденного разворота
             const sigVwap = currentSig.indicators?.vwap || currentSig.vwap;
-            if (sigVwap && price < sigVwap * 0.992 && !currentSig.volumeSpike && (Number(currentSig.riseFromLow) || 0) < 1.5) {
+            if (sigVwap && price < sigVwap * 0.992 && volumeSpike < 1.5 && (Number(currentSig.riseFromLow) || 0) < 1.5) {
                 try { incFunnel('shield_long_vwap', 'falling_knife_below_vwap', symbol); } catch {}
                 console.log(`[AUTOPILOT LONG SHIELD] Ignored ${symbol} falling knife LONG: price ${price} is below VWAP ${sigVwap} without reversal confirmation`);
                 continue;
@@ -638,7 +646,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
 
             // 2. В падающем/медвежьем рынке для LONG требуется повышенный балл или подтвержденный разворотный импульс
             const isBearishRegime = marketRegime === 'BEAR_TREND' || marketRegime === 'PANIC_DUMP' || btcTrend24h < -2.5;
-            if (isBearishRegime && finalAiScore < 92 && !currentSig.volumeSpike && (Number(currentSig.riseFromLow) || 0) < 2.0) {
+            if (isBearishRegime && finalAiScore < 92 && volumeSpike < 1.5 && (Number(currentSig.riseFromLow) || 0) < 2.0) {
                 try { incFunnel('shield_bear_regime_long', 'bearish_market_long_low_score', symbol); } catch {}
                 console.log(`[AUTOPILOT LONG SHIELD] Ignored ${symbol} LONG in Bearish Market: score ${finalAiScore} < 92 without volume spike or reversal rise`);
                 continue;
@@ -1070,7 +1078,11 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                                     estimatedFields: currentSig.estimatedFields || (currentSig.decisionTrace?.metadata?.estimatedFields ?? []),
                                     featuresVersion,
                                     features: currentQuantFeatures,
-                                    featuresHadIndicators: !!GLOBAL_TRUE_OHLCV[symbol],
+                                    featuresHadIndicators: Boolean(
+                                        GLOBAL_TRUE_OHLCV[symbol] ||
+                                        GLOBAL_TRUE_OHLCV[cleanSymbol(symbol)] ||
+                                        GLOBAL_TRUE_OHLCV[normalizeSymbol(symbol)]
+                                    ),
                                     featuresV2: qfV2.features,
                                     featuresV2HadIndicators: qfV2.hadIndicators,
                                     featuresV2KeyUsed: qfV2.keyUsed,
@@ -1127,6 +1139,13 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
                     };
 
                     if (globalSettings.isOteEntryEnabled === true) {
+                        const alreadyInOteQueue = getOtePendingCandidates().some(
+                            (c) => normalizeSymbol(c.symbol) === normalizedSymbol
+                        );
+                        if (alreadyInOteQueue) {
+                            try { incFunnel('ote_dedup', 'already_queued_in_ote', symbol); } catch {}
+                            continue;
+                        }
                         const oteResult = calculateOteEntryZone({
                             isSellSignal,
                             price,

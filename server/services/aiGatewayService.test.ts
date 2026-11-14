@@ -116,7 +116,7 @@ describe('AiGatewayService', () => {
     });
 
     expect(generateContentMock).toHaveBeenCalledTimes(2);
-    expect(generateContentMock.mock.calls[0][0].model).toBe('gemini-3.8-flash');
+    expect(generateContentMock.mock.calls[0][0].model).toBe('gemini-4-hydrogen');
     expect(generateContentMock.mock.calls[1][0].model).toBe('gemini-flash-latest');
     expect(result.text).toBe('{"analysis":"fallback success"}');
   });
@@ -150,5 +150,48 @@ describe('AiGatewayService', () => {
     expect(generateContentMock).not.toHaveBeenCalled();
     const parsed2 = JSON.parse(result2.text);
     expect(parsed2.evaluation).toBeDefined();
+  });
+
+  it('strips deprecated sampling parameters for gemini-4 models and enters cooldown on 404', async () => {
+    const generateContentMock = vi.fn()
+      .mockResolvedValueOnce({ text: '{"ok":true}' })
+      .mockRejectedValueOnce(new Error('404 NOT_FOUND: model not found'));
+
+    gateway.setInternalServerGeminiClient({
+      models: { generateContent: generateContentMock }
+    } as any);
+
+    await gateway.runAiGeneration({
+      model: 'gemini-3.7-flash',
+      contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+      config: {
+        responseMimeType: 'application/json',
+        temperature: 0.3,
+        topP: 0.9,
+        topK: 40,
+        candidateCount: 1
+      }
+    });
+
+    expect(generateContentMock.mock.calls[0][0].model).toBe('gemini-4-hydrogen');
+    expect(generateContentMock.mock.calls[0][0].config).toEqual({
+      responseMimeType: 'application/json'
+    });
+
+    const res404 = await gateway.runAiGeneration({
+      model: 'gemini-4-hydrogen',
+      contents: [{ role: 'user', parts: [{ text: 'test 404' }] }],
+      config: { responseMimeType: 'application/json' }
+    });
+    expect(JSON.parse(res404.text).isFallback).toBe(true);
+
+    generateContentMock.mockClear();
+    const resCooldown = await gateway.runAiGeneration({
+      model: 'gemini-4-hydrogen',
+      contents: [{ role: 'user', parts: [{ text: 'after 404' }] }],
+      config: { responseMimeType: 'application/json' }
+    });
+    expect(generateContentMock).not.toHaveBeenCalled();
+    expect(JSON.parse(resCooldown.text).isFallback).toBe(true);
   });
 });

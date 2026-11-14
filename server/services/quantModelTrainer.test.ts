@@ -90,4 +90,24 @@ describe('quantModelTrainer', () => {
     expect(aiKnowledgeBase.length).toBeGreaterThan(0);
     expect(saveKnowledgeDBSpy).toHaveBeenCalled();
   });
+
+  it('ignores legacy trades with all-zero [0..0] feature vectors so modelWeights are not corrupted', async () => {
+    const initialWeights = { ...modelWeights };
+    for (let i = 0; i < 45; i++) {
+      virtualTrades.push({
+        id: `legacy_zero_${i}`,
+        status: 'CLOSED',
+        side: 'SHORT',
+        features: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        outcome: 0,
+        pnlPercent: -4.2
+      });
+    }
+
+    await trainQuantModel(getContext());
+
+    expect(modelWeights).toEqual(initialWeights);
+    expect(saveSettingsSpy).not.toHaveBeenCalled();
+    expect(aiKnowledgeBase).toHaveLength(0);
+  });
 });

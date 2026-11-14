@@ -67,6 +67,8 @@ export function computeQuantFeaturesV2(params: ComputeQuantFeaturesV2Params): Co
     ageSec = Math.max(0, Math.round((Date.now() - indicators.timestamp) / 1000));
   } else if (typeof indicators.lastUpdated === 'number' && indicators.lastUpdated > 0) {
     ageSec = Math.max(0, Math.round((Date.now() - indicators.lastUpdated) / 1000));
+  } else if (typeof indicators.updatedAt === 'number' && indicators.updatedAt > 0) {
+    ageSec = Math.max(0, Math.round((Date.now() - indicators.updatedAt) / 1000));
   }
 
   const currentPrice = price > 0 ? price : (indicators.close || indicators.price || 1);

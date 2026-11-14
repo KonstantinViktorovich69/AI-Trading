@@ -30,6 +30,7 @@ interface TradeAnalysisSample {
   tradeId: string;
   symbol: string;
   side: 'LONG' | 'SHORT';
+  leverage?: number;
   patternName: string;
   openTime: number;
   closeTime: number;
@@ -349,7 +350,7 @@ export const TimeMachineView: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="font-bold text-zinc-100">{selectedTrade.symbol}</span>
               <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${selectedTrade.side === 'SHORT' ? 'bg-rose-950 text-rose-300' : 'bg-emerald-950 text-emerald-300'}`}>
-                {selectedTrade.side} {selectedTrade.leverage}x
+                {selectedTrade.side} {selectedTrade.leverage ?? 1}x
               </span>
               <span className="text-xs text-zinc-400 font-mono">ID: {selectedTrade.tradeId}</span>
             </div>

@@ -1069,7 +1069,7 @@ function startMainThreadScannerFallback() {
     updateGlobalTickers().then(() => {
       setTimeout(() => {
         updateTrueOHLCV().catch(e => console.error('[STARTUP OHLCV ERROR]', e));
-      }, 4000);
+      }, 1500);
       updateSignalsCache().catch(e => console.error('[STARTUP SIGNALS ERROR]', e));
     }).catch(e => console.error('[STARTUP TICKERS ERROR]', e));
 
@@ -1103,6 +1103,8 @@ const scannerWorkerManagerContext: ScannerWorkerManagerContext = {
   getGlobalPumps: () => GLOBAL_PUMPS,
   getGlobalCvd: () => GLOBAL_CVD,
   getGlobalAtr: () => GLOBAL_ATR,
+  getGlobalAdx: () => GLOBAL_ADX,
+  getGlobalRawOhlcv: () => GLOBAL_RAW_OHLCV,
   getCacheSignals: () => CACHE.signals,
   setCacheSignals: (sig) => { CACHE.signals = sig; },
   getGlobalAiCommitteeCache: () => GLOBAL_AI_COMMITTEE_CACHE,
@@ -1135,7 +1137,7 @@ if (isMainThread) {
     setInterval(updateGlobalTickers, 12000);
     updateGlobalTickers();
     
-    setTimeout(updateTrueOHLCV, 10000);
+    setTimeout(updateTrueOHLCV, 3000);
     setInterval(() => {
       runGuarded('ohlcv', 300000, updateTrueOHLCV, {
         loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
@@ -1195,6 +1197,9 @@ if (isMainThread) {
     // Periodically send all worker indicators state back to main thread
     parentPort?.on('message', (msg) => {}); // legacy keepalive
     setInterval(() => {
+      const syncedRawOhlcv = GLOBAL_RAW_OHLCV['BTCUSDT']
+        ? { BTCUSDT: GLOBAL_RAW_OHLCV['BTCUSDT'] }
+        : undefined;
       parentPort?.postMessage({
         type: 'SYNC_STATE',
         payload: {
@@ -1206,6 +1211,8 @@ if (isMainThread) {
           GLOBAL_PUMPS: [...GLOBAL_PUMPS],
           GLOBAL_CVD,
           GLOBAL_ATR,
+          GLOBAL_ADX,
+          GLOBAL_RAW_OHLCV: syncedRawOhlcv,
           CACHE_SIGNALS: CACHE.signals,
           GLOBAL_AI_COMMITTEE_CACHE
         }

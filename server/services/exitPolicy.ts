@@ -267,19 +267,20 @@ function _evaluateExitPolicyInternal(
           }
 
           // Calculate lock-in Stop Loss price for previous TP steps
+          const fmtLockSl = (p: number) => p < 0.0001 ? Number(p.toPrecision(6)) : p < 1 ? Number(p.toFixed(6)) : Number(p.toFixed(5));
           let lockSlPrice: number | undefined;
           if (i === 0) { // TP1: move to Breakeven (+0.35% in profit direction to cover fees and lock win)
-            lockSlPrice = trade.side === 'SHORT'
-              ? Number((trade.entryPrice * 0.9965).toFixed(5))
-              : Number((trade.entryPrice * 1.0035).toFixed(5));
+            lockSlPrice = fmtLockSl(trade.side === 'SHORT'
+              ? (trade.entryPrice * 0.9965)
+              : (trade.entryPrice * 1.0035));
           } else if (i === 1) { // TP2: lock +1.2% net profit
-            lockSlPrice = trade.side === 'SHORT'
-              ? Number((trade.entryPrice * 0.988).toFixed(5))
-              : Number((trade.entryPrice * 1.012).toFixed(5));
+            lockSlPrice = fmtLockSl(trade.side === 'SHORT'
+              ? (trade.entryPrice * 0.988)
+              : (trade.entryPrice * 1.012));
           } else if (i === 2) { // TP3: lock +2.2% net profit
-            lockSlPrice = trade.side === 'SHORT'
-              ? Number((trade.entryPrice * 0.978).toFixed(5))
-              : Number((trade.entryPrice * 1.022).toFixed(5));
+            lockSlPrice = fmtLockSl(trade.side === 'SHORT'
+              ? (trade.entryPrice * 0.978)
+              : (trade.entryPrice * 1.022));
           }
 
           // Only apply newStopLoss if it tightens/improves the existing stop loss

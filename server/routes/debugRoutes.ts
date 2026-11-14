@@ -435,11 +435,10 @@ Each object must contain these keys exactly:
 
       try {
         const aiResponse = await ctx.runAiGeneration({
-          model: 'gemini-3.7-flash',
+          model: 'gemini-4-hydrogen',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
-            responseMimeType: "application/json",
-            temperature: 0.2
+            responseMimeType: "application/json"
           }
         });
         

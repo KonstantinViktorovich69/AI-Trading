@@ -227,8 +227,68 @@ export function evaluateStrategySignal(ctx: StrategyContext): SignalDecision {
         ? 'SHORT'
         : undefined);
 
-  // Evaluate Core Technical Pattern Setup
+  // Evaluate Core Technical Pattern Setup modulated by activeStrategy
+  const activeStrategy = ctx.activeStrategy || 'ADAPTIVE_DYNAMIC';
+  gateDiagnostics[`strategy_${activeStrategy}`] = true;
+
   let patternResult: any;
+
+  const evalShortFirst = () => {
+    let res: any = analyzeShortScalpPatterns(
+      ctx.price, ctx.high, ctx.low, ctx.open, ctx.vwap, ctx.sar,
+      ctx.change24h || 0, ctx.volume24h, ctx.avgVolume || 100000, ctx.rsi
+    );
+    if (!res || res.signalType === 'NEUTRAL') {
+      const longFuturesPattern = analyzeLongScalpPatterns(
+        ctx.price, ctx.high, ctx.low, ctx.open, ctx.vwap, ctx.sar,
+        ctx.change24h || 0, ctx.volume24h, ctx.avgVolume || 100000, ctx.rsi
+      );
+      if (longFuturesPattern && longFuturesPattern.signalType === 'LONG') {
+        res = { ...longFuturesPattern, patternName: `Futures Long (${longFuturesPattern.patternName})` };
+      } else {
+        const longSpotPattern = analyzeSpotAccumulationPatterns(
+          ctx.price, ctx.high, ctx.low, ctx.open, ctx.vwap, ctx.sar,
+          ctx.rsi || 50, ctx.change24h || 0, ctx.volume24h, ctx.avgVolume || 100000
+        );
+        if (longSpotPattern && longSpotPattern.signalType === 'LONG') {
+          res = { ...longSpotPattern, patternName: `Futures Long (${longSpotPattern.patternName})` };
+        } else if (ctx.sar < ctx.price && ctx.price >= ctx.vwap) {
+          res = {
+            patternName: 'Futures Long Trend / Support Bounce',
+            signalType: 'LONG',
+            scoreBonus: 25,
+            reason: 'Бычий тренд выше VWAP с подтверждением SAR'
+          };
+        } else if (ctx.sar > ctx.price && ctx.price <= ctx.vwap) {
+          res = {
+            patternName: 'Futures Short Trend / Resistance Rejection',
+            signalType: 'SHORT',
+            scoreBonus: 25,
+            reason: 'Медвежий тренд ниже VWAP с подтверждением SAR'
+          };
+        }
+      }
+    }
+    return res;
+  };
+
+  const evalLongFirst = () => {
+    const longFuturesPattern = analyzeLongScalpPatterns(
+      ctx.price, ctx.high, ctx.low, ctx.open, ctx.vwap, ctx.sar,
+      ctx.change24h || 0, ctx.volume24h, ctx.avgVolume || 100000, ctx.rsi
+    );
+    if (longFuturesPattern && longFuturesPattern.signalType === 'LONG') {
+      return { ...longFuturesPattern, patternName: `Futures Long (${longFuturesPattern.patternName})` };
+    }
+    const longSpotPattern = analyzeSpotAccumulationPatterns(
+      ctx.price, ctx.high, ctx.low, ctx.open, ctx.vwap, ctx.sar,
+      ctx.rsi || 50, ctx.change24h || 0, ctx.volume24h, ctx.avgVolume || 100000
+    );
+    if (longSpotPattern && longSpotPattern.signalType === 'LONG') {
+      return { ...longSpotPattern, patternName: `Futures Long (${longSpotPattern.patternName})` };
+    }
+    return evalShortFirst();
+  };
 
   if (ctx.marketType === 'SPOT') {
     patternResult = analyzeSpotAccumulationPatterns(
@@ -283,48 +343,15 @@ export function evaluateStrategySignal(ctx: StrategyContext): SignalDecision {
         }
       }
     } else {
-      // Bi-directional evaluation when no explicit intent provided
-      patternResult = analyzeShortScalpPatterns(
-        ctx.price, ctx.high, ctx.low, ctx.open, ctx.vwap, ctx.sar,
-        ctx.change24h || 0, ctx.volume24h, ctx.avgVolume || 100000, ctx.rsi
-      );
-
-      if (!patternResult || patternResult.signalType === 'NEUTRAL') {
-        const longFuturesPattern = analyzeLongScalpPatterns(
-          ctx.price, ctx.high, ctx.low, ctx.open, ctx.vwap, ctx.sar,
-          ctx.change24h || 0, ctx.volume24h, ctx.avgVolume || 100000, ctx.rsi
-        );
-        if (longFuturesPattern && longFuturesPattern.signalType === 'LONG') {
-          patternResult = {
-            ...longFuturesPattern,
-            patternName: `Futures Long (${longFuturesPattern.patternName})`
-          };
-        } else {
-          const longSpotPattern = analyzeSpotAccumulationPatterns(
-            ctx.price, ctx.high, ctx.low, ctx.open, ctx.vwap, ctx.sar,
-            ctx.rsi || 50, ctx.change24h || 0, ctx.volume24h, ctx.avgVolume || 100000
-          );
-          if (longSpotPattern && longSpotPattern.signalType === 'LONG') {
-            patternResult = {
-              ...longSpotPattern,
-              patternName: `Futures Long (${longSpotPattern.patternName})`
-            };
-          } else if (ctx.sar < ctx.price && ctx.price >= ctx.vwap) {
-            patternResult = {
-              patternName: 'Futures Long Trend / Support Bounce',
-              signalType: 'LONG',
-              scoreBonus: 25,
-              reason: 'Бычий тренд выше VWAP с подтверждением SAR'
-            };
-          } else if (ctx.sar > ctx.price && ctx.price <= ctx.vwap) {
-            patternResult = {
-              patternName: 'Futures Short Trend / Resistance Rejection',
-              signalType: 'SHORT',
-              scoreBonus: 25,
-              reason: 'Медвежий тренд ниже VWAP с подтверждением SAR'
-            };
-          }
-        }
+      // Bi-directional evaluation when no explicit intent provided, guided by activeStrategy
+      if (activeStrategy === 'TREND_FOLLOWING' && ctx.htfTrend === 'BULLISH') {
+        patternResult = evalLongFirst();
+      } else if (activeStrategy === 'RANGE_MEAN_REVERSION' && ctx.rsi !== undefined && ctx.rsi <= 38) {
+        patternResult = evalLongFirst();
+      } else if (activeStrategy === 'ADAPTIVE_DYNAMIC' && ctx.htfTrend === 'BULLISH') {
+        patternResult = evalLongFirst();
+      } else {
+        patternResult = evalShortFirst();
       }
     }
   }
@@ -441,6 +468,25 @@ export function evaluateStrategySignal(ctx: StrategyContext): SignalDecision {
     if (ctx.price > ctx.vwap) confidence += 10;
     if (ctx.orderBookImbalance !== undefined && ctx.orderBookImbalance > 0.2) confidence += 5;
     if (ctx.htfTrend === 'BULLISH') confidence += 10;
+  }
+
+  // Active strategy confidence modulation
+  if (activeStrategy === 'SHORT_PUMP_FADE') {
+    if (rawSide === 'SHORT' && (ctx.change24h || 0) >= 5) confidence += 5;
+  } else if (activeStrategy === 'TREND_FOLLOWING') {
+    if ((rawSide === 'LONG' && ctx.htfTrend === 'BULLISH') || (rawSide === 'SHORT' && ctx.htfTrend === 'BEARISH')) {
+      confidence += 8;
+      gateDiagnostics.trendFollowingAligned = true;
+    } else if ((rawSide === 'LONG' && ctx.htfTrend === 'BEARISH') || (rawSide === 'SHORT' && ctx.htfTrend === 'BULLISH')) {
+      confidence -= 10;
+      gateDiagnostics.trendFollowingAligned = false;
+    }
+  } else if (activeStrategy === 'RANGE_MEAN_REVERSION') {
+    const vwapSpread = ctx.vwap ? Math.abs(ctx.price - ctx.vwap) / ctx.price : 0;
+    if (vwapSpread >= 0.004) confidence += 5;
+    if ((rawSide === 'SHORT' && (ctx.rsi ?? 50) >= 68) || (rawSide === 'LONG' && (ctx.rsi ?? 50) <= 32)) {
+      confidence += 8;
+    }
   }
 
   // Cap confidence to [0, 99]

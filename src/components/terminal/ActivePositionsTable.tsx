@@ -1,6 +1,13 @@
 import React from 'react';
 import { Shield, TrendingDown, TrendingUp, XCircle, Clock, Zap, AlertTriangle, ExternalLink } from 'lucide-react';
 
+function formatSmartPrice(p: number): string {
+  const num = Number(p || 0);
+  if (!isFinite(num) || num <= 0) return '0.0000';
+  const dec = num >= 100 ? 2 : num >= 1 ? 4 : num >= 0.01 ? 5 : num >= 0.0001 ? 6 : 8;
+  return num.toFixed(dec);
+}
+
 export interface PositionItem {
   id: string;
   symbol: string;
@@ -42,7 +49,7 @@ export const ActivePositionsTable: React.FC<ActivePositionsTableProps> = ({
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-emerald-400" />
           <h2 className="text-xs font-black uppercase tracking-wider text-zinc-100">
-            Активные Шорт-Позиции Агентов ({activePositions.length})
+            Активные Позиции Агентов ({activePositions.length})
           </h2>
         </div>
 
@@ -98,13 +105,17 @@ export const ActivePositionsTable: React.FC<ActivePositionsTableProps> = ({
                           ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                           : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       }`}>
-                        <TrendingDown className="w-3 h-3" />
+                        {pos.side === 'SHORT' ? (
+                          <TrendingDown className="w-3 h-3" />
+                        ) : (
+                          <TrendingUp className="w-3 h-3" />
+                        )}
                         {pos.side} {pos.leverage}x
                       </span>
                     </td>
 
                     <td className="p-2.5">
-                      <div className="text-zinc-200 font-bold">${pos.entryPrice.toFixed(4)}</div>
+                      <div className="text-zinc-200 font-bold">${formatSmartPrice(pos.entryPrice)}</div>
                       <div className="text-[10px] text-zinc-500">${pos.amount.toFixed(0)}</div>
                     </td>
 

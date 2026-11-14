@@ -2,6 +2,13 @@ import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
 import { normalizeExchangeId } from './activeExchange.ts';
 
+function formatPricePrecision(price: number): number {
+  if (!isFinite(price) || price <= 0) return price;
+  if (price < 0.0001) return Number(price.toPrecision(6));
+  if (price < 1) return Number(price.toFixed(6));
+  return Number(price.toFixed(5));
+}
+
 export interface ExpertAdvisorDependencies {
   getVirtualTrades: () => any[];
   getGlobalSettings: () => any;
@@ -67,7 +74,8 @@ export async function executeRuleBasedTradeFallback(
   const maxAllowedAmount = Number((initialAmount * 1.5).toFixed(2));
   const hasMarginRoom = trade.amount < maxAllowedAmount;
 
-  if (trade.mode === 'AUTO' && isDrawdown && dcaCount < 3 && !isPriceInSlZone && cooldownElapsed && hasMarginRoom) {
+  const isDcaAllowed = deps.getGlobalSettings?.()?.isDcaEnabled !== false;
+  if (isDcaAllowed && trade.mode === 'AUTO' && isDrawdown && dcaCount < 3 && !isPriceInSlZone && cooldownElapsed && hasMarginRoom) {
     let triggerDca = false;
     if (dcaCount === 0 && (pnlPct <= -8.0 || Math.abs(priceDevPct) >= 1.8)) {
       triggerDca = true;
@@ -110,24 +118,24 @@ export async function executeRuleBasedTradeFallback(
         const newEntryPrice = totalMargin / totalCoins;
 
         if (trade.takeProfit) {
-          trade.takeProfit = Number((newEntryPrice * (trade.takeProfit / oldEntry)).toFixed(5));
+          trade.takeProfit = formatPricePrecision(newEntryPrice * (trade.takeProfit / oldEntry));
         }
         if (trade.stopLoss) {
-          const ratioSl = Number((newEntryPrice * (trade.stopLoss / oldEntry)).toFixed(5));
+          const ratioSl = formatPricePrecision(newEntryPrice * (trade.stopLoss / oldEntry));
           trade.stopLoss = trade.side === 'LONG'
             ? Math.max(trade.stopLoss, ratioSl)
             : Math.min(trade.stopLoss, ratioSl);
         }
         (trade as any).dcaAveraged = true;
-        (trade as any).dcaBreakEvenPrice = Number(newEntryPrice.toFixed(5));
+        (trade as any).dcaBreakEvenPrice = formatPricePrecision(newEntryPrice);
         (trade as any).initialAmount = initialAmount;
         if (trade.tpStages) {
           trade.tpStages.forEach((stage: any) => {
-            stage.targetPrice = Number((newEntryPrice * (stage.targetPrice / oldEntry)).toFixed(5));
+            stage.targetPrice = formatPricePrecision(newEntryPrice * (stage.targetPrice / oldEntry));
           });
         }
 
-        trade.entryPrice = Number(newEntryPrice.toFixed(5));
+        trade.entryPrice = formatPricePrecision(newEntryPrice);
         trade.amount = Number(totalMargin.toFixed(2));
         const now = Date.now();
         (trade as any).lastGridTime = now;
@@ -210,7 +218,7 @@ export async function executeRuleBasedTradeFallback(
         if (!trade.history) trade.history = [];
         trade.history.push({ time: now, type: 'CLOSE', price: partialClosePrice, amount: closedAmount, notes: trade.aiAdvice });
 
-        const bePrice = isShort ? Number((trade.entryPrice * 0.999).toFixed(5)) : Number((trade.entryPrice * 1.001).toFixed(5));
+        const bePrice = isShort ? formatPricePrecision(trade.entryPrice * 0.999) : formatPricePrecision(trade.entryPrice * 1.001);
         trade.stopLoss = bePrice;
         trade.isProtected = true;
 
@@ -260,10 +268,10 @@ export async function executeRuleBasedTradeFallback(
   let adjustReason = '';
 
   if (pnlPct >= 4.0 && !trade.isProtected) {
-    targetSl = isShort ? Number((trade.entryPrice * 0.9995).toFixed(5)) : Number((trade.entryPrice * 1.0005).toFixed(5));
+    targetSl = isShort ? formatPricePrecision(trade.entryPrice * 0.9995) : formatPricePrecision(trade.entryPrice * 1.0005);
     adjustReason = `Перенос SL в безубыток при PnL +${pnlPct.toFixed(2)}%`;
   } else if (pnlPct <= -12.0 && isSarReversal) {
-    targetTp = isShort ? Number((trade.entryPrice * 0.995).toFixed(5)) : Number((trade.entryPrice * 1.005).toFixed(5));
+    targetTp = isShort ? formatPricePrecision(trade.entryPrice * 0.995) : formatPricePrecision(trade.entryPrice * 1.005);
     adjustReason = `Снижение цели TP ближе к точке безубытка из-за локального отскока SAR`;
   }
 
@@ -438,9 +446,9 @@ ${memoryString}
 
       try {
         const aiResponse = await deps.runAiGeneration({
-          model: "gemini-3.7-flash",
+          model: "gemini-4-hydrogen",
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: { responseMimeType: "application/json", temperature: 0.2 }
+          config: { responseMimeType: "application/json" }
         });
 
         const result = safeJsonParse(aiResponse.text, { action: "HOLD", advice: "Позиция удерживается в рамках тренда." });
@@ -468,7 +476,7 @@ ${memoryString}
               `Тейк-профит: ${oldTp || 'N/A'} ➡️ <b>${trade.takeProfit}</b>\n\n` +
               `💬 ${result.advice}`;
             deps.sendTelegramMessage(telegramText);
-          } else if (result.action === 'DCA' && result.dcaMultiplier) {
+          } else if (result.action === 'DCA' && result.dcaMultiplier && (globalSettings as any)?.isDcaEnabled !== false) {
             const dcaMult = Math.min(1.0, Math.max(0.2, result.dcaMultiplier));
             const dcaAmount = Number((trade.amount * dcaMult).toFixed(2));
             if (availableBalance >= dcaAmount) {
@@ -485,7 +493,7 @@ ${memoryString}
                 const oldEntry = trade.entryPrice;
                 const totalMargin = trade.amount + dcaAmount;
                 const newEntry = (oldEntry * trade.amount + dcaPrice * dcaAmount) / totalMargin;
-                trade.entryPrice = Number(newEntry.toFixed(5));
+                trade.entryPrice = formatPricePrecision(newEntry);
                 trade.amount = Number(totalMargin.toFixed(2));
                 (trade as any).lastAiAction = 'DCA';
 

@@ -4,6 +4,7 @@ import { ensureHistoricalDataSeeded } from '../db/seedData.ts';
 import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive.ts';
 import { updatePatternBlacklistFromStats } from './signalEngine.ts';
 import { enrichKnowledgeBaseWithStructuredFilters } from './quantRiskEngine.ts';
+import { getUnifiedTradeClosePnl } from '../quant.ts';
 
 export interface AgentExchangeLog {
   id: string;
@@ -257,6 +258,7 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
 
     ctx.setVirtualBalance(savedVirtualBalance);
     dbData.settings.main.virtualBalance = savedVirtualBalance;
+    dbData.settings.virtualBalance = savedVirtualBalance;
     dbData.settings.main.virtualEquity = calculatedEquity;
     const savedUiStatsResetTimestamp = typeof dbData.settings?.main?.uiStatsResetTimestamp === 'number'
       ? dbData.settings.main.uiStatsResetTimestamp
@@ -272,6 +274,7 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
     if (lastResetDate !== todayStr) {
       ctx.setStartOfDayBalance(calculatedEquity);
       dbData.settings.main.startOfDayBalance = calculatedEquity;
+      dbData.settings.startOfDayBalance = calculatedEquity;
       dbData.settings.main.lastResetDate = todayStr;
       console.log(`[STARTUP] 📅 New day detected on startup. Resetting startOfDayBalance to Equity $${calculatedEquity.toFixed(2)} (Cash: $${savedVirtualBalance.toFixed(2)}, Open Margin: $${totalOpenMargin.toFixed(2)}, PnL: $${totalUnrealizedPnl.toFixed(2)})`);
     } else {
@@ -369,17 +372,24 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
          t.closePriceSource = isUnpriced ? 'ENTRY_FALLBACK' : 'LAST_KNOWN';
          t.closeTime = now;
          t.closePrice = fallbackClosePrice;
-         
-         const unleveragedPct = t.side === 'SHORT'
-           ? ((t.entryPrice - fallbackClosePrice) / t.entryPrice) * 100
-           : ((fallbackClosePrice - t.entryPrice) / t.entryPrice) * 100;
-         const leveragedPct = unleveragedPct * t.leverage;
-         const feePercent = 0.1 * t.leverage;
-         t.pnlPercent = leveragedPct - feePercent;
-         t.pnl = t.amount * (t.pnlPercent / 100);
-         
+
+         if (!t.initialAmount) t.initialAmount = t.amount;
          if (!t.history) t.history = [];
          t.history.push({ time: now, type: 'CLOSE', price: fallbackClosePrice, amount: t.amount });
+
+         const lev = Number(t.leverage || 1);
+         let totalPnlUsd = 0;
+         let totalCloseQty = 0;
+         t.history.forEach((h: any) => {
+           if (h.type === 'CLOSE' && Number(h.amount) > 0 && Number(h.price) > 0 && Number(t.entryPrice) > 0) {
+             const res = getUnifiedTradeClosePnl(t.side, Number(t.entryPrice), Number(h.price), Number(h.amount), lev);
+             totalPnlUsd += res.pnlUsd;
+             totalCloseQty += Number(h.amount);
+           }
+         });
+         const denomAmount = Number(t.initialAmount || totalCloseQty || t.amount || 0);
+         t.pnl = totalPnlUsd;
+         t.pnlPercent = denomAmount > 0 ? (totalPnlUsd / denomAmount) * 100 : 0;
       }
     });
 

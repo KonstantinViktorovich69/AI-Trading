@@ -1,21 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
 import { buildKnowledgePromptContext } from './knowledgeEngine.ts';
-
-let aiClient: GoogleGenAI | null = null;
-
-function getAiClient(): GoogleGenAI | null {
-  if (!aiClient && process.env.GEMINI_API_KEY) {
-    aiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
-  }
-  return aiClient;
-}
+import { aiGatewayService } from './aiGatewayService.ts';
 
 export interface AgentDecision {
   action: 'APPROVED' | 'REJECTED' | 'WAIT';
@@ -36,12 +20,11 @@ export async function runAgentHunterEvaluation(
   volume24h: number,
   patternName: string
 ): Promise<AgentDecision> {
-  const ai = getAiClient();
-  if (!ai) {
+  if (!process.env.GEMINI_API_KEY && !process.env.VITE_GEMINI_API_KEY && !process.env.DEEPSEEK_API_KEY) {
     return {
       action: 'APPROVED',
       confidenceScore: 75,
-      reason: 'Gemini API Key не задан. Авто-одобрение по алгоритмическому фильтру'
+      reason: 'Gemini/DeepSeek API Key не задан. Авто-одобрение по алгоритмическому фильтру'
     };
   }
 
@@ -52,7 +35,7 @@ export async function runAgentHunterEvaluation(
 Проанализируй сетап:
 - Монета: ${symbol}
 - Цена: $${price}
-- Изменение за 24ч: +${change24h}%
+- Изменение за 24ч: ${change24h >= 0 ? '+' : ''}${change24h}%
 - Объем 24ч: $${volume24h}
 - Детектированный паттерн: ${patternName}
 
@@ -67,16 +50,23 @@ ${knowledgeContext}
 }
 `;
 
-    // ЛЕГАСИ-МОДЕЛЬ: 'gemini-3.7-flash' обновлена на актуальную 'gemini-3.8-flash'
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt
+    const response = await aiGatewayService.runAiGeneration({
+      model: 'gemini-4-hydrogen',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: { responseMimeType: 'application/json' }
     });
 
-    const text = response.text || '';
+    const text = response?.text || '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed?.isFallback) {
+        return {
+          action: 'APPROVED',
+          confidenceScore: 70,
+          reason: `Авто-одобрение (резерв шлюза: ${parsed.fallbackReason || 'AI unavailable'})`
+        };
+      }
       return {
         action: parsed.action || 'APPROVED',
         confidenceScore: parsed.confidenceScore || 70,

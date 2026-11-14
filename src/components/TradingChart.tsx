@@ -155,7 +155,7 @@ function calculateParabolicSAR(candles: any[]) {
   return sarPoints;
 }
 
-export const TradingChart = memo(function TradingChart({ 
+function TradingChartComponent({ 
   symbol, 
   exchange, 
   onClose,
@@ -1132,6 +1132,7 @@ export const TradingChart = memo(function TradingChart({
       )}
     </div>
   );
-});
+}
 
+export const TradingChart = memo(TradingChartComponent);
 export default TradingChart;

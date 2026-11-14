@@ -110,11 +110,10 @@ export function createKnowledgeRouter(ctx: KnowledgeRouterContext): Router {
       const prompt = ctx.getArchivistPrompt(currentRules, 0.3, 5);
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-3.7-flash',
+        model: 'gemini-4-hydrogen',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
-          temperature: 0.1,
           responseSchema: {
             type: Type.ARRAY,
             items: {
@@ -293,7 +292,7 @@ export function createKnowledgeRouter(ctx: KnowledgeRouterContext): Router {
 
         try {
           const response = await ctx.runAiGeneration({
-            model: 'gemini-3.7-flash',
+            model: 'gemini-4-hydrogen',
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             config: {
               responseMimeType: "application/json",

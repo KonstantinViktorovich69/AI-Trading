@@ -1,6 +1,36 @@
 import ccxt from 'ccxt';
 import { RSI, MACD, BollingerBands, ATR, VWAP, PSAR, ADX } from 'technicalindicators';
 import { ensureExchangeMarket } from './marketDataHubService.ts';
+import { isTraditionalEquitySymbol } from './marketSignalScanner.ts';
+import { normalizeSymbol } from '../quant.ts';
+
+let isUpdatingTrueOhlcv = false;
+
+function formatPricePrecision(price: number): number {
+  if (!isFinite(price) || price <= 0) return price;
+  if (price < 0.0001) return Number(price.toPrecision(6));
+  if (price < 1) return Number(price.toFixed(6));
+  return Number(price.toFixed(5));
+}
+
+function computeVolumeSpikeRatio(ohlcv15m: any[][], ohlcv1m: any[][] = []): number {
+  const calcRatio = (candles: any[][]): number => {
+    if (!Array.isArray(candles) || candles.length < 5) return 1.0;
+    const vols = candles.map((c) => Number(c?.[5] || 0)).filter((v) => isFinite(v) && v >= 0);
+    if (vols.length < 5) return 1.0;
+    const latestVol = vols[vols.length - 1] || 0;
+    const prevSlice = vols.slice(Math.max(0, vols.length - 21), vols.length - 1);
+    const nonZeroPrev = prevSlice.filter((v) => v > 0);
+    if (nonZeroPrev.length === 0) return latestVol > 0 ? 1.5 : 1.0;
+    const avgVol = nonZeroPrev.reduce((a, b) => a + b, 0) / nonZeroPrev.length;
+    if (avgVol <= 0) return 1.0;
+    return Number(Math.max(0.1, Math.min(20, latestVol / avgVol)).toFixed(2));
+  };
+
+  const ratio15m = calcRatio(ohlcv15m);
+  const ratio1m = calcRatio(ohlcv1m);
+  return Number(Math.max(ratio15m, ratio1m).toFixed(2));
+}
 
 export interface MarketDataCollectorContext {
   getGlobalTrueOHLCV: () => Record<string, any>;
@@ -35,6 +65,10 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
   if (process.env.OFFLINE_MODE === '1' || process.env.TEST_MODE === '1') {
     return;
   }
+  if (isUpdatingTrueOhlcv) {
+    return;
+  }
+  isUpdatingTrueOhlcv = true;
   try {
     const GLOBAL_TRUE_OHLCV = ctx.getGlobalTrueOHLCV();
     const GLOBAL_RAW_OHLCV = ctx.getGlobalRawOHLCV();
@@ -55,22 +89,21 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
       const limit = 45; 
       const volThreshold = 10000; 
       
-      const activePositionSymbols = new Set(virtualTrades.filter((t: any) => t.status === 'OPEN').map((t: any) => t.symbol.replace(/[\/:]/g, '').toUpperCase()));
+      const activePositionSymbols = new Set(virtualTrades.filter((t: any) => t.status === 'OPEN').map((t: any) => normalizeSymbol(t.symbol)));
+      const dedupByCleanSym = new Map<string, { symbol: string; ticker: any }>();
 
       Object.entries(tickers)
         .filter(([sym, t]: [string, any]) => {
            if (!sym.includes('/USDT')) return false;
+           const cleanSym = normalizeSymbol(sym);
+           if (!cleanSym || isTraditionalEquitySymbol(cleanSym)) return false;
+
            const qVol = t.quoteVolume ?? t.volume ?? 0;
-           if (qVol < volThreshold) return false;
-           
-           const cleanSym = sym.split(':')[0].replace(/[\/:]/g, '').toUpperCase();
-           
-           // Always include BTC and ETH
-           if (cleanSym === 'BTCUSDT' || cleanSym === 'ETHUSDT') return true;
-           
-           // Always include open positions
-           if (activePositionSymbols.has(cleanSym)) return true;
-           
+           if (qVol < volThreshold && cleanSym !== 'BTCUSDT' && cleanSym !== 'ETHUSDT' && !activePositionSymbols.has(cleanSym)) return false;
+
+           // Always include BTC, ETH and open positions
+           if (cleanSym === 'BTCUSDT' || cleanSym === 'ETHUSDT' || activePositionSymbols.has(cleanSym)) return true;
+
            // Include candidate gems: change/volatility > 3.0%
            const percent = Math.abs(t.percentage || 0);
            const high = t.high || t.last || 0;
@@ -78,31 +111,49 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
            const estVolat = low > 0 ? ((high - low) / low * 100) : 0;
            return percent > 3.0 || estVolat > 3.0;
         })
-        .sort((a: any, b: any) => ((b[1].quoteVolume ?? b[1].volume ?? 0) - (a[1].quoteVolume ?? a[1].volume ?? 0)))
+        .forEach(([symbol, t]: [string, any]) => {
+           const cleanSym = normalizeSymbol(symbol);
+           const existing = dedupByCleanSym.get(cleanSym);
+           if (!existing || (!existing.symbol.includes(':') && symbol.includes(':'))) {
+             dedupByCleanSym.set(cleanSym, { symbol, ticker: t });
+           }
+        });
+
+      Array.from(dedupByCleanSym.values())
+        .sort((a, b) => {
+          const aClean = normalizeSymbol(a.symbol);
+          const bClean = normalizeSymbol(b.symbol);
+          const aPriority = (aClean === 'BTCUSDT' || aClean === 'ETHUSDT' || activePositionSymbols.has(aClean)) ? 1 : 0;
+          const bPriority = (bClean === 'BTCUSDT' || bClean === 'ETHUSDT' || activePositionSymbols.has(bClean)) ? 1 : 0;
+          if (aPriority !== bPriority) return bPriority - aPriority;
+          return ((b.ticker?.quoteVolume ?? b.ticker?.volume ?? 0) - (a.ticker?.quoteVolume ?? a.ticker?.volume ?? 0));
+        })
         .slice(0, limit)
-        .forEach(([symbol]) => {
+        .forEach(({ symbol }) => {
            symbolsSet.add(symbol);
            if (!symbolToEx[symbol]) symbolToEx[symbol] = exName;
         });
     }
 
     const symbolsToUpdate = Array.from(symbolsSet);
-    const cleanSymbolsSet = new Set(symbolsToUpdate.map(s => s.split(':')[0].replace('/', '')));
+    const cleanSymbolsSet = new Set(symbolsToUpdate.map(s => normalizeSymbol(s)));
     
-    // Cleanup old records to prevent memory leak
+    // Cleanup old records to prevent memory leak (preserve BTCUSDT)
     for (const key of Object.keys(GLOBAL_TRUE_OHLCV)) {
-      if (!cleanSymbolsSet.has(key)) delete GLOBAL_TRUE_OHLCV[key];
+      if (key !== 'BTCUSDT' && !cleanSymbolsSet.has(key)) delete GLOBAL_TRUE_OHLCV[key];
     }
 
+    const activePositionSymbolsOuter = new Set(virtualTrades.filter((t: any) => t.status === 'OPEN').map((t: any) => normalizeSymbol(t.symbol)));
+
     // Safe throttled fetch wrapper with exponential backoff on errors/rate limits
-    const fetchOHLCVSafe = async (exchange: any, fSymbol: string, timeframe: string, limit: number, maxRetries = 3): Promise<any[]> => {
+    const fetchOHLCVSafe = async (exchange: any, fSymbol: string, timeframe: string, limit: number, isPriority = false, maxRetries = 3): Promise<any[]> => {
       // Ensure market is known to avoid CCXT ever calling loadMarkets() over the network
       ensureExchangeMarket(exchange, fSymbol);
       let attempt = 0;
       while (attempt < maxRetries) {
         try {
           // Subtle sub-second delay per call inside individual coin routines to restrict raw frequency peaks
-          const delay = exchange.id === 'weex' ? 350 : 150;
+          const delay = isPriority ? 40 : (exchange.id === 'weex' ? 80 : 60);
           await new Promise(resolve => setTimeout(resolve, delay));
           return await exchange.fetchOHLCV(fSymbol, timeframe, undefined, limit);
         } catch (e: any) {
@@ -132,7 +183,7 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
     };
 
     // Safe throttled concurrent batch routing designed for public rate endpoints limits
-    const batchSize = 2; 
+    const batchSize = 3;
     for (let i = 0; i < symbolsToUpdate.length; i += batchSize) {
       const batch = symbolsToUpdate.slice(i, i + batchSize);
       await Promise.all(batch.map(async (symbol) => {
@@ -140,6 +191,9 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
         try {
           const currentEx = ctx.getCcxtExchange(ex);
           if (!currentEx) return;
+
+          const cleanCheck = normalizeSymbol(symbol);
+          const isPriorityCoin = cleanCheck === 'BTCUSDT' || cleanCheck === 'ETHUSDT' || activePositionSymbolsOuter.has(cleanCheck);
 
           let realFetchSymbol = symbol;
           if (ex === 'weex') {
@@ -156,19 +210,17 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
           }
 
           // Fetch 15m first, it's more important for signals
-          const ohlcv15m = await fetchOHLCVSafe(currentEx, realFetchSymbol, '15m', 100);
+          const ohlcv15m = await fetchOHLCVSafe(currentEx, realFetchSymbol, '15m', 100, isPriorityCoin);
           if (ohlcv15m.length < 26) return;
           
-          // Fetch 1m only if 15m is healthy
-          const ohlcv1m = await fetchOHLCVSafe(currentEx, realFetchSymbol, '1m', 60);
-
-          // Fetch 1h and 4h for HTF Global Trend Filter and FVG
-          const ohlcv1h = await fetchOHLCVSafe(currentEx, realFetchSymbol, '1h', 100);
-          const ohlcv4h = await fetchOHLCVSafe(currentEx, realFetchSymbol, '4h', 20);
-          
-          // Fetch 1d and 5m for 1D Trend context and 5m active execution
-          const ohlcv1d = await fetchOHLCVSafe(currentEx, realFetchSymbol, '1d', 30);
-          const ohlcv5m = await fetchOHLCVSafe(currentEx, realFetchSymbol, '5m', 100);
+          // Fetch 1m and secondary HTF/LTF timeframes in parallel once 15m is healthy
+          const [ohlcv1m, ohlcv1h, ohlcv4h, ohlcv1d, ohlcv5m] = await Promise.all([
+            fetchOHLCVSafe(currentEx, realFetchSymbol, '1m', 60, isPriorityCoin),
+            fetchOHLCVSafe(currentEx, realFetchSymbol, '1h', 100, isPriorityCoin),
+            fetchOHLCVSafe(currentEx, realFetchSymbol, '4h', 20, isPriorityCoin),
+            fetchOHLCVSafe(currentEx, realFetchSymbol, '1d', 30, isPriorityCoin),
+            fetchOHLCVSafe(currentEx, realFetchSymbol, '5m', 100, isPriorityCoin)
+          ]);
       
           if (ohlcv15m.length >= 26) {
             const cleanSym = symbol.split(':')[0].replace(/[\/:]/g, '').toUpperCase();
@@ -264,22 +316,32 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
             
             // PSAR 15m & 1m
             let psarStatus15: 'BULLISH' | 'BEARISH' = 'BULLISH';
+            let lastSar15 = price;
             const psar15 = PSAR.calculate({ high: highs15, low: lows15, step: 0.02, max: 0.2 });
             if (psar15.length > 0) {
-              psarStatus15 = closes15[closes15.length - 1] > psar15[psar15.length - 1] ? 'BULLISH' : 'BEARISH';
+              lastSar15 = psar15[psar15.length - 1];
+              psarStatus15 = closes15[closes15.length - 1] > lastSar15 ? 'BULLISH' : 'BEARISH';
             }
 
             let psarStatus1m: 'BULLISH' | 'BEARISH' = 'BULLISH';
+            let lastSar1m = price;
+            let rsi1mVal = trueRsi15;
             let isSarFlipped1m = false;
             let isSarBearishFlipped1m = false;
             let isSarBullishFlipped1m = false;
+            if (ohlcv1m.length >= 15) {
+               const closes1 = ohlcv1m.map(h => h[4] as number);
+               const rsi1Arr = RSI.calculate({ values: closes1, period: 14 });
+               if (rsi1Arr.length > 0) rsi1mVal = rsi1Arr[rsi1Arr.length - 1];
+            }
             if (ohlcv1m.length >= 30) {
                const highs1 = ohlcv1m.map(h => h[2] as number);
                const lows1 = ohlcv1m.map(h => h[3] as number);
                const psar1 = PSAR.calculate({ high: highs1, low: lows1, step: 0.02, max: 0.2 });
                if (psar1.length > 5) {
                  const lastClose = ohlcv1m[ohlcv1m.length - 1][4] as number;
-                 psarStatus1m = lastClose > psar1[psar1.length - 1] ? 'BULLISH' : 'BEARISH';
+                 lastSar1m = psar1[psar1.length - 1];
+                 psarStatus1m = lastClose > lastSar1m ? 'BULLISH' : 'BEARISH';
                  
                  for (let k = 1; k <= 5; k++) {
                      const idx = psar1.length - k;
@@ -304,11 +366,11 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
 
             // ATR, ADX & VWAP
             const atrResult = ATR.calculate({ high: highs15, low: lows15, close: closes15, period: 14 });
-            if (atrResult.length > 0) GLOBAL_ATR[symbol.replace('/', '')] = atrResult[atrResult.length - 1] || 0;
+            if (atrResult.length > 0) GLOBAL_ATR[cleanSym] = atrResult[atrResult.length - 1] || 0;
             try {
               if (highs15.length >= 28) {
                 const adxResult = ADX.calculate({ high: highs15, low: lows15, close: closes15, period: 14 });
-                if (adxResult.length > 0) GLOBAL_ADX[symbol.replace('/', '')] = adxResult[adxResult.length - 1].adx || 0;
+                if (adxResult.length > 0) GLOBAL_ADX[cleanSym] = adxResult[adxResult.length - 1].adx || 0;
               }
             } catch (e) {}
 
@@ -402,16 +464,38 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
               }
             }
 
-            GLOBAL_TRUE_OHLCV[symbol.split(':')[0].replace('/', '')] = { 
+            const volumeSpikeVal = computeVolumeSpikeRatio(ohlcv15m, ohlcv1m);
+            const candles1mFormatted = Array.isArray(ohlcv1m)
+              ? ohlcv1m.slice(-15).map((c) => ({
+                  time: c[0],
+                  open: Number(c[1] || 0),
+                  high: Number(c[2] || 0),
+                  low: Number(c[3] || 0),
+                  close: Number(c[4] || 0),
+                  volume: Number(c[5] || 0)
+                }))
+              : [];
+
+            GLOBAL_TRUE_OHLCV[cleanSym] = { 
                 rsi1h: trueRsi15, 
+                rsi15m: trueRsi15,
+                rsi1m: rsi1mVal,
                 macd1h: macdSignal, 
                 bb1h: bbStatus,
                 vwap: lastVwap, 
+                sar: lastSar15,
+                sar1m: lastSar1m,
+                volumeSpike: volumeSpikeVal,
                 psarStatus: psarStatus15,
                 psarStatus1m,
                 isSarFlipped1m,
                 isSarBearishFlipped1m,
                 isSarBullishFlipped1m,
+                high: latestHigh,
+                low: latestLow,
+                open: latestOpen,
+                close: price,
+                candles1m: candles1mFormatted,
                 wicks: { 
                   topPct: (((latestHigh - latestLow) / (latestLow || 1) * 100) >= 0.15) ? (topWick / totalSize) : 0, 
                   bottomPct: (((latestHigh - latestLow) / (latestLow || 1) * 100) >= 0.15) ? (bottomWick / totalSize) : 0, 
@@ -421,6 +505,7 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
                 ema50: ema50Result,
                 ema200: ema200Result,
                 is48hBreakout: (price < Math.min(...lows15)) ? 1 : 0,
+                is48hBreakoutLow: (price > Math.max(...highs15)) ? 1 : 0,
                 ema200_1h: ema200_1hResult,
                 hasFvgAbove,
                 hasBullishFvgBelow,
@@ -440,7 +525,7 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
                 hasFvg5mBelow,
                 pointA5m,
                 pointB5m,
-                adx15m: GLOBAL_ADX[symbol.split(':')[0].replace('/', '')] || 25,
+                adx15m: GLOBAL_ADX[cleanSym] || 25,
                 updatedAt: Date.now()
             };
           }
@@ -448,10 +533,12 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
           console.error(`[OHLCV] Error for ${symbol}:`, e.message);
         }
       }));
-      await new Promise(resolve => setTimeout(resolve, 800)); // Delay between fetches
+      await new Promise(resolve => setTimeout(resolve, 150)); // Delay between batches
     }
   } catch (e: any) {
     console.error('[OHLCV] Global Error:', e.message);
+  } finally {
+    isUpdatingTrueOhlcv = false;
   }
 }
 
@@ -570,13 +657,13 @@ export async function checkOrderBooks(ctx: MarketDataCollectorContext): Promise<
           price: largestAskWall.price,
           size: largestAskWall.size,
           distancePct: largestAskWall.distancePct,
-          smartSellLimit: Number((largestAskWall.price * 0.9997).toFixed(5)) // Front-run 0.03% below Ask Iceberg Wall
+          smartSellLimit: formatPricePrecision(largestAskWall.price * 0.9997) // Front-run 0.03% below Ask Iceberg Wall
         } : null,
         bidIceberg: hasBidIceberg ? {
           price: largestBidWall.price,
           size: largestBidWall.size,
           distancePct: largestBidWall.distancePct,
-          smartBuyLimit: Number((largestBidWall.price * 1.0003).toFixed(5)) // Front-run 0.03% above Bid Iceberg Wall
+          smartBuyLimit: formatPricePrecision(largestBidWall.price * 1.0003) // Front-run 0.03% above Bid Iceberg Wall
         } : null
       };
 
@@ -673,22 +760,32 @@ export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketData
     
     // PSAR 15m & 1m
     let psarStatus15: 'BULLISH' | 'BEARISH' = 'BULLISH';
+    let lastSar15 = price;
     const psar15 = PSAR.calculate({ high: highs15, low: lows15, step: 0.02, max: 0.2 });
     if (psar15.length > 0) {
-      psarStatus15 = closes15[closes15.length - 1] > psar15[psar15.length - 1] ? 'BULLISH' : 'BEARISH';
+      lastSar15 = psar15[psar15.length - 1];
+      psarStatus15 = closes15[closes15.length - 1] > lastSar15 ? 'BULLISH' : 'BEARISH';
     }
     
     let psarStatus1m: 'BULLISH' | 'BEARISH' = 'BULLISH';
+    let lastSar1m = price;
+    let rsi1mVal = trueRsi15;
     let isSarFlipped1m = false;
     let isSarBearishFlipped1m = false;
     let isSarBullishFlipped1m = false;
+    if (ohlcv1m.length >= 15) {
+       const closes1 = ohlcv1m.map((h: any) => h[4] as number);
+       const rsi1Arr = RSI.calculate({ values: closes1, period: 14 });
+       if (rsi1Arr.length > 0) rsi1mVal = rsi1Arr[rsi1Arr.length - 1];
+    }
     if (ohlcv1m.length >= 30) {
        const highs1 = ohlcv1m.map((h: any) => h[2] as number);
        const lows1 = ohlcv1m.map((h: any) => h[3] as number);
        const psar1 = PSAR.calculate({ high: highs1, low: lows1, step: 0.02, max: 0.2 });
        if (psar1.length > 5) {
          const lastClose = ohlcv1m[ohlcv1m.length - 1][4] as number;
-         psarStatus1m = lastClose > psar1[psar1.length - 1] ? 'BULLISH' : 'BEARISH';
+         lastSar1m = psar1[psar1.length - 1];
+         psarStatus1m = lastClose > lastSar1m ? 'BULLISH' : 'BEARISH';
          
          for (let i = 1; i <= 5; i++) {
              const idx = psar1.length - i;
@@ -736,18 +833,40 @@ export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketData
     const topWick = latestHigh - bodyMax;
     const bottomWick = bodyMin - latestLow;
     const totalSize = (latestHigh - latestLow) || 1;
+
+    const volumeSpikeVal = computeVolumeSpikeRatio(ohlcv15m, ohlcv1m);
+    const candles1mFormatted = Array.isArray(ohlcv1m)
+      ? ohlcv1m.slice(-15).map((c: any) => ({
+          time: c[0],
+          open: Number(c[1] || 0),
+          high: Number(c[2] || 0),
+          low: Number(c[3] || 0),
+          close: Number(c[4] || 0),
+          volume: Number(c[5] || 0)
+        }))
+      : [];
     
     GLOBAL_TRUE_OHLCV[cleanSym] = {
         ...(GLOBAL_TRUE_OHLCV[cleanSym] || {}), // Preserve other values like FVG
         rsi1h: trueRsi15, 
+        rsi15m: trueRsi15,
+        rsi1m: rsi1mVal,
         macd1h: macdSignal, 
         bb1h: bbStatus,
         vwap: lastVwap, 
+        sar: lastSar15,
+        sar1m: lastSar1m,
+        volumeSpike: volumeSpikeVal,
         psarStatus: psarStatus15,
         psarStatus1m,
         isSarFlipped1m,
         isSarBearishFlipped1m,
         isSarBullishFlipped1m,
+        high: latestHigh,
+        low: latestLow,
+        open: latestOpen,
+        close: price,
+        candles1m: candles1mFormatted,
         wicks: { 
           topPct: (((latestHigh - latestLow) / (latestLow || 1) * 100) >= 0.15) ? (topWick / totalSize) : 0, 
           bottomPct: (((latestHigh - latestLow) / (latestLow || 1) * 100) >= 0.15) ? (bottomWick / totalSize) : 0, 
@@ -757,8 +876,11 @@ export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketData
         ema50: ema50Result,
         ema200: ema200Result,
         is48hBreakout: (price < Math.min(...lows15)) ? 1 : 0,
+        is48hBreakoutLow: (price > Math.max(...highs15)) ? 1 : 0,
         isLiquiditySweep,
-        isLiquiditySweepLow
+        isLiquiditySweepLow,
+        adx15m: GLOBAL_ADX[cleanSym] || 25,
+        updatedAt: Date.now()
     };
 
     if (ctx.onIndicatorsUpdated) {
@@ -827,7 +949,7 @@ export function getWallAdjustedTp(symbol: string, isSell: boolean, currentPrice:
   for (const wall of bidWalls) {
     if (wall.price > targetTpPrice) {
       // Front-run the bid wall by placing TP slightly above it (e.g. 0.05% higher)
-      const adjustedTp = Number((wall.price * 1.0005).toFixed(5));
+      const adjustedTp = formatPricePrecision(wall.price * 1.0005);
       if (adjustedTp < currentPrice) {
         console.log(`[ORDER BOOK FILTER] Adjusting TP for ${symbol} SHORT from ${targetTpPrice} to ${adjustedTp} to front-run bid wall at ${wall.price} (size: $${wall.size.toFixed(0)})`);
         return adjustedTp;

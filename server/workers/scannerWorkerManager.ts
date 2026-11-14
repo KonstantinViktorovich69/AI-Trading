@@ -14,6 +14,8 @@ export interface ScannerWorkerManagerContext {
   getGlobalPumps: () => Set<string>;
   getGlobalCvd: () => Record<string, any>;
   getGlobalAtr: () => Record<string, any>;
+  getGlobalAdx?: () => Record<string, any>;
+  getGlobalRawOhlcv?: () => Record<string, any>;
   getCacheSignals: () => any;
   setCacheSignals: (signals: any) => void;
   getGlobalAiCommitteeCache: () => Record<string, any>;
@@ -131,6 +133,8 @@ export class ScannerWorkerManager {
       if (p.GLOBAL_WHALES) Object.assign(this.ctx.getGlobalWhales(), p.GLOBAL_WHALES);
       if (p.GLOBAL_CVD) Object.assign(this.ctx.getGlobalCvd(), p.GLOBAL_CVD);
       if (p.GLOBAL_ATR) Object.assign(this.ctx.getGlobalAtr(), p.GLOBAL_ATR);
+      if (p.GLOBAL_ADX && this.ctx.getGlobalAdx) Object.assign(this.ctx.getGlobalAdx(), p.GLOBAL_ADX);
+      if (p.GLOBAL_RAW_OHLCV && this.ctx.getGlobalRawOhlcv) Object.assign(this.ctx.getGlobalRawOhlcv(), p.GLOBAL_RAW_OHLCV);
 
       let hasUpdates = false;
       if (p.CACHE_SIGNALS) {

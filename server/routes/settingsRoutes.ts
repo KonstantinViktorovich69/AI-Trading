@@ -303,6 +303,25 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       const v = Number(req.body.staleDataPauseSec);
       if (Number.isFinite(v) && v >= 0) globalSettings.staleDataPauseSec = Math.round(v);
     }
+    if (req.body.regimeUsesRealBtcCandles !== undefined) {
+      globalSettings.regimeUsesRealBtcCandles = !!req.body.regimeUsesRealBtcCandles;
+    }
+    if (req.body.blockEntriesOnEstimatedFeatures !== undefined) {
+      globalSettings.blockEntriesOnEstimatedFeatures = !!req.body.blockEntriesOnEstimatedFeatures;
+    }
+    if (req.body.modelSideAwareFeatures !== undefined) {
+      globalSettings.modelSideAwareFeatures = !!req.body.modelSideAwareFeatures;
+    }
+    if (req.body.requireModelMaturity !== undefined) {
+      globalSettings.requireModelMaturity = !!req.body.requireModelMaturity;
+    }
+    if (req.body.modelMinSamplesForAdjustment !== undefined) {
+      const v = Number(req.body.modelMinSamplesForAdjustment);
+      if (Number.isFinite(v) && v >= 1) globalSettings.modelMinSamplesForAdjustment = Math.round(v);
+    }
+    if (req.body.kbDedupeCap !== undefined) {
+      globalSettings.kbDedupeCap = !!req.body.kbDedupeCap;
+    }
     const exitFields = [
       'exitTrailingTriggerPct', 'exitTrailingDistancePct', 'exitEnableTrailingStop',
       'exitMinPttpActivationNetPnlPct', 'exitMinPttpPeakNetPnlPct', 'exitPttpTrailingDropPct',

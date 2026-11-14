@@ -3,6 +3,8 @@ import { inferDataOrigin, inferCloseReasonCode } from './tradeSchema.ts';
 import type { MarketRegime, DecisionTrace, TradePosition } from '../types/trading.ts';
 import { MIN_TRADES_FOR_PATTERN_STATISTICS, isPatternProtected } from './signalEngine.ts';
 import { getConfigVersion } from './buildInfo.ts';
+import { getCostModel } from './costModel.ts';
+import { getFunnelData } from './funnelCounters.ts';
 
 export interface GranularBreakdownMetric {
   category: string;
@@ -270,7 +272,7 @@ export class SignalPerformanceAnalyticsService {
       totalR += Number(t.rMultiple || 0);
       totalMae += Number(t.maePct || 0);
       totalMfe += Number(t.mfePct || 0);
-      totalSlippage += Number(t.slippagePct || 0.03);
+      totalSlippage += Number(t.slippagePct ?? 0);
       totalFees += Number(t.feeUsd || 0);
       totalHold += Number(t.holdDurationMs || 0);
 
@@ -342,19 +344,43 @@ export class SignalPerformanceAnalyticsService {
       const pnl = Number(t.pnl !== undefined ? t.pnl : ((t.amount || 10) * ((t.pnlPercent || 0) / 100)));
       const pnlPercent = Number(t.pnlPercent !== undefined ? t.pnlPercent : (entryPrice > 0 ? ((closePrice - entryPrice) / entryPrice) * (side === 'LONG' ? 100 : -100) * (t.leverage || 1) : 0));
       const rMultiple = this.calculateRMultiple(side, entryPrice, closePrice, t.stopLoss);
-      const { maePct, mfePct } = this.estimateMaeMfe(side, entryPrice, closePrice, pnlPercent);
-      
-      const notional = (t.amount || t.initialAmount || 10) * (t.leverage || 1);
-      const feeUsd = Number((notional * 0.001).toFixed(2));
-      const slippagePct = Number((t.slippagePct || 0.025).toFixed(3));
-      const holdDurationMs = (t.closeTime && t.openTime) ? (t.closeTime - t.openTime) : (Date.now() - (t.openTime || Date.now()));
+      const costModel = getCostModel(settings);
+      const leverage = Math.max(1, Number(t.leverage || 1));
+      const highestPrice = Number(t.highestPrice || 0);
+      const lowestPrice = Number(t.lowestPrice || 0);
+      const hasRealExcursion = entryPrice > 0 && highestPrice > 0 && lowestPrice > 0 && (highestPrice !== entryPrice || lowestPrice !== entryPrice);
+
+      let maePct: number;
+      let mfePct: number;
+      if (hasRealExcursion) {
+        if (side === 'LONG') {
+          mfePct = Number(Math.max(0, ((highestPrice - entryPrice) / entryPrice) * 100 * leverage).toFixed(2));
+          maePct = Number(Math.max(0, ((entryPrice - lowestPrice) / entryPrice) * 100 * leverage).toFixed(2));
+        } else {
+          mfePct = Number(Math.max(0, ((entryPrice - lowestPrice) / entryPrice) * 100 * leverage).toFixed(2));
+          maePct = Number(Math.max(0, ((highestPrice - entryPrice) / entryPrice) * 100 * leverage).toFixed(2));
+        }
+      } else {
+        const est = this.estimateMaeMfe(side, entryPrice, closePrice, pnlPercent);
+        maePct = est.maePct;
+        mfePct = est.mfePct;
+      }
+
+      const notional = Number(t.amount || t.initialAmount || 10) * leverage;
+      const feeUsd = t.feeUsd !== undefined && !isNaN(Number(t.feeUsd))
+        ? Number(Number(t.feeUsd).toFixed(2))
+        : Number((notional * costModel.feeRatePerSide * 2).toFixed(2));
+      const slippagePct = t.slippagePct !== undefined && !isNaN(Number(t.slippagePct))
+        ? Number(Number(t.slippagePct).toFixed(3))
+        : Number((costModel.slippageRoundTrip * 100).toFixed(3));
+      const holdDurationMs = (t.closeTime && t.openTime) ? Math.max(0, t.closeTime - t.openTime) : Math.max(0, Date.now() - (t.openTime || Date.now()));
 
       const pattern = this.normalizePattern(t.patternName || t.matchedPattern || t.pattern || (t.decisionTrace?.triggerPattern));
       const marketRegime: MarketRegime = t.marketRegime || t.decisionTrace?.marketRegime || 'NEUTRAL';
-      const confidenceScore = Number(t.signalAiScore || t.decisionTrace?.consensusScore || 85);
-      const consensusScore = Number(t.decisionTrace?.consensusScore || confidenceScore);
+      const confidenceScore = Number(t.signalAiScore ?? t.decisionTrace?.consensusScore ?? 0);
+      const consensusScore = Number(t.decisionTrace?.consensusScore ?? confidenceScore);
       const dynamicWeight = Number(t.dynamicWeight || t.assignedWeight || 1.0);
-      const riskSentinelDecision = t.riskSentinelDecision || (t.decisionTrace?.passedConsensus ? 'APPROVED' : 'APPROVED');
+      const riskSentinelDecision = t.riskSentinelDecision || (t.decisionTrace?.passedConsensus ? 'APPROVED' : 'UNKNOWN');
 
       return {
         id: t.id || `trade-${Math.random()}`,
@@ -533,10 +559,12 @@ export class SignalPerformanceAnalyticsService {
           }
         }
 
-        const accuracy = votesCount > 0 ? (correctCount / votesCount) * 100 : 75;
-        const avgConfidence = votesCount > 0 ? confSum / votesCount : 85;
+        const accuracy = votesCount > 0 ? (correctCount / votesCount) * 100 : 0;
+        const avgConfidence = votesCount > 0 ? confSum / votesCount : 0;
         const avgAssignedWeight = votesCount > 0 ? weightSum / votesCount : agent.baseWeight;
-        const dynamicWeight = Number(Math.max(0.5, Math.min(2.0, avgAssignedWeight * (accuracy / 70.0))).toFixed(2));
+        const dynamicWeight = votesCount > 0
+          ? Number(Math.max(0.5, Math.min(2.0, avgAssignedWeight * (accuracy / 70.0))).toFixed(2))
+          : Number(avgAssignedWeight.toFixed(2));
         const status = votesCount < 30 ? 'INSUFFICIENT_DATA (N < 30)' : (accuracy >= 75 ? 'STRONG_EVIDENCE' : 'INCONCLUSIVE');
 
         byAgent[agent.id] = {
@@ -564,12 +592,12 @@ export class SignalPerformanceAnalyticsService {
       ];
 
       const byFactorCombinations: Record<string, GranularBreakdownMetric> = {};
-      factorCombos.forEach((fc, idx) => {
-        const subset = scopedTrades.filter((t, i) => {
+      factorCombos.forEach((fc) => {
+        const subset = scopedTrades.filter((t) => {
           if (t.decisionTrace?.factors?.length) {
             return t.decisionTrace.factors.some(f => f.name.toLowerCase().includes(fc.tag));
           }
-          return i % factorCombos.length === idx;
+          return false;
         });
         byFactorCombinations[fc.label] = this.aggregateMetric(fc.label, subset);
       });
@@ -708,31 +736,78 @@ export class SignalPerformanceAnalyticsService {
       }))
       .sort((a, b) => b.winRate - a.winRate);
 
-    // Question 9: Filter Analysis
+    // Question 9: Filter Analysis (computed from real 24h funnel telemetry)
+    const funnel = getFunnelData(24);
+    let riskSentinelBlocks = 0;
+    let consensusRejections = 0;
+    let otherBlocks = 0;
+    let seenTotal = 0;
+
+    for (const [key, count] of Object.entries(funnel.aggregated || {})) {
+      const stage = key.split('|')[0]?.toLowerCase() || '';
+      if (stage === 'seen') {
+        seenTotal += count;
+      } else if (stage === 'executed' || stage === 'opened' || stage === 'entry') {
+        // non-rejection telemetry stage
+      } else if (stage.includes('risk')) {
+        riskSentinelBlocks += count;
+      } else if (stage.includes('committee') || stage.includes('consensus') || stage.includes('veto') || stage.includes('ai')) {
+        consensusRejections += count;
+      } else {
+        otherBlocks += count;
+      }
+    }
+    const totalSignalsFilteredOut = riskSentinelBlocks + consensusRejections + otherBlocks;
+    const denominatorSeen = Math.max(totalSignalsFilteredOut + closedTrades.length, seenTotal);
+    const filterPct = denominatorSeen > 0 ? Number(((totalSignalsFilteredOut / denominatorSeen) * 100).toFixed(1)) : 0;
+
     const question9_filterAnalysis = {
-      totalSignalsFilteredOut: Math.max(12, Math.round(closedTrades.length * 1.8)),
-      riskSentinelBlocks: Math.max(5, Math.round(closedTrades.length * 0.4)),
-      consensusRejections: Math.max(7, Math.round(closedTrades.length * 0.6)),
-      falseRejectionsEstimatedRate: 8.5,
-      summary: 'Фильтры Risk Sentinel и Consensus отсекают до 65% шума. Уровень ложного отсева прибыльных сигналов составляет менее 9%.'
+      totalSignalsFilteredOut,
+      riskSentinelBlocks,
+      consensusRejections,
+      falseRejectionsEstimatedRate: 0,
+      summary: totalSignalsFilteredOut > 0
+        ? `За последние 24ч отфильтровано ${totalSignalsFilteredOut} сигналов (${filterPct}% от потока): Risk Sentinel — ${riskSentinelBlocks}, Consensus/AI — ${consensusRejections}, прочие воронки — ${otherBlocks}.`
+        : 'За последние 24ч зафиксировано 0 отклонённых сигналов в телеметрии воронки (funnelCounters).'
     };
 
-    // Question 10: Loss Precursors
+    // Question 10: Loss Precursors (computed dynamically from closed losing trades)
+    const losses = closedTrades.filter(t => t.pnl < 0);
+    const calcPct = (count: number) => losses.length > 0 ? Math.round((count / losses.length) * 100) : 0;
+
+    const highMaeLosses = losses.filter(t => t.maePct > 1.2).length;
+    const fullStopLosses = losses.filter(t => t.closeReasonCode === 'STOP_LOSS' || t.rMultiple <= -0.9).length;
+    const counterTrendOrDegradedLosses = losses.filter(
+      t => t.gapAffected || t.indicatorsSource === 'FALLBACK' ||
+           (t.side === 'SHORT' && t.marketRegime === 'TREND_UP') ||
+           (t.side === 'LONG' && t.marketRegime === 'TREND_DOWN')
+    ).length;
+
+    const highMaePct = calcPct(highMaeLosses);
+    const fullStopPct = calcPct(fullStopLosses);
+    const counterTrendPct = calcPct(counterTrendOrDegradedLosses);
+
     const question10_lossPrecursors = [
       {
-        precursor: 'Повышенный MAE в первые 3 минуты (> 1.2% против входа)',
-        frequencyInLossesPct: 78,
-        description: 'В 78% убыточных сделок цена сразу уходила против позиции более чем на 1.2%, указывая на вход до завершения кульминации.'
+        precursor: 'Повышенный MAE против входа (> 1.2% с плечом)',
+        frequencyInLossesPct: highMaePct,
+        description: losses.length > 0
+          ? `Наблюдался в ${highMaeLosses} из ${losses.length} убыточных сделок (${highMaePct}%), указывает на ранний вход до завершения импульса.`
+          : 'Убыточные сделки в текущей выборке отсутствуют.'
       },
       {
-        precursor: 'Скрытое сопротивление / дисбаланс на старшем таймфрейме (HTF Imbalance)',
-        frequencyInLossesPct: 64,
-        description: 'Наличие непроторгованной плотности или FVG на 1h/4h таймфрейме снижает вероятность отскока.'
+        precursor: 'Срабатывание полного Stop-Loss (R <= -0.9)',
+        frequencyInLossesPct: fullStopPct,
+        description: losses.length > 0
+          ? `Зафиксировано в ${fullStopLosses} из ${losses.length} убыточных сделок (${fullStopPct}%).`
+          : 'Убыточные сделки в текущей выборке отсутствуют.'
       },
       {
-        precursor: 'Затухание объема без переключения Parabolic SAR',
-        frequencyInLossesPct: 59,
-        description: 'Вход по одному лишь пинбару без подтверждения разворота SAR приводит к продолжению пробоя.'
+        precursor: 'Вход против режима рынка (HTF) или на деградированных свечах',
+        frequencyInLossesPct: counterTrendPct,
+        description: losses.length > 0
+          ? `Обнаружено в ${counterTrendOrDegradedLosses} из ${losses.length} убыточных сделок (${counterTrendPct}%).`
+          : 'Убыточные сделки в текущей выборке отсутствуют.'
       }
     ];
 

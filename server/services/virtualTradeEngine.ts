@@ -1,6 +1,6 @@
 import { evaluateExitPolicy, type ExitPolicySettings } from './exitPolicy.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
-import { getCostModel } from './costModel.ts';
+import { getCostModel, roundTripCostPct } from './costModel.ts';
 import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
 import { getOtePendingCandidates, processOtePendingQueue } from './oteVirtualQueue.ts';
@@ -13,6 +13,20 @@ import type { GapCandleResult } from './gapCandleFetcher.ts';
 import { scheduleLearningCellsRecompute } from './learningCellService.ts';
 import { scheduleModelV2RetrainIfNeeded } from './quantModelV2.ts';
 import { resolveActiveExchange } from './activeExchange.ts';
+
+function formatPricePrecision(p: number): number {
+  if (!p || !Number.isFinite(p) || p <= 0) return p;
+  if (p < 0.0001) return Number(p.toPrecision(6));
+  if (p < 1) return Number(p.toFixed(6));
+  return Number(p.toFixed(5));
+}
+
+function formatPriceStr(p?: number): string {
+  if (typeof p !== 'number' || !Number.isFinite(p) || p <= 0) return 'N/A';
+  if (p < 0.0001) return p.toPrecision(6);
+  if (p < 1) return p.toFixed(6);
+  return p.toFixed(5);
+}
 
 const lastAlivePersistMap = new Map<string, number>();
 
@@ -291,9 +305,10 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
 
     const activeEx = resolveActiveExchange(globalSettings);            // 'weex'
     const wsKey = activeEx.charAt(0).toUpperCase() + activeEx.slice(1); // 'Weex'
+    const wsExMap = wsTickers ? (wsTickers[activeEx.toUpperCase()] || wsTickers[wsKey]) : undefined;
 
     // 1. WebSocket search
-    const tWs = wsTickers ? findTickerInMap(symbol, wsTickers[wsKey]) : undefined;
+    const tWs = wsExMap ? findTickerInMap(symbol, wsExMap) : undefined;
     if (tWs) {
       if (stalePriceGuardMs > 0 && typeof tWs.timestamp === 'number' && (nowForStale - tWs.timestamp > stalePriceGuardMs)) {
         currentPrice = 0;
@@ -343,8 +358,8 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
     }
 
-    // Update trade price in memory
-    if (Math.abs(trade.currentPrice - currentPrice) / currentPrice > 0.0001) {
+    // Update trade price in memory (explicitly handle missing/zero initial trade.currentPrice to avoid NaN bypass)
+    if (!trade.currentPrice || trade.currentPrice <= 0 || Math.abs(trade.currentPrice - currentPrice) / currentPrice > 0.0001) {
       trade.currentPrice = currentPrice;
       hasChanges = true;
     }
@@ -357,7 +372,9 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       ? ((trade.entryPrice - currentPrice) / trade.entryPrice) * 100
       : ((currentPrice - trade.entryPrice) / trade.entryPrice) * 100;
     const leveragedPnlNow = unleveragedPnlNow * trade.leverage;
-    const pnlNow = leveragedPnlNow - (0.1 * trade.leverage);
+    const activeCostModel = getCostModel(globalSettings);
+    const estCostMarginPct = roundTripCostPct(activeCostModel) * 100 * (trade.leverage || 1);
+    const pnlNow = leveragedPnlNow - estCostMarginPct;
 
     // --- PROFESSIONAL TRAILING TAKE PROFIT (PTTP) ---
     if ((trade as any).maxReachedUnleveragedPnl === undefined) {
@@ -401,6 +418,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         leverage: trade.leverage || 1,
         stopLoss: trade.stopLoss,
         takeProfit: trade.takeProfit,
+        tpStages: trade.tpStages,
         pnl: pnlNow,
         pnlPercent: pnlNow,
         createdAt: trade.openTime || (trade as any).createdAt || Date.now(),
@@ -483,7 +501,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         }
 
         if (trade.isReal) {
-          deps.sendTelegramMessage(`🎯 <b>Multi-TP Шаг #${stageIdx + 1} Достигнут (закрыто ${(ratioToClose * 100).toFixed(0)}%)!</b>\n\nМонета: <b>${trade.symbol.replace(/[\/:]/g, '')}</b>\nЦена: $${currentPrice.toFixed(5)}\nСЛ перенесен: $${trade.stopLoss?.toFixed(5) || 'N/A'}`);
+          deps.sendTelegramMessage(`🎯 <b>Multi-TP Шаг #${stageIdx + 1} Достигнут (закрыто ${(ratioToClose * 100).toFixed(0)}%)!</b>\n\nМонета: <b>${trade.symbol.replace(/[\/:]/g, '')}</b>\nЦена: $${formatPriceStr(currentPrice)}\nСЛ перенесен: $${formatPriceStr(trade.stopLoss)}`);
         }
 
         await deps.saveTradeDB(trade, true);
@@ -509,9 +527,14 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         : currentPrice <= trade.entryPrice * 1.0002;
 
       if (isPriceAtOrAboveEntry || pnlNow >= 0.2) {
-        const breakevenPrice = trade.side === 'SHORT'
-          ? Number((trade.entryPrice * 0.9995).toFixed(5))
-          : Number((trade.entryPrice * 1.0005).toFixed(5));
+        const rawBe = trade.side === 'SHORT'
+          ? (trade.entryPrice * 0.9995)
+          : (trade.entryPrice * 1.0005);
+        const breakevenPrice = rawBe < 0.0001
+          ? Number(rawBe.toPrecision(6))
+          : rawBe < 1
+          ? Number(rawBe.toFixed(6))
+          : Number(rawBe.toFixed(5));
         trade.stopLoss = breakevenPrice;
         trade.isProtected = true;
         (trade as any).dcaBreakEvenSet = true;
@@ -532,9 +555,9 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
     // Это дает позиции полноценное пространство для дыхания (1.15% буфер от текущей цены) и исключает
     // преждевременное выбивание по рыночному шуму на пути к целям TP1-TP4.
     if ((unleveragedPnlNow >= 1.50 || pnlNow >= 5.50) && !trade.isProtected && !shouldClose) {
-      const breakevenPrice = trade.side === 'SHORT'
-        ? Number((trade.entryPrice * 0.9965).toFixed(5))
-        : Number((trade.entryPrice * 1.0035).toFixed(5));
+      const breakevenPrice = formatPricePrecision(trade.side === 'SHORT'
+        ? trade.entryPrice * 0.9965
+        : trade.entryPrice * 1.0035);
 
       const shouldUpdateSl = !trade.stopLoss || (
         trade.side === 'SHORT' ? breakevenPrice < trade.stopLoss : breakevenPrice > trade.stopLoss
@@ -545,7 +568,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         trade.isProtected = true;
         deps.saveTradeDB(trade, true);
         if (trade.isReal) {
-          deps.sendTelegramMessage(`🛡️ <b>Adaptive Watchdog: Break-even Protected</b>\n\nSymbol: ${trade.symbol}\nProfit: +${pnlNow.toFixed(2)}% (Unleveraged: +${unleveragedPnlNow.toFixed(2)}%)\nNew SL: $${breakevenPrice.toFixed(5)}`);
+          deps.sendTelegramMessage(`🛡️ <b>Adaptive Watchdog: Break-even Protected</b>\n\nSymbol: ${trade.symbol}\nProfit: +${pnlNow.toFixed(2)}% (Unleveraged: +${unleveragedPnlNow.toFixed(2)}%)\nNew SL: $${formatPriceStr(breakevenPrice)}`);
           if (deps.setRealTradeSlTpOnExchange) {
             deps.setRealTradeSlTpOnExchange(trade.symbol, trade.side, trade.stopLoss, trade.takeProfit).catch(err => {
               console.log('[WATCHDOG BE SL SYNC ERR]:', err.message);
@@ -563,12 +586,12 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         const lockProfitPrice = trade.side === 'SHORT'
           ? trade.entryPrice * (1 - (2.0 / trade.leverage) / 100)
           : trade.entryPrice * (1 + (2.0 / trade.leverage) / 100);
-        trade.stopLoss = Number(lockProfitPrice.toFixed(5));
+        trade.stopLoss = formatPricePrecision(lockProfitPrice);
         trade.isProtected = true;
         (trade as any).protectionLevel = 1;
         deps.saveTradeDB(trade, true);
         if (trade.isReal) {
-          deps.sendTelegramMessage(`🛡️ <b>[Adaptive Watchdog - Tier 1] Locking Profits</b>\n\nМонета: <b>${trade.symbol}</b>\nПрофит: +${pnlNow.toFixed(2)}%\nНовый SL (Защита +2% прибыли): $${trade.stopLoss.toFixed(5)}`);
+          deps.sendTelegramMessage(`🛡️ <b>[Adaptive Watchdog - Tier 1] Locking Profits</b>\n\nМонета: <b>${trade.symbol}</b>\nПрофит: +${pnlNow.toFixed(2)}%\nНовый SL (Защита +2% прибыли): $${formatPriceStr(trade.stopLoss)}`);
           if (deps.setRealTradeSlTpOnExchange) {
             deps.setRealTradeSlTpOnExchange(trade.symbol, trade.side, trade.stopLoss, trade.takeProfit).catch(err => {
               console.log('[WATCHDOG TIER1 SL SYNC ERR]:', err.message);
@@ -580,12 +603,12 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
         const lockProfitPrice = trade.side === 'SHORT'
           ? trade.entryPrice * (1 - (5.0 / trade.leverage) / 100)
           : trade.entryPrice * (1 + (5.0 / trade.leverage) / 100);
-        trade.stopLoss = Number(lockProfitPrice.toFixed(5));
+        trade.stopLoss = formatPricePrecision(lockProfitPrice);
         trade.isProtected = true;
         (trade as any).protectionLevel = 2;
         deps.saveTradeDB(trade, true);
         if (trade.isReal) {
-          deps.sendTelegramMessage(`🛡️ <b>[Adaptive Watchdog - Tier 2] Locking High Profits</b>\n\nМонета: <b>${trade.symbol}</b>\nПрофит: +${pnlNow.toFixed(2)}%\nНовый SL (Защита +5% прибыли): $${trade.stopLoss.toFixed(5)}`);
+          deps.sendTelegramMessage(`🛡️ <b>[Adaptive Watchdog - Tier 2] Locking High Profits</b>\n\nМонета: <b>${trade.symbol}</b>\nПрофит: +${pnlNow.toFixed(2)}%\nНовый SL (Защита +5% прибыли): $${formatPriceStr(trade.stopLoss)}`);
           if (deps.setRealTradeSlTpOnExchange) {
             deps.setRealTradeSlTpOnExchange(trade.symbol, trade.side, trade.stopLoss, trade.takeProfit).catch(err => {
               console.log('[WATCHDOG TIER2 SL SYNC ERR]:', err.message);
@@ -657,13 +680,12 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       }
     }
 
-    // Scalping Time-Stop Safeguard: Auto-close positions stagnant in flat/loss > 3.0h
+    // Scalping Time-Stop Safeguard: Auto-close stagnant positions honoring exitPolicyConfig settings
     const tradeCreatedTime = trade.openTime || (trade as any).createdAt || Date.now();
     const tradeAgeHours = (Date.now() - tradeCreatedTime) / (3600 * 1000);
-    const configuredStagnationHours = (globalSettings as any).timeoutStagnationHours ?? 3.0;
-    // ЛЕГАСИ-ЛОГИКА: ранее условие (maxUnleveragedReached < 1.0) блокировало закрытие сделок, которые имели импульс в первый час, но затем часами зависли в боковике около нуля.
-    // Если позиция стагнирует дольше тайм-аута и находится около нуля/в убытке (pnlNow <= 1.0), закрываем для высвобождения торгового слота:
-    if (tradeAgeHours >= configuredStagnationHours && pnlNow <= 1.0 && !shouldClose) {
+    const configuredStagnationHours = exitPolicyConfig.timeoutStagnationHours ?? 8.0;
+    const maxStagnationPnlPct = exitPolicyConfig.maxStagnationPnlPct ?? 1.0;
+    if (exitPolicyConfig.enableStagnationTimeout !== false && tradeAgeHours >= configuredStagnationHours && pnlNow <= maxStagnationPnlPct && !shouldClose) {
       shouldClose = true;
       reason = `Тайм-стоп скальпинга: позиция в боковике ${tradeAgeHours.toFixed(1)}ч (PnL: ${pnlNow > 0 ? '+' : ''}${pnlNow.toFixed(2)}%). Закрытие для высвобождения торгового слота.`;
       (trade as any).closeReasonCode = 'TIMEOUT_SAFETY';
@@ -758,7 +780,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
                     const newAmount = oldAmount + orderAmount;
                     const newEntry = (oldEntry * oldAmount + dcaPrice * orderAmount) / newAmount;
 
-                    trade.entryPrice = Number(newEntry.toFixed(5));
+                    trade.entryPrice = formatPricePrecision(newEntry);
                     trade.amount = Number(newAmount.toFixed(2));
                     (trade as any).initialAmount = initialAmount;
                     (trade as any).dcaAveraged = true;
@@ -766,21 +788,21 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
 
                     if (trade.takeProfit) {
                       const tpRatio = trade.takeProfit / oldEntry;
-                      trade.takeProfit = Number((trade.entryPrice * tpRatio).toFixed(5));
+                      trade.takeProfit = formatPricePrecision(trade.entryPrice * tpRatio);
                     }
 
                     if (trade.tpStages) {
                       trade.tpStages.forEach((stage: any) => {
                         if (stage.targetPrice) {
                           const stageRatio = stage.targetPrice / oldEntry;
-                          stage.targetPrice = Number((trade.entryPrice * stageRatio).toFixed(5));
+                          stage.targetPrice = formatPricePrecision(trade.entryPrice * stageRatio);
                         }
                       });
                     }
 
                     if (trade.stopLoss) {
                       const slRatio = trade.stopLoss / oldEntry;
-                      const ratioSl = Number((trade.entryPrice * slRatio).toFixed(5));
+                      const ratioSl = formatPricePrecision(trade.entryPrice * slRatio);
                       // Protect Stop Loss: never widen into deeper loss on DCA
                       trade.stopLoss = trade.side === 'LONG'
                         ? Math.max(trade.stopLoss, ratioSl)
@@ -812,7 +834,7 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
                     hasChanges = true;
 
                     if (trade.isReal) {
-                      deps.sendTelegramMessage(`🤖 <b>Watchdog: Executed Grid DCA</b>\n\nSymbol: ${trade.symbol}\nPrice: $${dcaPrice}\nNew Entry: $${trade.entryPrice.toFixed(5)}\nNew TP: $${trade.takeProfit?.toFixed(5)}`);
+                      deps.sendTelegramMessage(`🤖 <b>Watchdog: Executed Grid DCA</b>\n\nSymbol: ${trade.symbol}\nPrice: $${formatPriceStr(dcaPrice)}\nNew Entry: $${formatPriceStr(trade.entryPrice)}\nNew TP: $${formatPriceStr(trade.takeProfit)}`);
                     }
                   }
                 }
@@ -984,9 +1006,9 @@ PnL %: ${trade.pnlPercent?.toFixed(2)}% (${trade.pnl?.toFixed(2)} USDT)
   }
 }`;
           const aiResp = await deps.runAiGeneration({
-            model: "gemini-3.7-flash",
+            model: "gemini-4-hydrogen",
             contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],
-            config: { responseMimeType: "application/json", temperature: 0.7 }
+            config: { responseMimeType: "application/json" }
           });
           if (aiResp.text) {
             const resBody = safeJsonParse(aiResp.text, {});

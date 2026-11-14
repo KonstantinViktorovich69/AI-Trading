@@ -548,6 +548,83 @@ export function FineTuningPanel({ tradingMode, setTradingMode, onAddToast, onRef
                     </div>
                     <p className="text-[9px] text-zinc-500 leading-normal">Вместо немедленного входа по рынку выставляет лимитную заявку глубже в зоне отката (50–61.8% от импульса после снятия ликвидности) и ждёт исполнения до 3 минут. Если цена не вернётся в зону — сделка пропускается. Работает и на реальных, и на виртуальных сделках.</p>
                   </div>
+
+                  {/* АКТИВНАЯ СТРАТЕГИЯ И НАПРАВЛЕНИЯ */}
+                  <div className="bg-[#111113] p-3 rounded-xl border border-white/[0.04]">
+                    <span className="text-[10px] font-bold text-zinc-200 block mb-2">АКТИВНАЯ СТРАТЕГИЯ</span>
+                    <select
+                      value={settings.activeStrategy || 'SHORT_PUMP_FADE'}
+                      onChange={e => setSettings({ ...settings, activeStrategy: e.target.value })}
+                      className="w-full bg-zinc-900 border border-white/[0.06] rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 font-bold"
+                    >
+                      <option value="SHORT_PUMP_FADE">SHORT_PUMP_FADE (Памп-развороты)</option>
+                      <option value="TREND_FOLLOWING">TREND_FOLLOWING (По HTF тренду)</option>
+                      <option value="RANGE_MEAN_REVERSION">RANGE_MEAN_REVERSION (Возврат к VWAP)</option>
+                      <option value="ADAPTIVE_DYNAMIC">ADAPTIVE_DYNAMIC (Адаптивная)</option>
+                    </select>
+                  </div>
+
+                  <div className="bg-[#111113] p-3 rounded-xl border border-white/[0.04]">
+                    <span className="text-[10px] font-bold text-zinc-200 block mb-2">РАЗРЕШЕННЫЕ НАПРАВЛЕНИЯ</span>
+                    <select
+                      value={settings.allowedTradingDirections || 'BOTH'}
+                      onChange={e => setSettings({ ...settings, allowedTradingDirections: e.target.value })}
+                      className="w-full bg-zinc-900 border border-white/[0.06] rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 font-bold"
+                    >
+                      <option value="BOTH">BOTH (LONG & SHORT)</option>
+                      <option value="SHORT_ONLY">SHORT_ONLY</option>
+                      <option value="LONG_ONLY">LONG_ONLY</option>
+                    </select>
+                  </div>
+
+                  {/* ГИГИЕНА АГЕНТОВ, МОДЕЛИ И КОНСЕНСУС */}
+                  <div className="bg-[#111113] p-3 rounded-xl border border-white/[0.04] md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="flex items-center justify-between gap-2 text-[10px] font-bold text-zinc-200 cursor-pointer">
+                      <span>Консенсус Комитета Агентов</span>
+                      <input
+                        type="checkbox"
+                        checked={!!settings.isCommitteeConsensusCheckEnabled}
+                        onChange={e => setSettings({ ...settings, isCommitteeConsensusCheckEnabled: e.target.checked })}
+                        className="rounded bg-zinc-800 border-zinc-700 text-indigo-500 h-3.5 w-3.5"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 text-[10px] font-bold text-zinc-200 cursor-pointer">
+                      <span>Фильтр Торговых Сессий</span>
+                      <input
+                        type="checkbox"
+                        checked={!!settings.isSessionFilterEnabled}
+                        onChange={e => setSettings({ ...settings, isSessionFilterEnabled: e.target.checked })}
+                        className="rounded bg-zinc-800 border-zinc-700 text-indigo-500 h-3.5 w-3.5"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 text-[10px] font-bold text-zinc-200 cursor-pointer">
+                      <span>Дедупликация Правил БЗ (Cap)</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.kbDedupeCap !== false}
+                        onChange={e => setSettings({ ...settings, kbDedupeCap: e.target.checked })}
+                        className="rounded bg-zinc-800 border-zinc-700 text-indigo-500 h-3.5 w-3.5"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 text-[10px] font-bold text-zinc-200 cursor-pointer">
+                      <span>Зрелость Модели (Maturity Gate)</span>
+                      <input
+                        type="checkbox"
+                        checked={!!settings.requireModelMaturity}
+                        onChange={e => setSettings({ ...settings, requireModelMaturity: e.target.checked })}
+                        className="rounded bg-zinc-800 border-zinc-700 text-indigo-500 h-3.5 w-3.5"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between gap-2 text-[10px] font-bold text-zinc-200 cursor-pointer sm:col-span-2">
+                      <span>Evidence Gate для Реальной Торговли</span>
+                      <input
+                        type="checkbox"
+                        checked={settings.realTradingEvidenceGateEnabled !== false}
+                        onChange={e => setSettings({ ...settings, realTradingEvidenceGateEnabled: e.target.checked })}
+                        className="rounded bg-zinc-800 border-zinc-700 text-indigo-500 h-3.5 w-3.5"
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="flex justify-end pt-2">

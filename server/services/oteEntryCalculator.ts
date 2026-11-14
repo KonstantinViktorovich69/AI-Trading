@@ -49,6 +49,13 @@ export interface OteEntryZoneResult {
  *   Зона отката формируется в диапазоне [50%, 61.8%] импульса от точки A.
  * В обоих случаях zoneLow < zoneHigh как числовые значения.
  */
+function formatAdaptivePrice(p: number): number {
+  if (!isFinite(p) || p <= 0) return 0;
+  if (p < 0.0001) return Number(p.toPrecision(6));
+  if (p < 1) return Number(p.toFixed(6));
+  return Number(p.toFixed(5));
+}
+
 export function calculateOteEntryZone(params: {
   isSellSignal: boolean;
   price: number;
@@ -84,7 +91,7 @@ export function calculateOteEntryZone(params: {
 
   // Проверка на вырожденный или недостаточный импульс (< 0.1% от цены)
   if (impulse <= 0 || (impulse / price) < MIN_IMPULSE_RATIO) {
-    const fallbackPrice = Number(price.toFixed(5));
+    const fallbackPrice = formatAdaptivePrice(price);
     return {
       targetPrice: fallbackPrice,
       zoneLow: fallbackPrice,
@@ -114,9 +121,9 @@ export function calculateOteEntryZone(params: {
   const targetPrice = (zoneLow + zoneHigh) / 2;
 
   return {
-    targetPrice: Number(targetPrice.toFixed(5)),
-    zoneLow: Number(zoneLow.toFixed(5)),
-    zoneHigh: Number(zoneHigh.toFixed(5)),
+    targetPrice: formatAdaptivePrice(targetPrice),
+    zoneLow: formatAdaptivePrice(zoneLow),
+    zoneHigh: formatAdaptivePrice(zoneHigh),
     isValid: true
   };
 }

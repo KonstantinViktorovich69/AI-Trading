@@ -321,6 +321,8 @@ export async function saveTradeToDB(trade: any, immediate: boolean = false, ctx:
     dbData.settings.main.startOfDayBalance = startOfDayBalance;
     dbData.settings.main.startOfWeekBalance = startOfWeekBalance;
     dbData.settings.main.updatedAt = Date.now();
+    dbData.settings.virtualBalance = virtualBalance;
+    dbData.settings.startOfDayBalance = startOfDayBalance;
     if (typeof globalSettings === 'object' && globalSettings !== null) {
       globalSettings.virtualBalance = virtualBalance;
       globalSettings.startOfDayBalance = startOfDayBalance;
@@ -515,6 +517,8 @@ export async function saveBalanceToDB(ctx: DbStorageContext): Promise<void> {
     dbData.settings.main.lastResetDate = new Date().toISOString().split('T')[0];
     dbData.settings.main.updatedAt = Date.now();
     dbData.settings.main.uiStatsResetTimestamp = globalSettings?.uiStatsResetTimestamp || 0;
+    dbData.settings.virtualBalance = virtualBalance;
+    dbData.settings.startOfDayBalance = startOfDayBalance;
 
     if (globalSettings) {
       globalSettings.virtualBalance = virtualBalance;

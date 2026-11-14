@@ -199,6 +199,38 @@ describe('Settings Router Security Tests', () => {
     expect(res.jsonData.data.isOteEntryEnabled).toBe(true);
   });
 
+  it('POST /settings persists Phase 2-3 model and guard feature flags', async () => {
+    const realSettings: any = {};
+
+    const mockCtx: Partial<SettingsRouterContext> = {
+      getGlobalSettings: vi.fn().mockReturnValue(realSettings),
+      getAutopilotFailedSymbols: vi.fn().mockReturnValue(new Set()),
+      getLastSanitizationStatus: vi.fn().mockReturnValue({ sanitized: false }),
+      saveSettings: vi.fn()
+    };
+
+    const router = createSettingsRouter(mockCtx as SettingsRouterContext);
+    const handler = getHandler(router, '/settings', 'post');
+    const res = createMockRes();
+
+    await handler({
+      body: {
+        regimeUsesRealBtcCandles: true,
+        blockEntriesOnEstimatedFeatures: true,
+        modelSideAwareFeatures: true,
+        requireModelMaturity: true,
+        modelMinSamplesForAdjustment: 100
+      }
+    } as any, res);
+
+    expect(mockCtx.saveSettings).toHaveBeenCalled();
+    expect(realSettings.regimeUsesRealBtcCandles).toBe(true);
+    expect(realSettings.blockEntriesOnEstimatedFeatures).toBe(true);
+    expect(realSettings.modelSideAwareFeatures).toBe(true);
+    expect(realSettings.requireModelMaturity).toBe(true);
+    expect(realSettings.modelMinSamplesForAdjustment).toBe(100);
+  });
+
   it('POST /settings normalizes legacy exchange values to weex and sanitizes session settings', async () => {
     const realSettings: any = {
       exchangeApiConfig: {

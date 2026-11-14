@@ -98,6 +98,13 @@ describe('quantRiskEngine', () => {
       const result = calculateConfidenceProbability('UNKNOWN_COIN', 10, 100, mockContext);
       expect(result.p).toBe(0.5);
     });
+
+    it('resolves slash and :USDT swap symbols against normalized GLOBAL_TRUE_OHLCV and orderBookImbalance keys', () => {
+      const result = calculateConfidenceProbability('BTC/USDT:USDT', 65000, 200000, mockContext, 'SHORT');
+      expect(result.features).toHaveLength(11);
+      expect(result.features.some(v => v !== 0)).toBe(true);
+      expect(result.p).not.toBe(0.5);
+    });
   });
 
   describe('executeUpdateMarketPulse', () => {
@@ -202,19 +209,25 @@ describe('quantRiskEngine', () => {
       expect(resOther.matchedRuleIds).toContain('al_2');
     });
 
-    it('dynamically infers triggers from text-only rules and applies penalties', () => {
+    it('dynamically infers triggers from active text-only rules and skips archived rules', () => {
       const kb = [{
         id: 'al_text_only',
         text: '[Авто-Обучение | FIL/USDT | PnL -29.9%] Избегать входов при перекупленности RSI > 75 и слабом объеме',
         impact: -12,
         successRate: 0.15,
-        isArchived: true // Archived because of low winrate on loss
+        isArchived: false
+      }, {
+        id: 'al_archived_rule',
+        text: '[Авто-Обучение | FIL/USDT | PnL -29.9%] Избегать входов при перекупленности RSI > 75',
+        impact: -12,
+        successRate: 0.15,
+        isArchived: true
       }];
 
-      // Evaluated with RSI 80 (should trigger penalty via dynamic inference even though archived)
       const res = evaluateKnowledgeBaseForSignal('FIL/USDT', { rsi: 80, volumeSpike: 1.0 }, kb);
       expect(res.penaltyScore).toBeGreaterThanOrEqual(5);
       expect(res.matchedRuleIds).toContain('al_text_only');
+      expect(res.matchedRuleIds).not.toContain('al_archived_rule');
     });
   });
 

@@ -197,11 +197,20 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
             }
           }
           if (exName === 'weex') {
+            const scaledTickers: Record<string, any> = {};
             for (const sym of Object.keys(tickers)) {
-              if (tickers[sym] && tickers[sym].percentage !== undefined) {
-                tickers[sym].percentage = tickers[sym].percentage * 100;
+              const t = tickers[sym];
+              if (t && t.percentage !== undefined && !t._pctScaled) {
+                scaledTickers[sym] = {
+                  ...t,
+                  percentage: t.percentage * 100,
+                  _pctScaled: true,
+                };
+              } else {
+                scaledTickers[sym] = t;
               }
             }
+            tickers = scaledTickers;
           }
           const count = Object.keys(tickers).length;
           if (count > 0) {
@@ -211,7 +220,7 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
             }
             console.log(`[SCANNER] ${exName}: successfully fetched ${count} tickers in ${Date.now() - startTime}ms`);
             
-            if (exName === 'weex' && wsTickers && wsTickers.Weex) {
+            if (exName === 'weex' && wsTickers && (wsTickers.Weex || (wsTickers as any).WEEX)) {
               for (const [pair, t] of Object.entries<any>(tickers)) {
                 const cleanSym = pair.replace(/[\/:]/g, '').toUpperCase();
                 const lastVal = t.last || 0;
@@ -226,8 +235,14 @@ export async function syncGlobalTickers(ctx: TickerSyncContext, forceFullScan = 
                   timestamp: t.timestamp || Date.now(),
                   last: lastVal
                 };
-                wsTickers.Weex[pair] = tickerObj as any;
-                wsTickers.Weex[cleanSym] = tickerObj as any;
+                if (wsTickers.Weex) {
+                  wsTickers.Weex[pair] = tickerObj as any;
+                  wsTickers.Weex[cleanSym] = tickerObj as any;
+                }
+                if ((wsTickers as any).WEEX) {
+                  (wsTickers as any).WEEX[pair] = tickerObj as any;
+                  (wsTickers as any).WEEX[cleanSym] = tickerObj as any;
+                }
               }
             }
           }

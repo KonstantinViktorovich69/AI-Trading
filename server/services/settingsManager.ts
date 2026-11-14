@@ -110,6 +110,12 @@ export interface GlobalSettings {
   evidenceGateMinDays?: number;
   evidenceGateMaxDrawdownPct?: number;
   staleDataPauseSec?: number;
+  regimeUsesRealBtcCandles?: boolean;
+  blockEntriesOnEstimatedFeatures?: boolean;
+  modelSideAwareFeatures?: boolean;
+  requireModelMaturity?: boolean;
+  modelMinSamplesForAdjustment?: number;
+  kbDedupeCap?: boolean;
 }
 
 export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPERT_INSTRUCTIONS): GlobalSettings {
@@ -170,7 +176,8 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     evidenceGateMinTrades: 150,
     evidenceGateMinDays: 14,
     evidenceGateMaxDrawdownPct: 15,
-    staleDataPauseSec: 300
+    staleDataPauseSec: 300,
+    kbDedupeCap: true
   };
 }
 

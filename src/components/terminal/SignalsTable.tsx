@@ -1,5 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, TrendingDown, Zap, ExternalLink, ShieldAlert, CheckCircle2, Sliders, ArrowRight } from 'lucide-react';
+import { Search, Filter, TrendingDown, TrendingUp, Zap, ExternalLink, ShieldAlert, CheckCircle2, Sliders, ArrowRight } from 'lucide-react';
+
+function formatSmartPrice(p: number): string {
+  const num = Number(p || 0);
+  if (!isFinite(num) || num <= 0) return '0.0000';
+  const dec = num >= 100 ? 2 : num >= 1 ? 4 : num >= 0.01 ? 5 : num >= 0.0001 ? 6 : 8;
+  return num.toFixed(dec);
+}
 
 export interface SignalItem {
   symbol: string;
@@ -165,6 +172,8 @@ export const SignalsTable: React.FC<SignalsTableProps> = ({
                 const score = sig.aiScore || 50;
                 const isHighAi = score >= 75;
 
+                const isLong = sig.signal === 'LONG' || (sig.type || '').toUpperCase().includes('LONG') || (sig.type || '').includes('Лонг');
+
                 return (
                   <tr
                     key={`${sig.exchange}-${sig.symbol}`}
@@ -190,7 +199,7 @@ export const SignalsTable: React.FC<SignalsTableProps> = ({
                     </td>
 
                     <td className="p-2.5">
-                      <div className="font-bold text-zinc-200">${(sig.price || 0).toFixed(4)}</div>
+                      <div className="font-bold text-zinc-200">${formatSmartPrice(sig.price || 0)}</div>
                       <div className={`text-[10px] font-bold ${(sig.change24h || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {(sig.change24h || 0) >= 0 ? `+${(sig.change24h || 0).toFixed(1)}%` : `${(sig.change24h || 0).toFixed(1)}%`}
                       </div>
@@ -208,9 +217,13 @@ export const SignalsTable: React.FC<SignalsTableProps> = ({
 
                     <td className="p-2.5">
                       <div className="flex items-center gap-1">
-                        <TrendingDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        {isLong ? (
+                          <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        ) : (
+                          <TrendingDown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        )}
                         <span className="text-zinc-300 font-semibold text-[11px] truncate max-w-[180px]">
-                          {sig.patternName || sig.type || 'Short Scalp Setup'}
+                          {sig.patternName || sig.type || (isLong ? 'Long Scalp Setup' : 'Short Scalp Setup')}
                         </span>
                       </div>
                     </td>
@@ -225,9 +238,13 @@ export const SignalsTable: React.FC<SignalsTableProps> = ({
                           e.stopPropagation();
                           onOpenShortOrder(sig);
                         }}
-                        className="px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 rounded font-bold text-[10px] uppercase tracking-wider transition-all inline-flex items-center gap-1"
+                        className={`px-2.5 py-1 rounded font-bold text-[10px] uppercase tracking-wider transition-all inline-flex items-center gap-1 border ${
+                          isLong
+                            ? 'bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/30'
+                            : 'bg-amber-500/15 hover:bg-amber-500/30 text-amber-400 border-amber-500/30'
+                        }`}
                       >
-                        <span>Short Limit</span>
+                        <span>{isLong ? 'Long Limit' : 'Short Limit'}</span>
                         <ArrowRight className="w-3 h-3" />
                       </button>
                     </td>

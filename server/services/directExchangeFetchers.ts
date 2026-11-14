@@ -105,7 +105,8 @@ export async function fetchWeexTickersDirect(attempt: number = 1): Promise<Recor
                 const lastVal = parseFloat(t.lastPrice) || 0;
                 result[symbol] = {
                   symbol,
-                  timestamp: t.closeTime || Date.now(),
+                  timestamp: Date.now(),
+                  exchangeCloseTime: t.closeTime || undefined,
                   high: parseFloat(t.highPrice) || 0,
                   low: parseFloat(t.lowPrice) || 0,
                   bid: lastVal,
