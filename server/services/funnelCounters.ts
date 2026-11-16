@@ -39,8 +39,10 @@ function writeAtomicJson(filePath: string, data: any): void {
   }
 }
 
+const isTestEnv = () => Boolean(process.env.VITEST || process.env.NODE_ENV === 'test');
+
 export function loadFunnelState(): void {
-  if (!isMainThread) return;
+  if (!isMainThread || isTestEnv()) return;
   try {
     if (fs.existsSync(FUNNEL_FILE)) {
       const raw = fs.readFileSync(FUNNEL_FILE, 'utf8');
@@ -56,7 +58,7 @@ export function loadFunnelState(): void {
 }
 
 export function flushFunnelCounters(): void {
-  if (!isMainThread) return;
+  if (!isMainThread || isTestEnv()) return;
   pruneOldBuckets();
   writeAtomicJson(FUNNEL_FILE, funnelState);
 }
@@ -74,7 +76,7 @@ function pruneOldBuckets(now = Date.now()): void {
 let shutdownHooksRegistered = false;
 
 function registerShutdownHooks(): void {
-  if (shutdownHooksRegistered || !isMainThread) return;
+  if (shutdownHooksRegistered || !isMainThread || isTestEnv()) return;
   shutdownHooksRegistered = true;
   try {
     process.on('beforeExit', () => {
@@ -90,7 +92,7 @@ function registerShutdownHooks(): void {
 }
 
 export function initFunnelCounters(): void {
-  if (!isMainThread) return;
+  if (!isMainThread || isTestEnv()) return;
   loadFunnelState();
   registerShutdownHooks();
   if (!autoFlushTimer) {
@@ -102,7 +104,7 @@ export function initFunnelCounters(): void {
 }
 
 // Auto-initialize on import in main thread
-if (isMainThread) {
+if (isMainThread && !isTestEnv()) {
   initFunnelCounters();
 }
 

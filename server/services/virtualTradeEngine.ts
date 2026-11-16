@@ -1,6 +1,7 @@
 import { evaluateExitPolicy, type ExitPolicySettings } from './exitPolicy.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
-import { getCostModel, roundTripCostPct } from './costModel.ts';
+import { getCostModel, getShadowTakerCostModel, roundTripCostPct } from './costModel.ts';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
 import { getOtePendingCandidates, processOtePendingQueue } from './oteVirtualQueue.ts';
@@ -898,10 +899,12 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       trade.history.push({ time: Date.now(), type: 'CLOSE', price: finalClosePrice, amount: trade.amount });
 
       const costModel = getCostModel(globalSettings);
+      const takerCostModel = getShadowTakerCostModel(costModel);
       let totalPnlUsd = 0;
       let totalGrossPnlUsd = 0;
       let totalFeeUsd = 0;
       let totalSlippageUsd = 0;
+      let totalTakerPnlUsd = 0;
       let initialTradeAmount = trade.initialAmount || trade.amount;
       if (!trade.initialAmount) {
         trade.initialAmount = initialTradeAmount;
@@ -914,10 +917,13 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
           totalGrossPnlUsd += (res.grossPnlUsd ?? 0);
           totalFeeUsd += (res.feeUsd ?? 0);
           totalSlippageUsd += (res.slippageUsd ?? 0);
+          const takerRes = getUnifiedTradeClosePnl(trade.side, trade.entryPrice, h.price, h.amount, trade.leverage, takerCostModel);
+          totalTakerPnlUsd += takerRes.pnlUsd;
         }
       });
 
       const totalPnlPercent = initialTradeAmount > 0 ? (totalPnlUsd / initialTradeAmount) * 100 : 0;
+      const totalTakerPnlPercent = initialTradeAmount > 0 ? (totalTakerPnlUsd / initialTradeAmount) * 100 : 0;
 
       trade.pnl = totalPnlUsd;
       trade.pnlPercent = totalPnlPercent;
@@ -925,6 +931,8 @@ export async function manageActiveTrades(deps: VirtualTradeEngineDependencies): 
       trade.feeUsd = totalFeeUsd;
       trade.slippageUsd = totalSlippageUsd;
       trade.costModelVersion = costModel.version || 2;
+      trade.netPnlTakerFee = Number(totalTakerPnlPercent.toFixed(4));
+      trade.netPnlTakerFeeUsd = Number(totalTakerPnlUsd.toFixed(6));
       (trade as any).outcome = totalPnlPercent > 0 ? 1 : 0;
 
       if (!(trade as any).isAutoLearning && !trade.isReal) {
@@ -1006,7 +1014,7 @@ PnL %: ${trade.pnlPercent?.toFixed(2)}% (${trade.pnl?.toFixed(2)} USDT)
   }
 }`;
           const aiResp = await deps.runAiGeneration({
-            model: "gemini-4-hydrogen",
+            model: DEFAULT_AI_MODEL,
             contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],
             config: { responseMimeType: "application/json" }
           });

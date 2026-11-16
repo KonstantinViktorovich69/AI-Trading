@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { isMainThread, parentPort } from 'worker_threads';
+import { DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, getDefaultAiModel } from '../config/aiModels.ts';
 
 export interface PendingAiTask {
   params: any;
@@ -23,20 +24,171 @@ export interface AiGatewayOptions {
   workerTimeoutMs?: number;
 }
 
+export interface AiGatewayErrorInfo {
+  status: number | null;
+  code: string;
+  message: string;
+  model: string;
+  at: number;
+}
+
+export interface AiGatewayHealth {
+  model: string;
+  geminiKeyConfigured: boolean;
+  deepseekKeyConfigured: boolean;
+  serverKeyConfigured: boolean;
+  lastSuccessAt: number | null;
+  aiFallbackCountTotal: number;
+  aiFallbackCountLastHour: number;
+  cooldownUntil: number | null;
+  cooldownActive: boolean;
+  lastError: AiGatewayErrorInfo | null;
+  errorCounts24h: Record<string, number>;
+}
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
 export class AiGatewayService {
   private pendingAiTasks: Map<string, PendingAiTask> = new Map();
   private pendingWorkerAiTasks: Map<string, PendingWorkerAiTask> = new Map();
   private globalRefGenAi: GoogleGenAI | null = null;
   private serverGeminiCooldownUntil: number = 0;
+  private lastCooldownReason: string = '';
   private currentAiQueue: Promise<any> = Promise.resolve();
   private cachedMarketNews: { text: string; timestamp: number } | null = null;
   private _aiFallbackCount: number = 0;
   private fallbackTimestamps: number[] = [];
   private lastSuccessAt: number | null = null;
+  private lastError: AiGatewayErrorInfo | null = null;
+  private errorEvents24h: Array<{ bucket: string; at: number }> = [];
   private options: AiGatewayOptions;
 
   constructor(options: AiGatewayOptions = {}) {
     this.options = options;
+  }
+
+  private pruneErrorEvents(nowTs = Date.now()): void {
+    const cutoff = nowTs - ONE_DAY_MS;
+    while (this.errorEvents24h.length > 0 && this.errorEvents24h[0].at < cutoff) {
+      this.errorEvents24h.shift();
+    }
+  }
+
+  private classifyGeminiError(err: any, model: string, nowTs = Date.now()): {
+    info: AiGatewayErrorInfo;
+    bucket: string;
+    isTransportOrNetwork: boolean;
+    isOverloadedOrUnavailable: boolean;
+    statusSummary: string;
+    shouldCooldown: boolean;
+  } {
+    const rawMsg = err?.message || String(err || 'Unknown AI error');
+    let parsedErrObj: any = null;
+    try {
+      const jsonStart = rawMsg.indexOf('{');
+      if (jsonStart !== -1) {
+        parsedErrObj = JSON.parse(rawMsg.slice(jsonStart));
+      }
+    } catch {}
+
+    const errPayload = parsedErrObj?.error || err?.error || {};
+    const explicitStatus = Number(err?.status ?? err?.statusCode ?? err?.response?.status ?? errPayload?.code);
+    let status: number | null = Number.isFinite(explicitStatus) && explicitStatus > 0 ? explicitStatus : null;
+
+    const isTransportOrNetwork =
+      rawMsg.includes('fetch failed') ||
+      rawMsg.includes('ETIMEDOUT') ||
+      rawMsg.includes('ENOTFOUND') ||
+      rawMsg.includes('ECONNREFUSED') ||
+      rawMsg.includes('ECONNRESET') ||
+      rawMsg.includes('timeout') ||
+      err?.code === 'ETIMEDOUT' ||
+      err?.code === 'ENOTFOUND' ||
+      err?.code === 'ECONNREFUSED' ||
+      err?.code === 'ECONNRESET';
+
+    if (status === null) {
+      if (rawMsg.includes('429') || rawMsg.includes('RESOURCE_EXHAUSTED')) status = 429;
+      else if (rawMsg.includes('404') || rawMsg.includes('NOT_FOUND')) status = 404;
+      else if (rawMsg.includes('403') || rawMsg.includes('PERMISSION_DENIED') || rawMsg.includes('denied access')) status = 403;
+      else if (rawMsg.includes('503') || rawMsg.includes('UNAVAILABLE') || rawMsg.includes('overloaded')) status = 503;
+      else if (rawMsg.includes('401') || rawMsg.includes('UNAUTHENTICATED')) status = 401;
+      else if (rawMsg.includes('400') || rawMsg.includes('INVALID_ARGUMENT')) status = 400;
+      else if (rawMsg.includes('500') || rawMsg.includes('INTERNAL')) status = 500;
+    }
+
+    let code = String(errPayload?.status || err?.code || '').trim();
+    if (!code) {
+      if (status === 429) code = 'RESOURCE_EXHAUSTED';
+      else if (status === 404) code = 'NOT_FOUND';
+      else if (status === 403) code = 'PERMISSION_DENIED';
+      else if (status === 503) code = 'UNAVAILABLE';
+      else if (status === 401) code = 'UNAUTHENTICATED';
+      else if (isTransportOrNetwork) code = 'NETWORK_ERROR';
+      else code = 'UNKNOWN';
+    }
+
+    const isOverloadedOrUnavailable =
+      status === 503 ||
+      rawMsg.includes('503') ||
+      rawMsg.includes('UNAVAILABLE') ||
+      rawMsg.includes('overloaded') ||
+      rawMsg.includes('temporarily unavailable');
+
+    let bucket = 'OTHER';
+    if (status === 429) bucket = '429';
+    else if (status === 404) bucket = '404';
+    else if (status === 403) bucket = '403';
+    else if (status === 503 || isOverloadedOrUnavailable) bucket = '503';
+    else if (isTransportOrNetwork) bucket = 'NETWORK';
+    else if (status !== null) bucket = String(status);
+
+    let statusSummary = 'unavailable';
+    if (status === 429) {
+      statusSummary = 'QUOTA';
+    } else if (status === 403) {
+      statusSummary = 'cloud project access restricted (403)';
+    } else if (status === 404) {
+      statusSummary = 'model deprecated / not found (404)';
+    } else if (isOverloadedOrUnavailable) {
+      statusSummary = 'model temporarily overloaded (503)';
+    } else if (isTransportOrNetwork) {
+      statusSummary = 'network connection temporarily unavailable';
+    } else {
+      statusSummary = rawMsg.length > 80 ? rawMsg.slice(0, 80) + '...' : rawMsg;
+    }
+
+    const shouldCooldown =
+      status === 403 ||
+      status === 404 ||
+      status === 429 ||
+      isOverloadedOrUnavailable ||
+      isTransportOrNetwork;
+
+    const cleanMessage = String(errPayload?.message || rawMsg).slice(0, 300);
+
+    return {
+      info: {
+        status,
+        code,
+        message: cleanMessage,
+        model,
+        at: nowTs
+      },
+      bucket,
+      isTransportOrNetwork,
+      isOverloadedOrUnavailable,
+      statusSummary,
+      shouldCooldown
+    };
+  }
+
+  private recordErrorEvent(err: any, model: string, nowTs = Date.now()) {
+    const classified = this.classifyGeminiError(err, model, nowTs);
+    this.lastError = classified.info;
+    this.pruneErrorEvents(nowTs);
+    this.errorEvents24h.push({ bucket: classified.bucket, at: nowTs });
+    return classified;
   }
 
   private recordFallbackEvent(nowTs = Date.now()): void {
@@ -72,10 +224,46 @@ export class AiGatewayService {
     return this._aiFallbackCount;
   }
 
+  public getHealth(nowTs = Date.now()): AiGatewayHealth {
+    this.pruneErrorEvents(nowTs);
+    const errorCounts24h: Record<string, number> = {
+      '429': 0,
+      '404': 0,
+      '403': 0,
+      '503': 0,
+      'NETWORK': 0,
+      'OTHER': 0
+    };
+    for (const ev of this.errorEvents24h) {
+      errorCounts24h[ev.bucket] = (errorCounts24h[ev.bucket] || 0) + 1;
+    }
+
+    const geminiKeyConfigured = Boolean(this.options.geminiApiKey || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY);
+    const deepseekKeyConfigured = Boolean(this.options.deepseekApiKey || process.env.DEEPSEEK_API_KEY);
+
+    return {
+      model: getDefaultAiModel(),
+      geminiKeyConfigured,
+      deepseekKeyConfigured,
+      serverKeyConfigured: geminiKeyConfigured || deepseekKeyConfigured,
+      lastSuccessAt: this.lastSuccessAt,
+      aiFallbackCountTotal: this._aiFallbackCount,
+      aiFallbackCountLastHour: this.getAiFallbackCountLastHour(nowTs),
+      cooldownUntil: this.serverGeminiCooldownUntil > nowTs ? this.serverGeminiCooldownUntil : null,
+      cooldownActive: this.serverGeminiCooldownUntil > nowTs,
+      lastError: this.lastError ? { ...this.lastError } : null,
+      errorCounts24h
+    };
+  }
+
   public resetAiFallbackCount(): void {
     this._aiFallbackCount = 0;
     this.fallbackTimestamps = [];
     this.lastSuccessAt = null;
+    this.lastError = null;
+    this.errorEvents24h = [];
+    this.serverGeminiCooldownUntil = 0;
+    this.lastCooldownReason = '';
   }
 
   public getPendingAiTasks(): Map<string, PendingAiTask> {
@@ -150,7 +338,7 @@ export class AiGatewayService {
           ) {
             defaultFallback = '[]';
           }
-          resolve({ text: defaultFallback });
+          resolve({ text: defaultFallback, isFallback: true, fallbackReason: 'Frontend task timeout' });
         }
       }, timeoutMs);
     });
@@ -185,7 +373,7 @@ export class AiGatewayService {
     return true;
   }
 
-  public getStaticServerSideAiFallback(params: any, errorMsg: string): { text: string } {
+  public getStaticServerSideAiFallback(params: any, errorMsg: string): { text: string; isFallback: true; fallbackReason: string } {
     this.recordFallbackEvent();
     const promptString = JSON.stringify(params.contents || "");
     let text = "[]";
@@ -274,11 +462,15 @@ export class AiGatewayService {
           consensus: "НЕТ ДАННЫХ"
         });
       } else {
-        text = `ИИ недоступен: ${errorMsg}`;
+        text = JSON.stringify({
+          isFallback: true,
+          fallbackReason: errorMsg,
+          message: `ИИ недоступен: ${errorMsg}`
+        });
       }
     }
 
-    return { text };
+    return { text, isFallback: true, fallbackReason: errorMsg };
   }
 
   public async runAiGeneration(params: any): Promise<any> {
@@ -364,19 +556,23 @@ export class AiGatewayService {
       }
 
       if (this.serverGeminiCooldownUntil > Date.now()) {
-        return this.getStaticServerSideAiFallback(params, "Gemini API in cooldown due to access/quota status. Using local fallback.");
+        const cooldownReason = this.lastCooldownReason === 'QUOTA'
+          ? 'QUOTA'
+          : 'Gemini API in cooldown due to access/quota status. Using local fallback.';
+        return this.getStaticServerSideAiFallback(params, cooldownReason);
       }
 
       const ai = this.getInternalServerGeminiClient();
       if (ai) {
-        try {
-          const requestedModel = String(params.model || '');
-          const isLegacyModel = !requestedModel ||
-            requestedModel.includes('gemini-3.') ||
-            requestedModel.includes('gemini-1.5') ||
-            requestedModel.includes('gemini-2.0');
-          const model = isLegacyModel ? 'gemini-4-hydrogen' : requestedModel;
+        const requestedModel = String(params.model || '');
+        const isLegacyModel = !requestedModel ||
+          requestedModel.includes('gemini-3.') ||
+          requestedModel.includes('gemini-1.5') ||
+          requestedModel.includes('gemini-2.0');
+        const defaultModel = getDefaultAiModel();
+        const model = isLegacyModel || requestedModel === DEFAULT_AI_MODEL ? defaultModel : requestedModel;
 
+        try {
           const sanitizeConfigForModel = (rawConfig: any, targetModel: string) => {
             if (!rawConfig || typeof rawConfig !== 'object') return rawConfig;
             if (!targetModel.startsWith('gemini-4')) return rawConfig;
@@ -399,10 +595,11 @@ export class AiGatewayService {
           } catch (primaryErr: any) {
             const primaryMsg = primaryErr?.message || String(primaryErr);
             const is503OrOverloaded = primaryMsg.includes('503') || primaryMsg.includes('overloaded') || primaryMsg.includes('UNAVAILABLE');
-            if (is503OrOverloaded && model !== 'gemini-flash-latest') {
+            // Automatic model fallback is strictly restricted to transient 503 overload; 429 QUOTA must never switch models.
+            if (is503OrOverloaded && model !== FALLBACK_AI_MODEL) {
               try {
                 response = await ai.models.generateContent({
-                  model: 'gemini-flash-latest',
+                  model: FALLBACK_AI_MODEL,
                   contents: params.contents,
                   config: params.config
                 });
@@ -416,52 +613,24 @@ export class AiGatewayService {
           this.recordSuccessEvent();
           return { text: response?.text || "" };
         } catch (geminiErr: any) {
-          const errMsg = geminiErr?.message || String(geminiErr);
-          const isTransportOrNetwork = errMsg.includes('fetch failed') ||
-            errMsg.includes('ETIMEDOUT') ||
-            errMsg.includes('ENOTFOUND') ||
-            errMsg.includes('ECONNREFUSED') ||
-            errMsg.includes('ECONNRESET') ||
-            errMsg.includes('timeout');
+          const classified = this.recordErrorEvent(geminiErr, model);
 
-          const isOverloadedOrUnavailable = errMsg.includes('503') ||
-            errMsg.includes('UNAVAILABLE') ||
-            errMsg.includes('overloaded') ||
-            errMsg.includes('temporarily unavailable');
-
-          let statusSummary = "unavailable";
-          if (errMsg.includes('403') || errMsg.includes('PERMISSION_DENIED') || errMsg.includes('denied access')) {
-            statusSummary = "cloud project access restricted (403)";
-          } else if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED')) {
-            statusSummary = "rate limit cooldown (429)";
-          } else if (isOverloadedOrUnavailable) {
-            statusSummary = "model temporarily overloaded (503)";
-          } else if (errMsg.includes('404')) {
-            statusSummary = "model deprecated / not found (404)";
-          } else if (isTransportOrNetwork) {
-            statusSummary = "network connection temporarily unavailable";
-          } else {
-            statusSummary = errMsg.length > 50 ? errMsg.slice(0, 50) + "..." : errMsg;
+          if (classified.info.status === 429) {
+            console.warn(`[AI ENGINE] QUOTA exceeded (429 ${classified.info.code}) on model ${model}: ${classified.info.message.slice(0, 140)}`);
           }
 
-          const shouldCooldown = errMsg.includes('403') ||
-            errMsg.includes('404') ||
-            errMsg.includes('NOT_FOUND') ||
-            errMsg.includes('PERMISSION_DENIED') ||
-            errMsg.includes('denied access') ||
-            errMsg.includes('429') ||
-            errMsg.includes('RESOURCE_EXHAUSTED') ||
-            isOverloadedOrUnavailable ||
-            isTransportOrNetwork;
-
-          if (shouldCooldown) {
-            const cooldownDurationMs = (isTransportOrNetwork || isOverloadedOrUnavailable) ? 2 * 60 * 1000 : 10 * 60 * 1000;
+          if (classified.shouldCooldown) {
+            const cooldownDurationMs = (classified.isTransportOrNetwork || classified.isOverloadedOrUnavailable)
+              ? 2 * 60 * 1000
+              : 10 * 60 * 1000;
             this.serverGeminiCooldownUntil = Date.now() + cooldownDurationMs;
-            console.log(`[AI ENGINE] Switched to local quantum engine (cloud AI status: ${statusSummary}). Normal operation continues.`);
+            this.lastCooldownReason = classified.info.status === 429 ? 'QUOTA' : classified.statusSummary;
+            console.log(`[AI ENGINE] Switched to local quantum engine (cloud AI status: ${classified.statusSummary}). Normal operation continues.`);
           } else {
-            console.log("[AI ENGINE] Notice: " + statusSummary + ". Using local fallback.");
+            console.log('[AI ENGINE] Notice: ' + classified.statusSummary + '. Using local fallback.');
           }
-          return this.getStaticServerSideAiFallback(params, statusSummary);
+
+          return this.getStaticServerSideAiFallback(params, classified.statusSummary);
         }
       } else {
         return this.getStaticServerSideAiFallback(params, "AI keys not configured");

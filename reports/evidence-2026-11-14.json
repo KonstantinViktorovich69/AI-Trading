@@ -1,0 +1,39 @@
+{
+  "generatedAt": "2026-11-14T12:16:01.997Z",
+  "dateUtc": "2026-11-14",
+  "totalTrades": 49,
+  "closedTrades": 49,
+  "cleanTrades": 0,
+  "excludedTrades": 49,
+  "protectedPatternsPolicy": "PENALIZE_ONLY",
+  "evidenceGate": {
+    "passed": false,
+    "rawPassed": false,
+    "enabled": true,
+    "overrideActive": false,
+    "reason": "EVIDENCE_GATE: n=0/150, days=0.0/14, lo=0, dd=0%/15%",
+    "cleanTradesCount": 0,
+    "eligibleTradesCount": 0,
+    "minTrades": 150,
+    "spanDays": 0,
+    "minDays": 14,
+    "avgNetReturnPct": 0,
+    "ci95": {
+      "lo": 0,
+      "hi": 0
+    },
+    "maxDrawdownPct": 0,
+    "maxAllowedDrawdownPct": 15,
+    "profitFactor": null,
+    "requiredCostModelVersion": 2,
+    "requiredFeaturesVersion": 2,
+    "checks": {
+      "minTradesOk": false,
+      "minDaysOk": false,
+      "ciPositiveOk": false,
+      "maxDrawdownOk": true
+    }
+  },
+  "byCostModelVersion": {},
+  "cells": []
+}

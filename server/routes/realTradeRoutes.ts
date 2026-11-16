@@ -4,7 +4,7 @@ import ccxt from 'ccxt';
 import { normalizeExchangeId, DEFAULT_EXCHANGE } from '../services/activeExchange.ts';
 import { isEntryPaused } from '../services/entryGate.ts';
 import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
-import { getCostModel } from '../services/costModel.ts';
+import { getCostModel, getShadowTakerCostModel } from '../services/costModel.ts';
 
 export interface RealTradeRouterContext {
   getGlobalSettings: () => any;
@@ -540,10 +540,12 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
             }
 
             const costModel = getCostModel(ctx.getGlobalSettings ? ctx.getGlobalSettings() : undefined);
+            const takerCostModel = getShadowTakerCostModel(costModel);
             let totalPnlUsd = 0;
             let totalGrossPnlUsd = 0;
             let totalFeeUsd = 0;
             let totalSlippageUsd = 0;
+            let totalTakerPnlUsd = 0;
             const initialTradeAmount = dbTrade.initialAmount || dbTrade.amount;
             if (!dbTrade.initialAmount) {
               dbTrade.initialAmount = initialTradeAmount;
@@ -556,16 +558,21 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
                 totalGrossPnlUsd += (res.grossPnlUsd ?? 0);
                 totalFeeUsd += (res.feeUsd ?? 0);
                 totalSlippageUsd += (res.slippageUsd ?? 0);
+                const takerRes = ctx.getUnifiedTradeClosePnl(dbTrade.side, dbTrade.entryPrice, h.price, h.amount, dbTrade.leverage, takerCostModel);
+                totalTakerPnlUsd += takerRes.pnlUsd;
               }
             });
 
             const totalPnlPercent = initialTradeAmount > 0 ? (totalPnlUsd / initialTradeAmount) * 100 : 0;
+            const totalTakerPnlPercent = initialTradeAmount > 0 ? (totalTakerPnlUsd / initialTradeAmount) * 100 : 0;
             dbTrade.pnlPercent = totalPnlPercent;
             dbTrade.pnl = totalPnlUsd;
             dbTrade.grossPnlUsd = totalGrossPnlUsd;
             dbTrade.feeUsd = totalFeeUsd;
             dbTrade.slippageUsd = totalSlippageUsd;
             dbTrade.costModelVersion = costModel.version || 2;
+            dbTrade.netPnlTakerFee = Number(totalTakerPnlPercent.toFixed(4));
+            dbTrade.netPnlTakerFeeUsd = Number(totalTakerPnlUsd.toFixed(6));
             dbTrade.feedback = totalPnlPercent > 0 ? 'SUCCESS' : (totalPnlPercent === 0 ? 'BREAKEVEN' : 'FAILED');
             dbTrade.closeReason = 'Закрыто внешне на бирже вручную или по ордеру СЛ/ТП';
             dbTrade.notes = dbTrade.closeReason;

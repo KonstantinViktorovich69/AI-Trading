@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildBalancedCandidateQueue, runAutopilotAndVirtualTradeEntry, type AutoPilotEngineDependencies } from './autoPilotEngine.ts';
 import { clearOtePendingCandidates, getOtePendingCandidates } from './oteVirtualQueue.ts';
+import { getFunnelData, resetFunnelForTest } from './funnelCounters.ts';
 
 describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests', () => {
   describe('1. buildBalancedCandidateQueue', () => {
@@ -1108,6 +1109,28 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
 
         await runAutopilotAndVirtualTradeEntry(deps);
         expect(executeMainVirtualAutoEntry).not.toHaveBeenCalled();
+      });
+
+      it('does NOT increment opened|auto_entry_virtual_success when saveTradeDB fails', async () => {
+        resetFunnelForTest();
+        const { deps } = createMockAutopilotDeps({
+          saveTradeDB: vi.fn().mockRejectedValue(new Error('SQLITE_BUSY')),
+          getCacheSignals: () => ({
+            data: [
+              { rawSymbol: 'BTC/USDT', signal: 'LONG', aiScore: 95, price: 60000, type: 'SAR REVERSAL', matchedPattern: 'SAR Reversal', volumeSpike: 2.0, volume24h: 500000 }
+            ],
+            lastUpdated: Date.now(),
+            marketRegime: 'RANGING',
+            marketHealth: 80,
+            btcTrend24h: 0.5
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+        const funnel = getFunnelData(1);
+        expect(funnel.aggregated['opened|auto_entry_virtual_success'] || 0).toBe(0);
+        expect(funnel.aggregated['opened_error|save_trade_db_failed']).toBe(1);
+        resetFunnelForTest();
       });
     });
   });

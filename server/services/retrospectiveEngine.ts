@@ -1,5 +1,6 @@
 import { Worker } from 'worker_threads';
 import { clipModelWeight } from './quantModelTrainer.ts';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 
 export interface RetrospectiveEngineContext {
   getCachedDB: () => any;
@@ -220,7 +221,7 @@ export function createRetrospectiveEngine(ctx: RetrospectiveEngineContext) {
       `;
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: retrospectivePrompt }] }],
         config: { 
           responseMimeType: "application/json"

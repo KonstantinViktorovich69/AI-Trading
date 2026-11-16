@@ -8,6 +8,7 @@ import { isWeexApiSupported } from '../data/defaultStrategyKnowledge.ts';
 import { DEFAULT_EXCHANGE } from '../services/activeExchange.ts';
 import { evaluateStrategySignal } from '../services/strategyEngine.ts';
 import { getCostModel, roundTripCostPct } from '../services/costModel.ts';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 
 function formatPricePrecision(p: number): number {
   if (!isFinite(p) || p <= 0) return 0;
@@ -128,7 +129,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       );
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [
           { role: 'system', parts: [{ text: systemPrompt }] },
           { role: 'user', parts: [{ text: "Сгенерируй актуальный крипто-бюллетень Sentinel Shield в формате Markdown на русском языке." }] }
@@ -249,7 +250,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       const rules = kb.filter(r => !r.isArchived).map(r => r.text).join('\n');
       const prompt = ctx.getCommitteePrompt(rules, JSON.stringify(data));
       const response = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: 'application/json'
@@ -316,7 +317,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
           );
 
           const response = await ctx.runAiGeneration({
-            model: 'gemini-4-hydrogen',
+            model: DEFAULT_AI_MODEL,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             config: {
               responseMimeType: 'application/json'
@@ -419,7 +420,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       const prompt = ctx.getSignalAnalysisPrompt(signalJson, rules);
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json"
@@ -462,7 +463,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       let responseText = "";
       try {
         const response = await ctx.runAiGeneration({
-          model: "gemini-4-hydrogen",
+          model: DEFAULT_AI_MODEL,
           contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],
           config: {
             responseMimeType: "application/json"

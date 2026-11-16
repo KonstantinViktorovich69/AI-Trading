@@ -1,5 +1,6 @@
 import express from 'express';
 import type { Request, Response, Router } from 'express';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 
 export interface DebugRouterContext {
   getGlobalTrueOhlcv: () => Record<string, any>;
@@ -435,7 +436,7 @@ Each object must contain these keys exactly:
 
       try {
         const aiResponse = await ctx.runAiGeneration({
-          model: 'gemini-4-hydrogen',
+          model: DEFAULT_AI_MODEL,
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             responseMimeType: "application/json"

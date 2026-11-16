@@ -1,0 +1,404 @@
+{
+  "slice": 1,
+  "capturedAt": "2026-11-15T08:38:13.481Z",
+  "serverStartedAt": "2026-11-15T08:22:41Z",
+  "totalSignals": 634,
+  "realCount": 44,
+  "realPct": 6.94,
+  "estimatedCount": 590,
+  "directionalSignalsCount": 30,
+  "realSymbols": [
+    "CROSS/USDT:USDT",
+    "QNT/USDT:USDT",
+    "ETH/USDT:USDT",
+    "XRP/USDT:USDT",
+    "AVAX/USDT:USDT",
+    "SUI/USDT:USDT",
+    "UNI/USDT:USDT",
+    "HYPE/USDT:USDT",
+    "AIOT/USDT:USDT",
+    "DOGE/USDT:USDT",
+    "ZAMA/USDT:USDT",
+    "CETUS/USDT:USDT",
+    "1000PEPE/USDT:USDT",
+    "ZEC/USDT:USDT",
+    "ATOM/USDT:USDT",
+    "BTW/USDT:USDT",
+    "LINK/USDT:USDT",
+    "KGEN/USDT:USDT",
+    "XLM/USDT:USDT",
+    "ASTER/USDT:USDT",
+    "ONDO/USDT:USDT",
+    "XMR/USDT:USDT",
+    "AAVE/USDT:USDT",
+    "PONS/USDT:USDT",
+    "LTC/USDT:USDT",
+    "ADA/USDT:USDT",
+    "DOT/USDT:USDT",
+    "IDOL/USDT:USDT",
+    "ARB/USDT:USDT",
+    "AKE/USDT:USDT",
+    "BTC/USDT:USDT",
+    "SOL/USDT:USDT",
+    "XPIN/USDT:USDT",
+    "BCH/USDT:USDT",
+    "BNB/USDT:USDT",
+    "TRX/USDT:USDT",
+    "THETA/USDT:USDT",
+    "PIEVERSE/USDT:USDT",
+    "HBAR/USDT:USDT",
+    "JST/USDT:USDT",
+    "WXT/USDT:USDT",
+    "GRAM/USDT:USDT",
+    "MANA/USDT:USDT",
+    "AIN/USDT:USDT"
+  ],
+  "directionalSymbols": [
+    {
+      "symbol": "CROSS/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)",
+      "dataQuality": "REAL",
+      "aiScore": 93
+    },
+    {
+      "symbol": "QNT/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "⚡ 1m Spire Climax Bottom (Шпиль снизу)",
+      "dataQuality": "REAL",
+      "aiScore": 84
+    },
+    {
+      "symbol": "ETH/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 81
+    },
+    {
+      "symbol": "XRP/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 81
+    },
+    {
+      "symbol": "AVAX/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 81
+    },
+    {
+      "symbol": "SUI/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 81
+    },
+    {
+      "symbol": "UNI/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 81
+    },
+    {
+      "symbol": "HYPE/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 81
+    },
+    {
+      "symbol": "AIOT/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 81
+    },
+    {
+      "symbol": "DOGE/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "⚡ 1m Spire Climax Bottom (Шпиль снизу)",
+      "dataQuality": "REAL",
+      "aiScore": 76
+    },
+    {
+      "symbol": "ZAMA/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "⚡ 1m Spire Climax Bottom (Шпиль снизу)",
+      "dataQuality": "REAL",
+      "aiScore": 76
+    },
+    {
+      "symbol": "CETUS/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "⚡ 1m Spire Climax Bottom (Шпиль снизу)",
+      "dataQuality": "REAL",
+      "aiScore": 76
+    },
+    {
+      "symbol": "1000PEPE/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "ZEC/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "ATOM/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "BTW/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "LINK/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "KGEN/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "XLM/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "ASTER/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "ONDO/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "XMR/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "AAVE/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "PONS/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 73
+    },
+    {
+      "symbol": "LTC/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "⚡ 1m Spire Climax Bottom (Шпиль снизу)",
+      "dataQuality": "REAL",
+      "aiScore": 68
+    },
+    {
+      "symbol": "ADA/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "⚡ 1m Spire Climax Bottom (Шпиль снизу)",
+      "dataQuality": "REAL",
+      "aiScore": 68
+    },
+    {
+      "symbol": "DOT/USDT:USDT",
+      "signal": "LONG",
+      "pattern": "⚡ 1m Spire Climax Bottom (Шпиль снизу)",
+      "dataQuality": "REAL",
+      "aiScore": 68
+    },
+    {
+      "symbol": "IDOL/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 65
+    },
+    {
+      "symbol": "ARB/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 65
+    },
+    {
+      "symbol": "AKE/USDT:USDT",
+      "signal": "SHORT",
+      "pattern": "🧹 False Breakout (Ложный пробой)",
+      "dataQuality": "REAL",
+      "aiScore": 50
+    }
+  ],
+  "marketRegime": "TREND_DOWN",
+  "regimeReal": "TREND_DOWN",
+  "shadowRegimeReal": {
+    "regime": "TREND_DOWN",
+    "confidence": 0.94352,
+    "btcTrend24h": -3.8704,
+    "btcVolatility1h": 1.6120733765781232,
+    "avgAltCorrelation": 0.75,
+    "volumeProfile": "DISTRIBUTION",
+    "recommendedLongWeight": 0.6,
+    "recommendedShortWeight": 1.4,
+    "description": "Медвежий направленный тренд (BTC -3.87%). Преимущество у шорт-паттернов и фейдинга пампов."
+  },
+  "marketHealth": 100,
+  "btcTrend24h": -3.8704,
+  "debugOhlcvTotal": 44,
+  "debugOhlcvSample": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "1000PEPEUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "IDOLUSDT",
+    "XPINUSDT",
+    "ZECUSDT",
+    "BCHUSDT",
+    "DOGEUSDT"
+  ],
+  "systemHealth": {
+    "success": true,
+    "timestamp": "2026-11-15T08:38:13.418Z",
+    "loops": {
+      "signalScanAgeSec": 2,
+      "autopilotTickAgeSec": 2,
+      "watchdogTickAgeSec": 0,
+      "heartbeatTickAgeSec": 7
+    },
+    "signalScanAgeSec": 2,
+    "autopilotTickAgeSec": 2,
+    "watchdogTickAgeSec": 0,
+    "marketData": {
+      "tickersAgeSec": 10,
+      "btcOhlcvAgeSec": 304,
+      "tickerTimestamp": 1794731883320,
+      "btcOhlcvTimestamp": 1794731589651
+    },
+    "tickersAgeSec": 10,
+    "btcOhlcvAgeSec": 304,
+    "entryGate": {
+      "paused": true,
+      "reason": "stale_data_btc_ohlcv (304s > 300s)"
+    },
+    "aiGateway": {
+      "geminiKeyConfigured": true,
+      "deepseekKeyConfigured": false,
+      "serverKeyConfigured": true,
+      "lastSuccessAt": 1794731699574,
+      "aiFallbackCountTotal": 1,
+      "aiFallbackCountLastHour": 1,
+      "lastSuccessAgeSec": 194
+    },
+    "openPositions": {
+      "virtual": 0,
+      "real": 0,
+      "total": 0
+    },
+    "evidenceGate": {
+      "passed": false,
+      "rawPassed": false,
+      "enabled": true,
+      "overrideActive": false,
+      "reason": "EVIDENCE_GATE: n=0/150, days=0.0/14, lo=0, dd=0%/15%",
+      "cleanTradesCount": 0,
+      "eligibleTradesCount": 0,
+      "minTrades": 150,
+      "spanDays": 0,
+      "minDays": 14,
+      "avgNetReturnPct": 0,
+      "ci95": {
+        "lo": 0,
+        "hi": 0
+      },
+      "maxDrawdownPct": 0,
+      "maxAllowedDrawdownPct": 15,
+      "profitFactor": null,
+      "requiredCostModelVersion": 2,
+      "requiredFeaturesVersion": 2,
+      "checks": {
+        "minTradesOk": false,
+        "minDaysOk": false,
+        "ciPositiveOk": false,
+        "maxDrawdownOk": true
+      }
+    },
+    "regimes": {
+      "current": "TREND_DOWN",
+      "legacy": "TREND_DOWN",
+      "real": "TREND_DOWN"
+    },
+    "flags": {
+      "regimeUsesRealBtcCandles": true,
+      "blockEntriesOnEstimatedFeatures": true,
+      "modelSideAwareFeatures": true,
+      "requireModelMaturity": true,
+      "modelMinSamplesForAdjustment": 100,
+      "strictLiquidityGate": false,
+      "timeMachineApplyLearningsEnabled": false,
+      "slippageTierModelEnabled": true,
+      "allowBrowserAiPoller": false,
+      "realTradingEvidenceGateEnabled": true,
+      "evidenceGateOverride": false,
+      "evidenceGateMinTrades": 150,
+      "evidenceGateMinDays": 14,
+      "evidenceGateMaxDrawdownPct": 15,
+      "staleDataPauseSec": 300,
+      "learningProtectedPatternsPolicy": "PENALIZE_ONLY",
+      "aggregatedLearningMode": "SHADOW"
+    }
+  },
+  "funnel1hAggregated": {
+    "scheduler|manageTradesServerSide_tick": 2225,
+    "seen|evaluating_candidate": 4536,
+    "shield_consensus|committee_consensus_low": 3165,
+    "quant_guard|win_prob_below_32pct": 1079,
+    "scheduler|runAutopilotAndVirtualTradeEntry_tick": 557,
+    "scheduler|recordHistory_tick": 222,
+    "scheduler|runAiExpertTraderLoop_tick": 222,
+    "loop|ohlcv_skipped_overlap": 11,
+    "loop|ai_expert_skipped_overlap": 2,
+    "autopilot|entry_paused": 210,
+    "shield_long_vwap|falling_knife_below_vwap": 231,
+    "loop|ohlcv_forced_release": 1,
+    "ote_queued|ote_limit_placed_virtual": 1,
+    "exec_lock|concurrent_execution_lock_active": 43,
+    "ote_dedup|already_queued_in_ote": 17
+  }
+}

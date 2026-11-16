@@ -61,6 +61,7 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
   try {
     const dbData = ctx.readLocalDB();
     ctx.setCachedDBData(dbData);
+    let startupSource = 'local_file';
 
     if (ctx.isPostgresConfigured() && typeof ctx.loadAllFromPg === 'function') {
       try {
@@ -84,6 +85,7 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
           }
         }
         if (pgModified) {
+          startupSource += '+postgres';
           await ctx.flushDB();
         }
       } catch (pgErr: any) {
@@ -166,6 +168,7 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
           }
           remoteTrades.forEach((t: any) => { if (t && t.id) localTradesMap.set(String(t.id), t); });
           dbData.trades = Array.from(localTradesMap.values());
+          startupSource += '+firestore';
           console.log(`[STARTUP] Merged Firestore trades backup. Total trades: ${dbData.trades.length} (Restored ${remoteTrades.length} from Cloud).`);
         }
 
@@ -503,6 +506,13 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
     aiKnowledgeBase.length = 0;
     dbData.knowledge.forEach((r: any) => aiKnowledgeBase.push(r));
     await ctx.flushDB();
+    const tradeTimes = virtualTrades
+      .map((t: any) => Number(t?.openTime || 0))
+      .filter((ts: number) => isFinite(ts) && ts > 0);
+    const maxOpenTimeIso = tradeTimes.length > 0 ? new Date(Math.max(...tradeTimes)).toISOString() : 'none';
+    const openTradesCount = virtualTrades.filter((t: any) => t?.status === 'OPEN').length;
+    const closedTradesCount = virtualTrades.filter((t: any) => t?.status === 'CLOSED').length;
+    console.log(`[STARTUP DB] source=${startupSource} trades=${virtualTrades.length} (open=${openTradesCount}, closed=${closedTradesCount}) maxOpenTime=${maxOpenTimeIso} rev=${dbData?.stateRevision ?? 0}`);
 
     if (db && !ctx.isFirebaseFirestoreDisabled && ctx.isMainThread) {
       console.log(`[FIRESTORE INIT] isMainThread=${ctx.isMainThread}: Initializing remote synchronization...`);

@@ -104,6 +104,8 @@ export interface TradePosition {
   grossPnlUsd?: number;
   feeUsd?: number;
   slippageUsd?: number;
+  netPnlTakerFee?: number;
+  netPnlTakerFeeUsd?: number;
   history?: Array<{
     timestamp: number;
     type: string;

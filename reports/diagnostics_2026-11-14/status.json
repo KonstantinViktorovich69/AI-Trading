@@ -1,0 +1,1 @@
+{"success":true,"status":"ONLINE","timestamp":"2026-11-14T12:16:42.059Z","serverUptime":65.091,"uptimeSec":72,"authMode":"disabled","databaseRevision":1295395,"eventLoopLagMs":0,"aiFallbackActive":false,"realTradingEnabled":false,"activePositionsCount":0,"signalsCount":634,"weexLatencyMs":734,"wsLatenciesMs":{"weex":734}}

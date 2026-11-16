@@ -1,5 +1,6 @@
 import { buildKnowledgePromptContext } from './knowledgeEngine.ts';
 import { aiGatewayService } from './aiGatewayService.ts';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 
 export interface AgentDecision {
   action: 'APPROVED' | 'REJECTED' | 'WAIT';
@@ -51,7 +52,7 @@ ${knowledgeContext}
 `;
 
     const response = await aiGatewayService.runAiGeneration({
-      model: 'gemini-4-hydrogen',
+      model: DEFAULT_AI_MODEL,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: { responseMimeType: 'application/json' }
     });

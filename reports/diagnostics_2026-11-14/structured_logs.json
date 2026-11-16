@@ -1,0 +1,1 @@
+{"success":true,"total":1,"limit":200,"offset":0,"logs":[{"timestamp":"2026-11-14T12:15:36.975Z","epochMs":1794658536975,"level":"success","component":"SYSTEM","message":"Structured log manager initialized with precision millisecond epoch sorting."}]}

@@ -1,6 +1,7 @@
 import { cleanSymbol, findTickerInMap } from '../utils/symbolUtils.ts';
 import { safeJsonParse } from '../utils/jsonRepair.ts';
 import { normalizeExchangeId } from './activeExchange.ts';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 
 function formatPricePrecision(price: number): number {
   if (!isFinite(price) || price <= 0) return price;
@@ -446,7 +447,7 @@ ${memoryString}
 
       try {
         const aiResponse = await deps.runAiGeneration({
-          model: "gemini-4-hydrogen",
+          model: DEFAULT_AI_MODEL,
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: { responseMimeType: "application/json" }
         });

@@ -194,4 +194,114 @@ describe('AiGatewayService', () => {
     expect(generateContentMock).not.toHaveBeenCalled();
     expect(JSON.parse(resCooldown.text).isFallback).toBe(true);
   });
+
+  it('uses GEMINI_MODEL override when provided in environment', async () => {
+    const prevEnv = process.env.GEMINI_MODEL;
+    process.env.GEMINI_MODEL = 'gemini-flash-latest';
+    try {
+      vi.resetModules();
+      const { DEFAULT_AI_MODEL, getDefaultAiModel } = await import('../config/aiModels.ts');
+      expect(DEFAULT_AI_MODEL).toBe('gemini-flash-latest');
+      expect(getDefaultAiModel()).toBe('gemini-flash-latest');
+
+      const generateContentMock = vi.fn().mockResolvedValueOnce({ text: '{"ok":true}' });
+      gateway.setInternalServerGeminiClient({
+        models: { generateContent: generateContentMock }
+      } as any);
+
+      await gateway.runAiGeneration({
+        contents: [{ role: 'user', parts: [{ text: 'env test' }] }]
+      });
+
+      expect(generateContentMock).toHaveBeenCalledTimes(1);
+      expect(generateContentMock.mock.calls[0][0].model).toBe('gemini-flash-latest');
+    } finally {
+      if (prevEnv === undefined) delete process.env.GEMINI_MODEL;
+      else process.env.GEMINI_MODEL = prevEnv;
+      vi.resetModules();
+    }
+  });
+
+  it('tracks 429 QUOTA in getHealth(), marks isFallback with reason QUOTA, does not switch model, and skips API during cooldown', async () => {
+    const quotaErr: any = new Error(JSON.stringify({
+      error: {
+        code: 429,
+        message: 'You exceeded your current quota.',
+        status: 'RESOURCE_EXHAUSTED'
+      }
+    }));
+    quotaErr.status = 429;
+
+    const generateContentMock = vi.fn().mockRejectedValue(quotaErr);
+    gateway.setInternalServerGeminiClient({
+      models: { generateContent: generateContentMock }
+    } as any);
+
+    const res1 = await gateway.runAiGeneration({
+      model: 'gemini-4-hydrogen',
+      contents: [{ role: 'user', parts: [{ text: 'hello' }] }],
+      config: { responseMimeType: 'application/json' }
+    });
+
+    // Must not auto-switch model on 429
+    expect(generateContentMock).toHaveBeenCalledTimes(1);
+    expect(generateContentMock.mock.calls[0][0].model).toBe('gemini-4-hydrogen');
+
+    const body1 = JSON.parse(res1.text);
+    expect(body1.isFallback).toBe(true);
+    expect(body1.fallbackReason).toBe('QUOTA');
+    expect(res1.isFallback).toBe(true);
+    expect(res1.fallbackReason).toBe('QUOTA');
+
+    const health = gateway.getHealth();
+    expect(health.lastError?.status).toBe(429);
+    expect(health.lastError?.code).toBe('RESOURCE_EXHAUSTED');
+    expect(health.lastError?.model).toBe('gemini-4-hydrogen');
+    expect(health.errorCounts24h['429']).toBe(1);
+    expect(health.errorCounts24h['404']).toBe(0);
+    expect(health.errorCounts24h['403']).toBe(0);
+    expect(health.errorCounts24h['NETWORK']).toBe(0);
+    expect(health.cooldownActive).toBe(true);
+
+    // Repeated call during cooldown must not call API and must still report QUOTA
+    generateContentMock.mockClear();
+    const res2 = await gateway.runAiGeneration({
+      model: 'gemini-4-hydrogen',
+      contents: [{ role: 'user', parts: [{ text: 'retry while cooled down' }] }],
+      config: { responseMimeType: 'application/json' }
+    });
+
+    expect(generateContentMock).not.toHaveBeenCalled();
+    const body2 = JSON.parse(res2.text);
+    expect(body2.isFallback).toBe(true);
+    expect(body2.fallbackReason).toBe('QUOTA');
+  });
+
+  it('distinguishes 403, 404, and network errors in getHealth().errorCounts24h', async () => {
+    const mockCall = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error('PERMISSION_DENIED 403'), { status: 403 }))
+      .mockRejectedValueOnce(new Error('fetch failed ETIMEDOUT'));
+
+    gateway.setInternalServerGeminiClient({
+      models: { generateContent: mockCall }
+    } as any);
+
+    await gateway.runAiGeneration({ contents: [{ parts: [{ text: 'call1' }] }] });
+    let health = gateway.getHealth();
+    expect(health.lastError?.status).toBe(403);
+    expect(health.errorCounts24h['403']).toBe(1);
+    expect(health.errorCounts24h['429']).toBe(0);
+
+    // Reset cooldown only by creating a second instance to test network error separately
+    const gatewayNet = new AiGatewayService({ frontendTimeoutMs: 500, workerTimeoutMs: 500 });
+    gatewayNet.setInternalServerGeminiClient({
+      models: { generateContent: vi.fn().mockRejectedValueOnce(new Error('fetch failed ETIMEDOUT')) }
+    } as any);
+    await gatewayNet.runAiGeneration({ contents: [{ parts: [{ text: 'call2' }] }] });
+    health = gatewayNet.getHealth();
+    expect(health.lastError?.status).toBeNull();
+    expect(health.lastError?.code).toBe('NETWORK_ERROR');
+    expect(health.errorCounts24h['NETWORK']).toBe(1);
+  });
 });
+

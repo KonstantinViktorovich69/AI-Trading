@@ -1,6 +1,7 @@
 import { findTickerInMap } from '../utils/symbolUtils.ts';
 import { DEFAULT_EXCHANGE } from './activeExchange.ts';
 import { cleanSymbol, normalizeSymbol } from '../quant.ts';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 
 export interface StructuredFilterMatchResult {
   matched: boolean;
@@ -527,7 +528,7 @@ export async function executeUpdateMarketPulse(ctx: QuantRiskEngineContext): Pro
     if (ctx.runAiGeneration && ctx.getMarketPulsePrompt) {
       const prompt = ctx.getMarketPulsePrompt(context, shortsSq, longsSq);
       const result = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }
       });
@@ -590,7 +591,7 @@ export async function executeScrapeSocialSentiment(
     if (ctx.runAiGeneration && ctx.getSocialScraperPrompt) {
       const prompt = ctx.getSocialScraperPrompt(cleanSymbol, change, vol);
       const result = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }
       });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { generateProgrammaticCommitteeFallback, runDeterministicQuantCommitteeFallback, executeUpdateSignalsCache, type MarketSignalScannerContext } from './marketSignalScanner.ts';
+import { generateProgrammaticCommitteeFallback, runDeterministicQuantCommitteeFallback, executeUpdateSignalsCache, evaluateScannerPatternPure, type MarketSignalScannerContext } from './marketSignalScanner.ts';
 
 describe('marketSignalScanner', () => {
   describe('generateProgrammaticCommitteeFallback', () => {
@@ -175,6 +175,63 @@ describe('marketSignalScanner', () => {
       expect(cachedSignals.data[0].dataQuality).toBe('ESTIMATED');
       expect(cachedSignals.data[0].signal).toBe('NEUTRAL');
       expect(cachedSignals.data[0].matchedPattern).toBe('None');
+    });
+  });
+
+  describe('evaluateScannerPatternPure parity', () => {
+    it('matches executeUpdateSignalsCache pattern selection deterministically for SHORT/LONG/ESTIMATED', () => {
+      const shortRes = evaluateScannerPatternPure({
+        tickerPrice: 65000,
+        change: 8.5,
+        high: 65500,
+        low: 60000,
+        volume: 1000000,
+        rawIndicators: {
+          sar: 65000,
+          vwap: 64800,
+          rsi1h: 78,
+          bb1h: 'OVERBOUGHT',
+          psarStatus1m: 'BEARISH',
+          isSarBearishFlipped1m: true,
+          wicks: { topPct: 0.65, bottomPct: 0.1, bodySize: 0 },
+          volumeSpike: 1.5
+        }
+      });
+      expect(shortRes.signalSide).toBe('SHORT');
+      expect(shortRes.matchedPattern).toBe('💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)');
+
+      const longRes = evaluateScannerPatternPure({
+        tickerPrice: 100,
+        change: -8.5,
+        high: 110,
+        low: 99,
+        volume: 1000000,
+        rawIndicators: {
+          sar: 99,
+          vwap: 102,
+          rsi1h: 22,
+          bb1h: 'OVERSOLD',
+          psarStatus1m: 'BULLISH',
+          isSarBullishFlipped1m: true,
+          wicks: { topPct: 0.1, bottomPct: 0.6, bodySize: 0 },
+          volumeSpike: 1.8
+        }
+      });
+      expect(longRes.signalSide).toBe('LONG');
+      expect(longRes.matchedPattern).toBe('💥 ПРОЛИВ (SAR Bottom Reversal)');
+
+      const estRes = evaluateScannerPatternPure({
+        tickerPrice: 0.15,
+        change: -12.0,
+        high: 0.18,
+        low: 0.145,
+        volume: 500000,
+        open: 0.17,
+        rawIndicators: undefined
+      });
+      expect(estRes.dataQuality).toBe('ESTIMATED');
+      expect(estRes.signalSide).toBe('NEUTRAL');
+      expect(estRes.matchedPattern).toBe('None');
     });
   });
 });

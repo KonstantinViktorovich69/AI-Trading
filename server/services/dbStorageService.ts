@@ -49,9 +49,9 @@ export function readLocalDB(atomicStore: { loadState: <T>(fallback: T) => T }): 
   return atomicStore.loadState<any>({ settings: {}, trades: [], knowledge: [] });
 }
 
-export async function writeLocalDB(data: any, atomicStore: { saveState: (data: any) => Promise<any> }): Promise<void> {
+export async function writeLocalDB(data: any, atomicStore: { saveState: (data: any) => Promise<any> }): Promise<any> {
   try {
-    await atomicStore.saveState(data);
+    return await atomicStore.saveState(data);
   } catch (e) {
     console.error('[ATOMIC DB ERROR] Failed to write local DB via atomic store:', e);
     throw e;
@@ -87,7 +87,14 @@ export async function flushDB(ctx: DbStorageContext): Promise<void> {
     if ((!cachedDBData.knowledge || cachedDBData.knowledge.length === 0) && Array.isArray(memKnowledge) && memKnowledge.length > 0) {
       cachedDBData.knowledge = [...memKnowledge];
     }
-    await writeLocalDB(cachedDBData, ctx.getAtomicStore());
+    const saveRes = await writeLocalDB(cachedDBData, ctx.getAtomicStore());
+    const targetPath = saveRes?.filePath;
+    let bytes = 0;
+    if (targetPath && fs.existsSync(targetPath)) {
+      try { bytes = fs.statSync(targetPath).size; } catch {}
+    }
+    const rev = saveRes?.stateRevision ?? ctx.getAtomicStore().getRevision();
+    console.log(`[DB FLUSH] path=${targetPath || 'atomicStore'} trades=${Array.isArray(cachedDBData.trades) ? cachedDBData.trades.length : 0} bytes=${bytes} rev=${rev}`);
     if (ctx.getIsPostgresConfigured() && ctx.syncTradesToPg && ctx.syncKnowledgeToPg) {
       await Promise.allSettled([
         ctx.syncTradesToPg(cachedDBData.trades || []),
@@ -116,7 +123,14 @@ export async function requestDBSave(ctx: DbStorageContext): Promise<void> {
       .slice(0, 500);
     cachedDBData.trades = [...active, ...closed];
   }
-  await ctx.getAtomicStore().saveState(cachedDBData);
+  const saveRes = await ctx.getAtomicStore().saveState(cachedDBData);
+  const targetPath = saveRes?.filePath;
+  let bytes = 0;
+  if (targetPath && fs.existsSync(targetPath)) {
+    try { bytes = fs.statSync(targetPath).size; } catch {}
+  }
+  const rev = saveRes?.stateRevision ?? ctx.getAtomicStore().getRevision();
+  console.log(`[DB SAVE] path=${targetPath || 'atomicStore'} trades=${Array.isArray(cachedDBData.trades) ? cachedDBData.trades.length : 0} bytes=${bytes} rev=${rev}`);
 }
 
 export function withFirestoreTimeout<T>(promise: Promise<T>, ms: number, desc: string): Promise<T> {
@@ -424,6 +438,9 @@ export async function saveTradeToDB(trade: any, immediate: boolean = false, ctx:
       await flushDB(ctx);
     } else {
       await requestDBSave(ctx);
+    }
+    if (trade) {
+      console.log(`[DB TRADE SAVED] id=${trade.id} symbol=${trade.symbol} status=${trade.status} totalTrades=${Array.isArray(dbData.trades) ? dbData.trades.length : 0}`);
     }
 
     const db = ctx.getFirebaseDb();

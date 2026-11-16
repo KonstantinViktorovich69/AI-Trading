@@ -13,23 +13,19 @@ function formatPricePrecision(price: number): number {
   return Number(price.toFixed(5));
 }
 
-function computeVolumeSpikeRatio(ohlcv15m: any[][], ohlcv1m: any[][] = []): number {
-  const calcRatio = (candles: any[][]): number => {
-    if (!Array.isArray(candles) || candles.length < 5) return 1.0;
-    const vols = candles.map((c) => Number(c?.[5] || 0)).filter((v) => isFinite(v) && v >= 0);
-    if (vols.length < 5) return 1.0;
-    const latestVol = vols[vols.length - 1] || 0;
-    const prevSlice = vols.slice(Math.max(0, vols.length - 21), vols.length - 1);
-    const nonZeroPrev = prevSlice.filter((v) => v > 0);
-    if (nonZeroPrev.length === 0) return latestVol > 0 ? 1.5 : 1.0;
-    const avgVol = nonZeroPrev.reduce((a, b) => a + b, 0) / nonZeroPrev.length;
-    if (avgVol <= 0) return 1.0;
-    return Number(Math.max(0.1, Math.min(20, latestVol / avgVol)).toFixed(2));
-  };
-
-  const ratio15m = calcRatio(ohlcv15m);
-  const ratio1m = calcRatio(ohlcv1m);
-  return Number(Math.max(ratio15m, ratio1m).toFixed(2));
+export function computeVolumeSpikeRatio(ohlcv15m: any[][]): number {
+  if (!Array.isArray(ohlcv15m) || ohlcv15m.length < 6) return 1.0;
+  // Исключаем последнюю открытую (незавершённую) 15m свечу — оцениваем только последнюю закрытую свечу
+  const closedCandles = ohlcv15m.slice(0, -1);
+  const closedVols = closedCandles.map((c) => Number(c?.[5] || 0)).filter((v) => isFinite(v) && v >= 0);
+  if (closedVols.length < 5) return 1.0;
+  const lastClosedVol = closedVols[closedVols.length - 1] || 0;
+  const prevSlice = closedVols.slice(Math.max(0, closedVols.length - 21), closedVols.length - 1);
+  const nonZeroPrev = prevSlice.filter((v) => v > 0);
+  if (nonZeroPrev.length === 0) return lastClosedVol > 0 ? 1.5 : 1.0;
+  const avgVol = nonZeroPrev.reduce((a, b) => a + b, 0) / nonZeroPrev.length;
+  if (avgVol <= 0) return 1.0;
+  return Number(Math.max(0.1, Math.min(20, lastClosedVol / avgVol)).toFixed(2));
 }
 
 export interface MarketDataCollectorContext {
@@ -464,7 +460,7 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
               }
             }
 
-            const volumeSpikeVal = computeVolumeSpikeRatio(ohlcv15m, ohlcv1m);
+            const volumeSpikeVal = computeVolumeSpikeRatio(ohlcv15m);
             const candles1mFormatted = Array.isArray(ohlcv1m)
               ? ohlcv1m.slice(-15).map((c) => ({
                   time: c[0],
@@ -834,7 +830,7 @@ export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketData
     const bottomWick = bodyMin - latestLow;
     const totalSize = (latestHigh - latestLow) || 1;
 
-    const volumeSpikeVal = computeVolumeSpikeRatio(ohlcv15m, ohlcv1m);
+    const volumeSpikeVal = computeVolumeSpikeRatio(ohlcv15m);
     const candles1mFormatted = Array.isArray(ohlcv1m)
       ? ohlcv1m.slice(-15).map((c: any) => ({
           time: c[0],

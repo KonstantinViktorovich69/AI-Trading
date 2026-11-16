@@ -116,6 +116,7 @@ export interface GlobalSettings {
   requireModelMaturity?: boolean;
   modelMinSamplesForAdjustment?: number;
   kbDedupeCap?: boolean;
+  exchangeWsObserveOnly?: boolean;
 }
 
 export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPERT_INSTRUCTIONS): GlobalSettings {
@@ -177,7 +178,8 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     evidenceGateMinDays: 14,
     evidenceGateMaxDrawdownPct: 15,
     staleDataPauseSec: 300,
-    kbDedupeCap: true
+    kbDedupeCap: true,
+    exchangeWsObserveOnly: false
   };
 }
 

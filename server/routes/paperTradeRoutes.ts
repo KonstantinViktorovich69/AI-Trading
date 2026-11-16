@@ -2,7 +2,7 @@ import express from 'express';
 import type { Request, Response, Router } from 'express';
 import { DirectionalMemoryAnalyticsService } from '../services/directionalMemoryAnalyticsService.ts';
 import { SignalPerformanceAnalyticsService } from '../services/signalPerformanceAnalyticsService.ts';
-import { getCostModel } from '../services/costModel.ts';
+import { getCostModel, getShadowTakerCostModel } from '../services/costModel.ts';
 import { isEntryPaused } from '../services/entryGate.ts';
 import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
 
@@ -214,7 +214,9 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
         trade.history.push({ time: Date.now(), type: 'CLOSE', price: actualClosePrice, amount: trade.amount });
 
         const costModel = getCostModel(ctx.getGlobalSettings ? ctx.getGlobalSettings() : undefined);
+        const takerCostModel = getShadowTakerCostModel(costModel);
         const { pnlUsd, grossPnlUsd, feeUsd, slippageUsd } = ctx.getUnifiedTradeClosePnl(trade.side, trade.entryPrice, actualClosePrice, trade.amount, trade.leverage, costModel);
+        const takerRes = ctx.getUnifiedTradeClosePnl(trade.side, trade.entryPrice, actualClosePrice, trade.amount, trade.leverage, takerCostModel);
 
         trade.pnl = pnlUsd;
         trade.pnlPercent = (trade.pnl / trade.amount) * 100;
@@ -222,6 +224,8 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
         trade.feeUsd = feeUsd;
         trade.slippageUsd = slippageUsd;
         trade.costModelVersion = costModel.version || 2;
+        trade.netPnlTakerFeeUsd = Number(takerRes.pnlUsd.toFixed(6));
+        trade.netPnlTakerFee = trade.amount > 0 ? Number(((takerRes.pnlUsd / trade.amount) * 100).toFixed(4)) : 0;
         (trade as any).outcome = trade.pnlPercent > 0 ? 1 : 0;
 
         console.log(`[BALANCE UPDATE] Closing trade ID ${trade.id} (${trade.symbol}) at $${actualClosePrice}, PnL: $${pnlUsd.toFixed(2)} (${trade.pnlPercent.toFixed(2)}%)`);
@@ -740,7 +744,9 @@ function handleTradeClose(req: Request, res: Response, ctx: PaperTradeRouterCont
   trade.history.push({ time: Date.now(), type: 'CLOSE', price: actualClosePrice, amount: trade.amount });
   
   const costModel = getCostModel(ctx.getGlobalSettings ? ctx.getGlobalSettings() : undefined);
+  const takerCostModel = getShadowTakerCostModel(costModel);
   const { pnlUsd, grossPnlUsd, feeUsd, slippageUsd } = ctx.getUnifiedTradeClosePnl(trade.side, trade.entryPrice, actualClosePrice, trade.amount, trade.leverage, costModel);
+  const takerRes = ctx.getUnifiedTradeClosePnl(trade.side, trade.entryPrice, actualClosePrice, trade.amount, trade.leverage, takerCostModel);
   
   trade.pnl = pnlUsd;
   trade.pnlPercent = (trade.pnl / trade.amount) * 100;
@@ -748,6 +754,8 @@ function handleTradeClose(req: Request, res: Response, ctx: PaperTradeRouterCont
   trade.feeUsd = feeUsd;
   trade.slippageUsd = slippageUsd;
   trade.costModelVersion = costModel.version || 2;
+  trade.netPnlTakerFeeUsd = Number(takerRes.pnlUsd.toFixed(6));
+  trade.netPnlTakerFee = trade.amount > 0 ? Number(((takerRes.pnlUsd / trade.amount) * 100).toFixed(4)) : 0;
   (trade as any).outcome = trade.pnlPercent > 0 ? 1 : 0;
   if (!(trade as any).isAutoLearning && !trade.isReal) {
     const tradeMargin = (trade as any).margin || (trade as any).initialMargin || (trade.amount ? trade.amount / (trade.leverage || 1) : 0);

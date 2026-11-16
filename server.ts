@@ -1684,14 +1684,7 @@ const systemContext: SystemRouterContext = {
   getGlobalCcxtTickers: () => GLOBAL_CCXT_TICKERS,
   getGlobalTrueOhlcv: () => GLOBAL_TRUE_OHLCV,
   getApiHealth: () => apiHealth,
-  getAiGatewayHealth: () => ({
-    geminiKeyConfigured: Boolean(process.env.GEMINI_API_KEY),
-    deepseekKeyConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
-    serverKeyConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY),
-    lastSuccessAt: aiGatewayService.getLastSuccessAt(),
-    aiFallbackCountTotal: aiGatewayService.getAiFallbackCount(),
-    aiFallbackCountLastHour: aiGatewayService.getAiFallbackCountLastHour()
-  }),
+  getAiGatewayHealth: () => aiGatewayService.getHealth(),
   setExpertInstructions: (instructions: string, source: string, reason?: string) => setExpertInstructions(instructions, source as any, reason),
   saveSettings: () => saveSettings()
 };
@@ -1777,6 +1770,10 @@ async function startServer() {
     }
 
     backgroundSchedulerService.start();
+
+    if (globalSettings?.exchangeWsObserveOnly === true) {
+      exchangeWsManager.startAll({ observeOnly: true });
+    }
 
     try {
       const effectiveExit = buildExitPolicyConfig(globalSettings, { isMultiTp: true, tpStages: [] });

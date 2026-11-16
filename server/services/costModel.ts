@@ -79,3 +79,20 @@ export function calculateTieredSlippageRoundTrip(
   // Tier 3: Liquidity >= $200,000 -> normal base slippage
   return baseSlippageRoundTrip;
 }
+
+/**
+ * Empirical WEEX Futures v3 taker fee rate per side (0.08% per side = 0.16% round-trip),
+ * confirmed on 1025/1026 contracts in GET /capi/v3/market/exchangeInfo.
+ * Used strictly for shadow field netPnlTakerFee without altering costModel v2.
+ */
+export const WEEX_TAKER_FEE_PER_SIDE = 0.0008;
+
+export function getShadowTakerCostModel(baseCostModel?: CostModel): CostModel {
+  return {
+    feeRatePerSide: WEEX_TAKER_FEE_PER_SIDE,
+    slippageRoundTrip: baseCostModel?.slippageRoundTrip ?? DEFAULT_COST_MODEL.slippageRoundTrip,
+    version: baseCostModel?.version ?? DEFAULT_COST_MODEL.version,
+    slippageTierModelEnabled: baseCostModel?.slippageTierModelEnabled ?? false
+  };
+}
+

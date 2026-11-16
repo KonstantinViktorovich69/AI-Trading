@@ -188,4 +188,31 @@ describe('Unified Cost Model (T4.1)', () => {
     // 1.0 - 0.10 = 0.90%
     expect(netReturnPct(tradeFallbackLegacy)).toBeCloseTo(0.90, 4);
   });
+
+  it('computes shadow taker cost model (0.08% per side = 0.20% round-trip with 0.04% slippage) without changing costModel v2', async () => {
+    const { getShadowTakerCostModel, WEEX_TAKER_FEE_PER_SIDE } = await import('./costModel.ts');
+    const v2 = getCostModel();
+    const taker = getShadowTakerCostModel(v2);
+
+    expect(v2.feeRatePerSide).toBe(0.0006);
+    expect(WEEX_TAKER_FEE_PER_SIDE).toBe(0.0008);
+    expect(taker.feeRatePerSide).toBe(0.0008);
+    expect(taker.slippageRoundTrip).toBe(0.0004);
+    expect(roundTripCostPct(v2)).toBeCloseTo(0.0016, 6);
+    expect(roundTripCostPct(taker)).toBeCloseTo(0.0020, 6);
+
+    const amount = 100;
+    const leverage = 5;
+    // +1% favorable move at 5x = +5.00% raw ROE
+    // v2 net = 5.00% - (0.16% * 5) = +4.20%
+    // taker net = 5.00% - (0.20% * 5) = +4.00%
+    const v2Res = getUnifiedTradeClosePnl('LONG', 100, 101, amount, leverage, v2);
+    const takerRes = getUnifiedTradeClosePnl('LONG', 100, 101, amount, leverage, taker);
+    expect(v2Res.pnlPercent).toBeCloseTo(4.20, 4);
+    expect(takerRes.pnlPercent).toBeCloseTo(4.00, 4);
+    expect(takerRes.feeUsd).toBeCloseTo(0.80, 4); // 500 * 0.0016
+    expect(takerRes.slippageUsd).toBeCloseTo(0.20, 4); // 500 * 0.0004
+    expect(takerRes.pnlUsd).toBeCloseTo(4.00, 4);
+  });
 });
+

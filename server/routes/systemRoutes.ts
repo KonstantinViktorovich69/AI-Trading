@@ -40,12 +40,23 @@ export interface SystemRouterContext {
   getGlobalTrueOhlcv?: () => Record<string, any>;
   getApiHealth?: () => Record<string, any>;
   getAiGatewayHealth?: () => {
+    model?: string;
     serverKeyConfigured: boolean;
     geminiKeyConfigured: boolean;
     deepseekKeyConfigured: boolean;
     lastSuccessAt: number | null;
     aiFallbackCountTotal: number;
     aiFallbackCountLastHour: number;
+    cooldownUntil?: number | null;
+    cooldownActive?: boolean;
+    lastError?: {
+      status: number | null;
+      code: string;
+      message: string;
+      model: string;
+      at: number;
+    } | null;
+    errorCounts24h?: Record<string, number>;
   };
   setExpertInstructions?: (instructions: string, source: string, reason?: string) => any;
   saveSettings?: () => any;
@@ -439,7 +450,8 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         evidenceGateMinTrades: Number(globalSettings.evidenceGateMinTrades) || 150,
         evidenceGateMinDays: Number(globalSettings.evidenceGateMinDays) || 14,
         evidenceGateMaxDrawdownPct: Number(globalSettings.evidenceGateMaxDrawdownPct) || 15,
-        staleDataPauseSec: typeof globalSettings.staleDataPauseSec === 'number' ? globalSettings.staleDataPauseSec : 300
+        staleDataPauseSec: typeof globalSettings.staleDataPauseSec === 'number' ? globalSettings.staleDataPauseSec : 300,
+        exchangeWsObserveOnly: !!globalSettings.exchangeWsObserveOnly
       };
 
       const versions = {
@@ -513,14 +525,7 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
 
       const aiHealth = ctx.getAiGatewayHealth
         ? ctx.getAiGatewayHealth()
-        : {
-            geminiKeyConfigured: Boolean(process.env.GEMINI_API_KEY),
-            deepseekKeyConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
-            serverKeyConfigured: Boolean(process.env.GEMINI_API_KEY || process.env.DEEPSEEK_API_KEY),
-            lastSuccessAt: aiGatewayService.getLastSuccessAt(),
-            aiFallbackCountTotal: aiGatewayService.getAiFallbackCount(),
-            aiFallbackCountLastHour: aiGatewayService.getAiFallbackCountLastHour(now)
-          };
+        : aiGatewayService.getHealth(now);
 
       const openVirtual = virtualTrades.filter(t => t && t.status === 'OPEN' && !t.isReal).length;
       const openReal = virtualTrades.filter(t => t && t.status === 'OPEN' && t.isReal).length;
@@ -543,7 +548,8 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         evidenceGateMaxDrawdownPct: evidenceGate.maxAllowedDrawdownPct,
         staleDataPauseSec: typeof globalSettings.staleDataPauseSec === 'number' ? globalSettings.staleDataPauseSec : 300,
         learningProtectedPatternsPolicy: globalSettings.learningProtectedPatternsPolicy || 'PENALIZE_ONLY',
-        aggregatedLearningMode: globalSettings.aggregatedLearningMode || 'SHADOW'
+        aggregatedLearningMode: globalSettings.aggregatedLearningMode || 'SHADOW',
+        exchangeWsObserveOnly: !!globalSettings.exchangeWsObserveOnly
       };
 
       res.json({

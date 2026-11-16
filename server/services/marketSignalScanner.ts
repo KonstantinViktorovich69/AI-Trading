@@ -178,6 +178,212 @@ export const shadowRegimeStats = {
   real: {} as Record<string, number>
 };
 
+export interface ScannerPatternEvalInput {
+  tickerPrice: number;
+  change: number;
+  high: number;
+  low: number;
+  volume: number;
+  open?: number;
+  tickerVwap?: number;
+  rawIndicators?: any;
+}
+
+export interface ScannerPatternEvalResult {
+  matchedPattern: string;
+  signalSide: 'SHORT' | 'LONG' | 'NEUTRAL';
+  scoreBonus: number;
+  volatility: number;
+  dropFromRecentHigh: number;
+  dropFromHigh: number;
+  riseFromLow: number;
+  vwapInfo: number;
+  trueRsi: number;
+  bbStatus: string;
+  psarStatus1m: string;
+  isSarBearishFlipped1m: boolean;
+  isSarBullishFlipped1m: boolean;
+  isShortTermBearish: boolean;
+  isQuickLocalSpike: boolean;
+  isQuickLocalDrop: boolean;
+  estimatedFields: string[];
+  dataQuality: 'REAL' | 'ESTIMATED';
+  hasRealOhlcv: boolean;
+  wicks: { topPct: number; bottomPct: number; bodySize: number };
+  volumeSpike: number;
+  isVolumeQualified: boolean;
+  cachedIndicators: any;
+}
+
+export function evaluateScannerPatternPure(input: ScannerPatternEvalInput): ScannerPatternEvalResult {
+  const { tickerPrice, change, high, low, volume, open, tickerVwap, rawIndicators } = input;
+  const volatility = low > 0 ? ((high - low) / low) * 100 : 0;
+
+  const recentHigh = high;
+  const dropFromRecentHigh = recentHigh > 0 ? ((recentHigh - tickerPrice) / recentHigh) * 100 : 0;
+  const dropFromHigh = tickerPrice > 0 ? ((high - tickerPrice) / high) * 100 : 0;
+  const riseFromLow = low > 0 ? ((tickerPrice - low) / low) * 100 : 0;
+
+  const range24h = high - low;
+  const openPrice = open || (tickerPrice / (1 + (change / 100)));
+  const calcTopWick = range24h > 0 ? Math.max(0, (high - Math.max(tickerPrice, openPrice)) / range24h) : 0.3;
+  const calcBottomWick = range24h > 0 ? Math.max(0, (Math.min(tickerPrice, openPrice) - low) / range24h) : 0.3;
+  const estRsi = 50 + Math.max(-45, Math.min(45, change * 3.5));
+
+  const cachedIndicators = rawIndicators || {
+    sar: tickerPrice,
+    vwap: tickerVwap || (high + low + tickerPrice) / 3 || tickerPrice,
+    rsi1h: estRsi,
+    bb1h: change > 5 ? 'OVERBOUGHT' : change < -5 ? 'OVERSOLD' : 'INSIDE',
+    psarStatus1m: dropFromRecentHigh > 0.8 ? 'BEARISH' : riseFromLow > 0.8 ? 'BULLISH' : (change >= 0 ? 'BULLISH' : 'BEARISH'),
+    isSarBearishFlipped1m: dropFromRecentHigh >= 0.6 && change > 2,
+    isSarBullishFlipped1m: riseFromLow >= 0.6 && change < -2,
+    wicks: { topPct: calcTopWick, bottomPct: calcBottomWick, bodySize: Math.abs(tickerPrice - openPrice) },
+    volumeSpike: volume > 100000 ? 3.5 : 1.2
+  };
+
+  const vwapInfo = cachedIndicators.vwap || tickerPrice;
+  const trueRsi = cachedIndicators.rsi1h || estRsi;
+  const bbStatus = cachedIndicators.bb1h || (change > 5 ? 'OVERBOUGHT' : change < -5 ? 'OVERSOLD' : 'INSIDE');
+  const psarStatus1m = cachedIndicators.psarStatus1m || (dropFromRecentHigh > 0.8 ? 'BEARISH' : 'BULLISH');
+  const isSarBearishFlipped1m = cachedIndicators.isSarBearishFlipped1m !== undefined
+    ? cachedIndicators.isSarBearishFlipped1m
+    : (psarStatus1m === 'BEARISH' && (dropFromRecentHigh >= 1.2 || calcTopWick >= 0.35));
+  const isSarBullishFlipped1m = cachedIndicators.isSarBullishFlipped1m !== undefined
+    ? cachedIndicators.isSarBullishFlipped1m
+    : (psarStatus1m === 'BULLISH' && (riseFromLow >= 1.2 || calcBottomWick >= 0.35));
+  const isShortTermBearish = psarStatus1m === 'BEARISH' || dropFromRecentHigh >= 0.8;
+  const isQuickLocalSpike = (change >= 3.0 || riseFromLow >= 3.0) && dropFromRecentHigh <= 4.0;
+  const isQuickLocalDrop = (change <= -3.0 || dropFromRecentHigh >= 3.0) && riseFromLow <= 4.0;
+
+  // T2.2: Определение полноты данных и списка оцененных полей
+  const estimatedFields: string[] = [];
+  if (!rawIndicators) {
+    estimatedFields.push('rsi1h', 'volumeSpike', 'wicks', 'sar', 'vwap', 'bb1h', 'psarStatus1m', 'isSarBearishFlipped1m', 'isSarBullishFlipped1m');
+  } else {
+    if (rawIndicators.rsi1h === undefined) estimatedFields.push('rsi1h');
+    if (rawIndicators.volumeSpike === undefined) estimatedFields.push('volumeSpike');
+    if (!rawIndicators.wicks) estimatedFields.push('wicks');
+    if (rawIndicators.sar === undefined) estimatedFields.push('sar');
+    if (rawIndicators.vwap === undefined) estimatedFields.push('vwap');
+    if (rawIndicators.psarStatus1m === undefined) estimatedFields.push('psarStatus1m');
+  }
+  const dataQuality: 'REAL' | 'ESTIMATED' = estimatedFields.length > 0 ? 'ESTIMATED' : 'REAL';
+  const hasRealOhlcv = dataQuality === 'REAL';
+
+  let matchedPattern = 'None';
+  let signalSide: 'SHORT' | 'LONG' | 'NEUTRAL' = 'NEUTRAL';
+  let scoreBonus = 0;
+
+  const wicks = cachedIndicators.wicks || { topPct: calcTopWick, bottomPct: calcBottomWick, bodySize: 0 };
+  const volumeSpike = cachedIndicators.volumeSpike || 1.0;
+
+  // Фильтрация мусора согласно AGENTS.md: Игнорировать монеты с объемом < $50,000 (если нет аномального всплеска объема > 4x)
+  const minVolumeRequired = 50000;
+  const isVolumeQualified = volume >= minVolumeRequired || volumeSpike >= 4.0;
+
+  // Только при наличии реальных OHLCV свечей разрешаем генерацию направленных паттернов.
+  // Монеты без полного набора OHLCV остаются NEUTRAL с dataQuality: 'ESTIMATED' и не торгуются по эвристикам тикера.
+  if (isVolumeQualified && hasRealOhlcv) {
+    // --- SHORT PATTERNS ---
+    // Слив монеты: требует реальных OHLCV, подтвержденного переключения SAR на вершине, импульса >= 7% и фитиля съема ликвидности
+    if ((change >= 7.0 || riseFromLow >= 8.0) && isSarBearishFlipped1m && volumeSpike >= 1.5 && (wicks.topPct >= 0.35 || dropFromRecentHigh >= 1.2)) {
+      matchedPattern = '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)';
+      signalSide = 'SHORT';
+      scoreBonus = 16;
+    } else if ((wicks.topPct >= 0.40 || dropFromRecentHigh >= 1.0) && (change >= 3.0 || riseFromLow >= 5.0) && (tickerPrice <= vwapInfo || isShortTermBearish)) {
+      matchedPattern = '🧹 False Breakout (Ложный пробой)';
+      signalSide = 'SHORT';
+      scoreBonus = 14;
+    } else if ((change >= 7.0 || riseFromLow >= 9.0) && (wicks.topPct >= 0.40 || dropFromRecentHigh >= 1.2)) {
+      matchedPattern = '⚡ 1m Spire Climax (Шпиль на 1м)';
+      signalSide = 'SHORT';
+      scoreBonus = 17;
+    } else if (((cachedIndicators.obImbalance && cachedIndicators.obImbalance > 70) || trueRsi >= 72) && (change >= 3.5 || isQuickLocalSpike)) {
+      matchedPattern = '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)';
+      signalSide = 'SHORT';
+      scoreBonus = 18;
+    } else if ((change >= 3.0 || riseFromLow >= 4.5) && dropFromRecentHigh >= 0.5 && dropFromRecentHigh <= 3.5 && wicks.topPct >= 0.30) {
+      matchedPattern = '🎯 Wick Zone Retest (Ретест фитиля)';
+      signalSide = 'SHORT';
+      scoreBonus = 13;
+    } else if ((change >= 7.0 || riseFromLow >= 8.0 || trueRsi >= 75) && wicks.topPct >= 0.35 && (isSarBearishFlipped1m || isShortTermBearish)) {
+      matchedPattern = '🔥 Vertical Exhaustion (Разворот)';
+      signalSide = 'SHORT';
+      scoreBonus = 15;
+    } else if (volumeSpike >= 3.0 && (change >= 4.0 || isQuickLocalSpike) && (wicks.topPct >= 0.30 || dropFromRecentHigh >= 0.8)) {
+      matchedPattern = '💀 Volume Climax (Predictive Dump)';
+      signalSide = 'SHORT';
+      scoreBonus = 12;
+    } else if ((change >= 5.0 || isQuickLocalSpike) && (trueRsi >= 70 || bbStatus === 'OVERBOUGHT') && wicks.topPct >= 0.35) {
+      matchedPattern = '⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry)';
+      signalSide = 'SHORT';
+      scoreBonus = 16;
+    }
+    // --- LONG PATTERNS ---
+    // Пролив монеты: требует реальных OHLCV, подтвержденного бычьего SAR, просадки <= -7% и фитиля откупа
+    else if ((change <= -7.0 || dropFromRecentHigh >= 8.0) && isSarBullishFlipped1m && volumeSpike >= 1.5 && (wicks.bottomPct >= 0.35 || riseFromLow >= 1.2)) {
+      matchedPattern = '💥 ПРОЛИВ (SAR Bottom Reversal)';
+      signalSide = 'LONG';
+      scoreBonus = 16;
+    } else if ((wicks.bottomPct >= 0.40 || riseFromLow >= 1.0) && (change <= -3.0 || dropFromRecentHigh >= 5.0) && (tickerPrice >= vwapInfo || !isShortTermBearish)) {
+      matchedPattern = '🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)';
+      signalSide = 'LONG';
+      scoreBonus = 14;
+    } else if ((change <= -7.0 || dropFromRecentHigh >= 9.0) && (wicks.bottomPct >= 0.40 || riseFromLow >= 1.2)) {
+      matchedPattern = '⚡ 1m Spire Climax Bottom (Шпиль снизу)';
+      signalSide = 'LONG';
+      scoreBonus = 17;
+    } else if (((cachedIndicators.obImbalance && cachedIndicators.obImbalance < 30) || trueRsi <= 28) && (change <= -3.5 || isQuickLocalDrop)) {
+      matchedPattern = '💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)';
+      signalSide = 'LONG';
+      scoreBonus = 18;
+    } else if ((change <= -3.0 || dropFromRecentHigh >= 4.5) && riseFromLow >= 0.5 && riseFromLow <= 3.5 && wicks.bottomPct >= 0.30) {
+      matchedPattern = '🎯 Bottom Wick Retest (Ретест дна)';
+      signalSide = 'LONG';
+      scoreBonus = 13;
+    } else if ((change <= -7.0 || dropFromRecentHigh >= 8.0 || trueRsi <= 25) && wicks.bottomPct >= 0.35 && (isSarBullishFlipped1m || !isShortTermBearish)) {
+      matchedPattern = '🔥 Reversal from Dump (Разворот пролива)';
+      signalSide = 'LONG';
+      scoreBonus = 15;
+    } else if (volumeSpike >= 3.0 && (change <= -4.0 || isQuickLocalDrop) && (wicks.bottomPct >= 0.30 || riseFromLow >= 0.8)) {
+      matchedPattern = '💀 Volume Climax Bottom (Recovery)';
+      signalSide = 'LONG';
+      scoreBonus = 12;
+    } else if ((change <= -5.0 || isQuickLocalDrop) && (trueRsi <= 30 || bbStatus === 'OVERSOLD') && wicks.bottomPct >= 0.35) {
+      matchedPattern = '⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry)';
+      signalSide = 'LONG';
+      scoreBonus = 16;
+    }
+  }
+
+  return {
+    matchedPattern,
+    signalSide,
+    scoreBonus,
+    volatility,
+    dropFromRecentHigh,
+    dropFromHigh,
+    riseFromLow,
+    vwapInfo,
+    trueRsi,
+    bbStatus,
+    psarStatus1m,
+    isSarBearishFlipped1m,
+    isSarBullishFlipped1m,
+    isShortTermBearish,
+    isQuickLocalSpike,
+    isQuickLocalDrop,
+    estimatedFields,
+    dataQuality,
+    hasRealOhlcv,
+    wicks,
+    volumeSpike,
+    isVolumeQualified,
+    cachedIndicators
+  };
+}
+
 /**
  * Основной движок сканирования и кэширования торговых сигналов
  */
@@ -280,145 +486,35 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
       const high = ticker?.high || (tickerPrice > 0 ? tickerPrice * (1 + Math.max(0, change / 100)) : tickerPrice);
       const low = ticker?.low || (tickerPrice > 0 ? tickerPrice * (1 + Math.min(0, change / 100)) : tickerPrice);
       const volume = ticker?.quoteVolume || ticker?.baseVolume || (ticker?.volume ? ticker.volume * tickerPrice : 0);
-      const volatility = low > 0 ? ((high - low) / low) * 100 : 0;
-
-      const recentHigh = high;
-      const dropFromRecentHigh = recentHigh > 0 ? ((recentHigh - tickerPrice) / recentHigh) * 100 : 0;
-      const dropFromHigh = tickerPrice > 0 ? ((high - tickerPrice) / high) * 100 : 0;
-      const riseFromLow = low > 0 ? ((tickerPrice - low) / low) * 100 : 0;
-
-      const range24h = high - low;
-      const openPrice = ticker?.open || (tickerPrice / (1 + (change / 100)));
-      const calcTopWick = range24h > 0 ? Math.max(0, (high - Math.max(tickerPrice, openPrice)) / range24h) : 0.3;
-      const calcBottomWick = range24h > 0 ? Math.max(0, (Math.min(tickerPrice, openPrice) - low) / range24h) : 0.3;
-      const estRsi = 50 + Math.max(-45, Math.min(45, change * 3.5));
-
-      const cachedIndicators = rawIndicators || {
-        sar: tickerPrice,
-        vwap: ticker?.vwap || (high + low + tickerPrice) / 3 || tickerPrice,
-        rsi1h: estRsi,
-        bb1h: change > 5 ? 'OVERBOUGHT' : change < -5 ? 'OVERSOLD' : 'INSIDE',
-        psarStatus1m: dropFromRecentHigh > 0.8 ? 'BEARISH' : riseFromLow > 0.8 ? 'BULLISH' : (change >= 0 ? 'BULLISH' : 'BEARISH'),
-        isSarBearishFlipped1m: dropFromRecentHigh >= 0.6 && change > 2,
-        isSarBullishFlipped1m: riseFromLow >= 0.6 && change < -2,
-        wicks: { topPct: calcTopWick, bottomPct: calcBottomWick, bodySize: Math.abs(tickerPrice - openPrice) },
-        volumeSpike: volume > 100000 ? 3.5 : 1.2
-      };
-
-      const vwapInfo = cachedIndicators.vwap || tickerPrice;
-      const trueRsi = cachedIndicators.rsi1h || estRsi;
-      const bbStatus = cachedIndicators.bb1h || (change > 5 ? 'OVERBOUGHT' : change < -5 ? 'OVERSOLD' : 'INSIDE');
-      const psarStatus1m = cachedIndicators.psarStatus1m || (dropFromRecentHigh > 0.8 ? 'BEARISH' : 'BULLISH');
-      const isSarBearishFlipped1m = cachedIndicators.isSarBearishFlipped1m !== undefined 
-        ? cachedIndicators.isSarBearishFlipped1m 
-        : (psarStatus1m === 'BEARISH' && (dropFromRecentHigh >= 1.2 || calcTopWick >= 0.35));
-      const isSarBullishFlipped1m = cachedIndicators.isSarBullishFlipped1m !== undefined 
-        ? cachedIndicators.isSarBullishFlipped1m 
-        : (psarStatus1m === 'BULLISH' && (riseFromLow >= 1.2 || calcBottomWick >= 0.35));
-      const isShortTermBearish = psarStatus1m === 'BEARISH' || dropFromRecentHigh >= 0.8;
-      const isQuickLocalSpike = (change >= 3.0 || riseFromLow >= 3.0) && dropFromRecentHigh <= 4.0;
-      const isQuickLocalDrop = (change <= -3.0 || dropFromRecentHigh >= 3.0) && riseFromLow <= 4.0;
-
-      // T2.2: Определение полноты данных и списка оцененных полей
-      const estimatedFields: string[] = [];
-      if (!rawIndicators) {
-        estimatedFields.push('rsi1h', 'volumeSpike', 'wicks', 'sar', 'vwap', 'bb1h', 'psarStatus1m', 'isSarBearishFlipped1m', 'isSarBullishFlipped1m');
-      } else {
-        if (rawIndicators.rsi1h === undefined) estimatedFields.push('rsi1h');
-        if (rawIndicators.volumeSpike === undefined) estimatedFields.push('volumeSpike');
-        if (!rawIndicators.wicks) estimatedFields.push('wicks');
-        if (rawIndicators.sar === undefined) estimatedFields.push('sar');
-        if (rawIndicators.vwap === undefined) estimatedFields.push('vwap');
-        if (rawIndicators.psarStatus1m === undefined) estimatedFields.push('psarStatus1m');
-      }
-      const dataQuality: 'REAL' | 'ESTIMATED' = estimatedFields.length > 0 ? 'ESTIMATED' : 'REAL';
-      const hasRealOhlcv = dataQuality === 'REAL';
-
-      let matchedPattern = 'None';
-      let signalSide: 'SHORT' | 'LONG' | 'NEUTRAL' = 'NEUTRAL';
-      let scoreBonus = 0;
-
-      const wicks = cachedIndicators.wicks || { topPct: calcTopWick, bottomPct: calcBottomWick, bodySize: 0 };
-      const volumeSpike = cachedIndicators.volumeSpike || 1.0;
-
-      // Фильтрация мусора согласно AGENTS.md: Игнорировать монеты с объемом < $50,000 (если нет аномального всплеска объема > 4x)
-      const minVolumeRequired = 50000;
-      const isVolumeQualified = volume >= minVolumeRequired || volumeSpike >= 4.0;
-
-      // Только при наличии реальных OHLCV свечей разрешаем генерацию направленных паттернов.
-      // Монеты без полного набора OHLCV остаются NEUTRAL с dataQuality: 'ESTIMATED' и не торгуются по эвристикам тикера.
-      if (isVolumeQualified && hasRealOhlcv) {
-        // --- SHORT PATTERNS ---
-        // Слив монеты: требует реальных OHLCV, подтвержденного переключения SAR на вершине, импульса >= 7% и фитиля съема ликвидности
-        if ((change >= 7.0 || riseFromLow >= 8.0) && isSarBearishFlipped1m && volumeSpike >= 1.5 && (wicks.topPct >= 0.35 || dropFromRecentHigh >= 1.2)) {
-          matchedPattern = '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)';
-          signalSide = 'SHORT';
-          scoreBonus = 16;
-        } else if ((wicks.topPct >= 0.40 || dropFromRecentHigh >= 1.0) && (change >= 3.0 || riseFromLow >= 5.0) && (tickerPrice <= vwapInfo || isShortTermBearish)) {
-          matchedPattern = '🧹 False Breakout (Ложный пробой)';
-          signalSide = 'SHORT';
-          scoreBonus = 14;
-        } else if ((change >= 7.0 || riseFromLow >= 9.0) && (wicks.topPct >= 0.40 || dropFromRecentHigh >= 1.2)) {
-          matchedPattern = '⚡ 1m Spire Climax (Шпиль на 1м)';
-          signalSide = 'SHORT';
-          scoreBonus = 17;
-        } else if (((cachedIndicators.obImbalance && cachedIndicators.obImbalance > 70) || trueRsi >= 72) && (change >= 3.5 || isQuickLocalSpike)) {
-          matchedPattern = '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)';
-          signalSide = 'SHORT';
-          scoreBonus = 18;
-        } else if ((change >= 3.0 || riseFromLow >= 4.5) && dropFromRecentHigh >= 0.5 && dropFromRecentHigh <= 3.5 && wicks.topPct >= 0.30) {
-          matchedPattern = '🎯 Wick Zone Retest (Ретест фитиля)';
-          signalSide = 'SHORT';
-          scoreBonus = 13;
-        } else if ((change >= 7.0 || riseFromLow >= 8.0 || trueRsi >= 75) && wicks.topPct >= 0.35 && (isSarBearishFlipped1m || isShortTermBearish)) {
-          matchedPattern = '🔥 Vertical Exhaustion (Разворот)';
-          signalSide = 'SHORT';
-          scoreBonus = 15;
-        } else if (volumeSpike >= 3.0 && (change >= 4.0 || isQuickLocalSpike) && (wicks.topPct >= 0.30 || dropFromRecentHigh >= 0.8)) {
-          matchedPattern = '💀 Volume Climax (Predictive Dump)';
-          signalSide = 'SHORT';
-          scoreBonus = 12;
-        } else if ((change >= 5.0 || isQuickLocalSpike) && (trueRsi >= 70 || bbStatus === 'OVERBOUGHT') && wicks.topPct >= 0.35) {
-          matchedPattern = '⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry)';
-          signalSide = 'SHORT';
-          scoreBonus = 16;
-        }
-        // --- LONG PATTERNS ---
-        // Пролив монеты: требует реальных OHLCV, подтвержденного бычьего SAR, просадки <= -7% и фитиля откупа
-        else if ((change <= -7.0 || dropFromRecentHigh >= 8.0) && isSarBullishFlipped1m && volumeSpike >= 1.5 && (wicks.bottomPct >= 0.35 || riseFromLow >= 1.2)) {
-          matchedPattern = '💥 ПРОЛИВ (SAR Bottom Reversal)';
-          signalSide = 'LONG';
-          scoreBonus = 16;
-        } else if ((wicks.bottomPct >= 0.40 || riseFromLow >= 1.0) && (change <= -3.0 || dropFromRecentHigh >= 5.0) && (tickerPrice >= vwapInfo || !isShortTermBearish)) {
-          matchedPattern = '🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)';
-          signalSide = 'LONG';
-          scoreBonus = 14;
-        } else if ((change <= -7.0 || dropFromRecentHigh >= 9.0) && (wicks.bottomPct >= 0.40 || riseFromLow >= 1.2)) {
-          matchedPattern = '⚡ 1m Spire Climax Bottom (Шпиль снизу)';
-          signalSide = 'LONG';
-          scoreBonus = 17;
-        } else if (((cachedIndicators.obImbalance && cachedIndicators.obImbalance < 30) || trueRsi <= 28) && (change <= -3.5 || isQuickLocalDrop)) {
-          matchedPattern = '💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)';
-          signalSide = 'LONG';
-          scoreBonus = 18;
-        } else if ((change <= -3.0 || dropFromRecentHigh >= 4.5) && riseFromLow >= 0.5 && riseFromLow <= 3.5 && wicks.bottomPct >= 0.30) {
-          matchedPattern = '🎯 Bottom Wick Retest (Ретест дна)';
-          signalSide = 'LONG';
-          scoreBonus = 13;
-        } else if ((change <= -7.0 || dropFromRecentHigh >= 8.0 || trueRsi <= 25) && wicks.bottomPct >= 0.35 && (isSarBullishFlipped1m || !isShortTermBearish)) {
-          matchedPattern = '🔥 Reversal from Dump (Разворот пролива)';
-          signalSide = 'LONG';
-          scoreBonus = 15;
-        } else if (volumeSpike >= 3.0 && (change <= -4.0 || isQuickLocalDrop) && (wicks.bottomPct >= 0.30 || riseFromLow >= 0.8)) {
-          matchedPattern = '💀 Volume Climax Bottom (Recovery)';
-          signalSide = 'LONG';
-          scoreBonus = 12;
-        } else if ((change <= -5.0 || isQuickLocalDrop) && (trueRsi <= 30 || bbStatus === 'OVERSOLD') && wicks.bottomPct >= 0.35) {
-          matchedPattern = '⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry)';
-          signalSide = 'LONG';
-          scoreBonus = 16;
-        }
-      }
+      const {
+        matchedPattern,
+        signalSide,
+        scoreBonus,
+        volatility,
+        dropFromRecentHigh,
+        dropFromHigh,
+        riseFromLow,
+        vwapInfo,
+        trueRsi,
+        bbStatus,
+        isSarBearishFlipped1m,
+        isSarBullishFlipped1m,
+        estimatedFields,
+        dataQuality,
+        hasRealOhlcv,
+        wicks,
+        volumeSpike,
+        cachedIndicators
+      } = evaluateScannerPatternPure({
+        tickerPrice,
+        change,
+        high,
+        low,
+        volume,
+        open: ticker?.open,
+        tickerVwap: ticker?.vwap,
+        rawIndicators
+      });
 
       const blockLocks: string[] = [];
       const blockDetails: string[] = [];
@@ -517,7 +613,7 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
           volumeSpike,
           topWickPct: wicks.topPct,
           bottomWickPct: wicks.bottomPct,
-          vwapDistancePct: vwapInfo?.distancePct,
+          vwapDistancePct: (vwapInfo as any)?.distancePct,
           sarReversal: !!(isSarBearishFlipped1m || isSarBullishFlipped1m),
           bosChoch: isActualSweepConfirmed && (wicks.topPct >= 0.35 || wicks.bottomPct >= 0.35),
           liquiditySweep: isActualSweepConfirmed

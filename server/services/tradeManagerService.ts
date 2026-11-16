@@ -1,7 +1,7 @@
 import ccxt, { Exchange } from 'ccxt';
 import { manageActiveTrades, VirtualTradeEngineDependencies } from './virtualTradeEngine.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
-import { getCostModel } from './costModel.ts';
+import { getCostModel, getShadowTakerCostModel } from './costModel.ts';
 import { applyPendingGapsToOpenTrades, recordGap, getRecordedGaps } from './heartbeatService.ts';
 import { PROCESS_STARTED_AT } from './buildInfo.ts';
 
@@ -244,13 +244,17 @@ export class TradeManagerService {
         t.closeTime = Date.now();
         
         const costModel = getCostModel(this.deps.getGlobalSettings());
+        const takerCostModel = getShadowTakerCostModel(costModel);
         const { pnlUsd, grossPnlUsd, feeUsd, slippageUsd, leveragedPct } = getUnifiedTradeClosePnl(t.side, t.entryPrice, lastPrice, t.amount || 0, t.leverage || 1, costModel);
+        const takerRes = getUnifiedTradeClosePnl(t.side, t.entryPrice, lastPrice, t.amount || 0, t.leverage || 1, takerCostModel);
         t.pnl = pnlUsd;
         t.pnlPercent = (t.amount || 0) > 0 ? (t.pnl / t.amount) * 100 : Math.max(-100, leveragedPct);
         t.grossPnlUsd = grossPnlUsd;
         t.feeUsd = feeUsd;
         t.slippageUsd = slippageUsd;
         t.costModelVersion = costModel.version || 2;
+        t.netPnlTakerFeeUsd = Number(takerRes.pnlUsd.toFixed(6));
+        t.netPnlTakerFee = (t.amount || 0) > 0 ? Number(((takerRes.pnlUsd / t.amount) * 100).toFixed(4)) : Number(Math.max(-100, takerRes.pnlPercent).toFixed(4));
         
         t.closeReason = `Forced close by Circuit Breaker: ${reason}`;
         t.notes = t.closeReason;

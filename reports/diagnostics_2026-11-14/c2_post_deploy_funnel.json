@@ -1,0 +1,58 @@
+{
+  "deployUtc": "2026-11-14T10:39:54Z",
+  "seen": 8112,
+  "gates": {
+    "shield_long_vwap|falling_knife_below_vwap": {
+      "count": 3533,
+      "shareOfSeenPct": 43.55
+    },
+    "shield_consensus|committee_consensus_low": {
+      "count": 2720,
+      "shareOfSeenPct": 33.53
+    },
+    "quant_guard|win_prob_below_32pct": {
+      "count": 1181,
+      "shareOfSeenPct": 14.56
+    },
+    "cell|would_boost": {
+      "count": 253,
+      "shareOfSeenPct": 3.12
+    },
+    "ote_queued|ote_limit_placed_virtual": {
+      "count": 11,
+      "shareOfSeenPct": 0.14
+    },
+    "exec_lock|concurrent_execution_lock_active": {
+      "count": 389,
+      "shareOfSeenPct": 4.8
+    },
+    "ote_dedup|already_queued_in_ote": {
+      "count": 150,
+      "shareOfSeenPct": 1.85
+    },
+    "opened|auto_entry_virtual_success": {
+      "count": 1,
+      "shareOfSeenPct": 0.01
+    }
+  },
+  "rawAgg": {
+    "scheduler|manageTradesServerSide_tick": 4607,
+    "loop|ohlcv_forced_release": 4,
+    "autopilot|entry_paused": 629,
+    "scheduler|recordHistory_tick": 458,
+    "scheduler|runAiExpertTraderLoop_tick": 458,
+    "scheduler|runAutopilotAndVirtualTradeEntry_tick": 1151,
+    "seen|evaluating_candidate": 8112,
+    "shield_long_vwap|falling_knife_below_vwap": 3533,
+    "shield_consensus|committee_consensus_low": 2720,
+    "quant_guard|win_prob_below_32pct": 1181,
+    "loop|ohlcv_skipped_overlap": 19,
+    "cell|would_boost": 253,
+    "ote_queued|ote_limit_placed_virtual": 11,
+    "exec_lock|concurrent_execution_lock_active": 389,
+    "ote_dedup|already_queued_in_ote": 150,
+    "opened|auto_entry_virtual_success": 1,
+    "loop|ai_expert_skipped_overlap": 8,
+    "gap_replay|done": 2
+  }
+}

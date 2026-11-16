@@ -48,3 +48,39 @@
 | `learningProtectedPatternsPolicy` | `'PENALIZE_ONLY'` (`learningCellService.ts:144`) | **I** | Защитная политика для паттернов с положительным бэкграундом (штраф веса без полного блэклиста) | `server/services/learningCellService.ts:23,144`, `server/routes/telemetryRoutes.ts:142`, `server/routes/systemRoutes.ts:545` | Задать `"learningProtectedPatternsPolicy"` в `settings.json` |
 | `costModel` | `{ feeRatePerSide: 0.0006, slippageRoundTrip: 0.0004, version: 2 }` (`settingsManager.ts:160-164`) | **I** | Единая модель транзакционных издержек (`0.16%` от нотионала round-trip) на всех путях закрытия (`virtualTradeEngine`, `paperTradeRoutes`, `realTradeRoutes`, `tradeManagerService`) | `server/services/costModel.ts:17-47`, `server/quant.ts:106-137` | `POST /api/settings` `{ "costModel": { ... } }` (`settingsRoutes.ts:268`) |
 | `ENABLE_REAL_TRADING` | не задана (`false`) | **ENV** | Жёсткий аппаратно-средовой рубильник реальных ордеров на бирже; без `'true'` роуты `/api/real-trade/*` и `executeRealOpenOnExchange` возвращают 403 | `server/routes/realTradeRoutes.ts:39,47,120`, `server.ts:360`, `server/routes/systemRoutes.ts:181` | Задать `ENABLE_REAL_TRADING=true` в окружении процесса |
+
+---
+
+## 3. Изменения поведения в коммите `82642b4` и последующих доработках (аудит Round 7 / H6)
+
+> Примечание по трассировке git: в текущей рабочей директории отсутствует каталог `.git`, поэтому точную дифф-границу самого коммита `82642b4` против `0ce49e0` по истории git проверить невозможно (`НЕ ПРОВЕРЕНО: .git отсутствует`). Ниже зафиксированы фактические изменения кода, присутствующие в живой кодовой базе и отчётах на момент Round 7 (`2026-11-15`).
+
+### 3.1. Изменения поведения вне флагов
+1. **ИИ-шлюз и единый реестр моделей (`server/config/aiModels.ts`, `server/services/aiGatewayService.ts`)**:
+   - Вынесены константы `DEFAULT_AI_MODEL = process.env.GEMINI_MODEL || 'gemini-4-hydrogen'` и `FALLBACK_AI_MODEL = 'gemini-flash-latest'` (проверено в `models.list`: оба идентификатора поддерживают `generateContent`).
+   - При `429 RESOURCE_EXHAUSTED` автоматическое переключение на другую модель запрещено; ответ помечается `isFallback: true, fallbackReason: 'QUOTA'`, включается cooldown `10 мин`, в `getHealth()` пишутся `lastError` и `errorCounts24h`. Переключение на `FALLBACK_AI_MODEL` ограничено только `503 / UNAVAILABLE`.
+2. **WEEX WebSocket в режиме наблюдения (`server/services/exchangeWsManager.ts`, `exchangeWsObserveOnly`)**:
+   - Исправлен разбор массива `msg.d` от WEEX WebSocket и учёт активности сокета (`lastWebSocketActivity` при `lastPrice > 0`).
+3. **Расчёт `volumeSpike` по закрытой 15m-свече (`server/services/marketDataCollectorService.ts:computeVolumeSpikeRatio`)**:
+   - Исправлен баг `Math.max(15m, 1m)` и чтения незавершённой текущей свечи (`vols[vols.length - 1]`): теперь `computeVolumeSpikeRatio(ohlcv15m)` использует строго последнюю **закрытую** 15m-свечу (`ohlcv15m.slice(0, -1)`) относительно до 20 предшествующих закрытых 15m-свечей (кламп `[0.1, 20]`), без 1m переопределения.
+4. **Чистое извлечение детектора паттернов (`server/services/marketSignalScanner.ts:evaluateScannerPatternPure`) и `netPnlTakerFee` (`server/services/costModel.ts`)**:
+   - Логика выбора 16 направленных паттернов вынесена без изменения поведения в чистую функцию `evaluateScannerPatternPure()`.
+   - Аддитивное теневое поле `netPnlTakerFee` / `netPnlTakerFeeUsd` (`0.08% * 2 + 0.04% = 0.20%` round-trip) сохраняется при закрытии сделок без влияния на баланс и триггеры закрытия.
+5. **Чистка правил Базы Знаний и логирование БД (`kbDedupeCap`, `dbStartupSync.ts`, `dbStorageService.ts`)**:
+   - Сняты ложные массовые блокировки `kb_block` по автоправилу `2Z/USDT:USDT` (`reports/diagnostics_2026-11-14/funnel_24h.json` -> `funnel_2h.json`: с нескольких тысяч до `0`).
+
+### 3.2. Статус 10+ активных флагов в живом `settings.json` (не менялись в Round 7)
+| Флаг | Значение в `settings.json` | Класс | Фактическое влияние по воронке (`funnel_24h.json` vs `funnel_2h.json` vs live `11-15`) |
+| :--- | :--- | :--- | :--- |
+| `regimeUsesRealBtcCandles` | `true` | **B** | Переключает `marketRegime` на реальные свечи BTC OHLCV (`1h`/`15m`). На live-рынке `TREND_DOWN` блокирует контртрендовые LONG (`shield_btc_panic`: `2,409`, `shield_bear_regime_long`: `130`). |
+| `blockEntriesOnEstimatedFeatures` | `true` | **B** | Отсекает входы автопилота без реального `GLOBAL_TRUE_OHLCV` (при нехватке OHLCV сканер уже оставляет такие тикеры `NEUTRAL`). |
+| `modelSideAwareFeatures` | `true` | **B** | Переводит вектор признаков в `featuresVersion: 2` (side-aware для LONG и SHORT); поднимает `requiredFeaturesVersion` до `2` в Evidence Gate. |
+| `requireModelMaturity` | `true` (`minSamples=100`) | **B** | Обнуляет `probAdjustment` логистической регрессии до накопления 100 чистых v2-сделок; при этом фиксированный `quant_guard` (`win_prob_below_32pct`) на live 24h отфильтровал `79,394 / 130,996` (`60.6%`) кандидатов. |
+| `slippageTierModelEnabled` | `true` | **B** | Масштабирует проскальзывание при 24h объёме `< $200k` (`1.5x`) и `< $50k` (`2.5x`); влияет на расчёт PnL закрытий. |
+| `realTradingEvidenceGateEnabled` | `true` | **I** | Блокирует реальные ордера, пока `cleanTrades = 0 / 150` (`EVIDENCE_GATE: n=0/150, days=0.0/14`). Защитный гейт работает корректно. |
+| `staleDataPauseSec` | `300` | **I** | Паузит входы при устаревании тикеров или BTC OHLCV `> 300с`. В живом окружении вызывает паузу ~`46%` тиков автопилота (`8,627 / 18,796`) из-за цикла `updateTrueOHLCV` (`161.8с` в изоляции, `>300с` под нагрузкой). |
+| `kbDedupeCap` | `true` | **B** | Удерживает дубликаты правил Базы Знаний и предотвращает паразитные `kb_block` по одному активу. |
+| `isCommitteeConsensusCheckEnabled` | `true` | **B** | Отклоняет `32.2%–33.5%` кандидатов сканера (`shield_consensus|committee_consensus_low`: `43,189` за 24ч на 15.11). |
+| `isOteEntryEnabled` | `true` | **B** | Переводит одобренные входы в лимитную очередь OTE (`ote_queued`: `25`, `opened|auto_entry_virtual_success`: `15` за 24ч на 15.11). |
+| `isSessionFilterEnabled` | `true` (все 5 сессий разрешены) | **B** | Фильтр активен, но при всех 5 разрешённых сессиях и `blockedHoursUtc: []` блокировок не создаёт (`0` отказов). |
+

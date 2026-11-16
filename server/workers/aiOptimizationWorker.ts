@@ -5,6 +5,7 @@ import {
   validateExpertInstructionModification,
   loadExpertInstructionsHistory
 } from '../services/selfLearningGuard.ts';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 
 export interface AiOptimizationWorkerContext {
   getCachedDB: () => any;
@@ -74,7 +75,7 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       const prompt = ctx.getArchivistPrompt(currentRules, 0.35, 3);
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -352,7 +353,7 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       );
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -609,7 +610,7 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       let rawDecision: any = null;
       try {
         const response = await ctx.runAiGeneration({
-          model: 'gemini-4-hydrogen',
+          model: DEFAULT_AI_MODEL,
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             responseMimeType: "application/json"

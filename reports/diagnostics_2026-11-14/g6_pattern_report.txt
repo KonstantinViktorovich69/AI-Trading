@@ -1,0 +1,53 @@
+=== G6 PATTERN REPORT (READ-ONLY) ===
+database.json total records: 45 (closed: 45)
+data/trades-archive.jsonl lines: 374 (unique IDs: 198, internal duplicates: 176)
+Overlap DB vs archive by ID: 0
+Unique deduplicated CLOSED trades: 243
+
+--- 1. DATABASE.JSON ONLY BY triggerPattern (comparable to 0ce49e0 slice) ---
+Pattern | n | Wins | WinRate | Mean pnl% | Sum pnl% | Sum USD | 95% CI mean% | Note
+---|---:|---:|---:|---:|---:|---:|---|---|
+🧹 False Breakout (Ложный пробой) | 17 | 3 | 17.6% | -1.83% | -31.19% | $-1.36 | [-4.04%, 0.10%] | выборка мала, выводов нет
+🎯 Bottom Wick Retest (Ретест дна) | 14 | 3 | 21.4% | -0.69% | -9.69% | $-0.42 | [-2.65%, 1.28%] | выборка мала, выводов нет
+💀 Volume Climax Bottom (Recovery) | 5 | 1 | 20.0% | -1.87% | -9.37% | $-0.39 | [-4.02%, 0.28%] | выборка мала, выводов нет
+🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | 4 | 2 | 50.0% | -3.72% | -14.87% | $-0.31 | [-10.22%, 2.79%] | выборка мала, выводов нет
+💀 Volume Climax (Predictive Dump) | 3 | 2 | 66.7% | 0.54% | 1.63% | $0.03 | [-0.20%, 1.77%] | выборка мала, выводов нет
+⚡ 1m Spire Climax Bottom (Шпиль снизу) | 1 | 1 | 100.0% | 4.16% | 4.16% | $0.09 | [4.16%, 4.16%] | выборка мала, выводов нет
+🎯 Wick Zone Retest (Ретест фитиля) | 1 | 1 | 100.0% | 3.78% | 3.78% | $0.08 | [3.78%, 3.78%] | выборка мала, выводов нет
+
+--- 2. ALL UNIQUE CLOSED TRADES (DB + ARCHIVE) BY (triggerPattern, side, dataQuality) ---
+Pattern | Side | DataQuality | n | Wins | WinRate | Mean pnl% | Sum pnl% | 95% CI mean% | Note
+---|---|---|---:|---:|---:|---:|---:|---|---|
+🧹 False Breakout (Ложный пробой) | SHORT | UNKNOWN | 41 | 15 | 36.6% | -0.07% | -2.94% | [-2.87%, 2.99%] | OK (n >= 30)
+🎯 Bottom Wick Retest (Ретест дна) | LONG | UNKNOWN | 39 | 12 | 30.8% | -3.02% | -117.64% | [-5.84%, -0.41%] | OK (n >= 30)
+⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | SHORT | UNKNOWN | 37 | 13 | 35.1% | 0.13% | 4.75% | [-1.30%, 1.89%] | OK (n >= 30)
+⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | LONG | UNKNOWN | 35 | 11 | 31.4% | -0.07% | -2.52% | [-1.14%, 1.03%] | OK (n >= 30)
+🔥 Vertical Exhaustion (Разворот) | SHORT | UNKNOWN | 29 | 13 | 44.8% | -0.45% | -13.04% | [-1.63%, 0.69%] | выборка мала, выводов нет
+💀 Volume Climax Bottom (Recovery) | LONG | UNKNOWN | 18 | 8 | 44.4% | 0.86% | 15.56% | [-2.39%, 5.55%] | выборка мала, выводов нет
+🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | UNKNOWN | 13 | 2 | 15.4% | -1.28% | -16.68% | [-7.34%, 7.68%] | выборка мала, выводов нет
+🧹 False Breakout (Ложный пробой) | SHORT | ESTIMATED | 9 | 1 | 11.1% | -2.95% | -26.58% | [-6.01%, -0.71%] | выборка мала, выводов нет
+💀 Volume Climax (Predictive Dump) | SHORT | UNKNOWN | 5 | 2 | 40.0% | -2.62% | -13.11% | [-6.10%, 0.77%] | выборка мала, выводов нет
+🎯 Bottom Wick Retest (Ретест дна) | LONG | ESTIMATED | 4 | 0 | 0.0% | -0.75% | -3.02% | [-1.86%, -0.20%] | выборка мала, выводов нет
+🎯 Wick Zone Retest (Ретест фитиля) | SHORT | UNKNOWN | 3 | 0 | 0.0% | -4.85% | -14.55% | [-5.01%, -4.63%] | выборка мала, выводов нет
+💀 Volume Climax (Predictive Dump) | SHORT | ESTIMATED | 2 | 2 | 100.0% | 0.92% | 1.83% | [0.06%, 1.77%] | выборка мала, выводов нет
+🔥 Reversal from Dump (Разворот пролива) | LONG | UNKNOWN | 2 | 1 | 50.0% | 0.27% | 0.53% | [-2.02%, 2.55%] | выборка мала, выводов нет
+🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | ESTIMATED | 2 | 2 | 100.0% | 2.79% | 5.58% | [1.77%, 3.81%] | выборка мала, выводов нет
+⚡ 1m Spire Climax Bottom (Шпиль снизу) | LONG | UNKNOWN | 1 | 1 | 100.0% | 4.16% | 4.16% | [4.16%, 4.16%] | выборка мала, выводов нет
+🎯 Wick Zone Retest (Ретест фитиля) | SHORT | ESTIMATED | 1 | 1 | 100.0% | 3.78% | 3.78% | [3.78%, 3.78%] | выборка мала, выводов нет
+💀 Volume Climax Bottom (Recovery) | LONG | ESTIMATED | 1 | 1 | 100.0% | 1.77% | 1.77% | [1.77%, 1.77%] | выборка мала, выводов нет
+🧹 False Breakout (Ложный пробой) | SHORT | REAL | 1 | 1 | 100.0% | 3.81% | 3.81% | [3.81%, 3.81%] | выборка мала, выводов нет
+
+--- 3. ALL UNIQUE CLOSED TRADES (DB + ARCHIVE) BY triggerPattern ---
+Pattern | n | Wins | WinRate | Mean pnl% | Sum pnl% | Sum USD | 95% CI mean% | Note
+---|---:|---:|---:|---:|---:|---:|---|---|
+🧹 False Breakout (Ложный пробой) | 51 | 17 | 33.3% | -0.50% | -25.71% | $-3.06 | [-2.90%, 1.90%] | OK (n >= 30)
+🎯 Bottom Wick Retest (Ретест дна) | 43 | 12 | 27.9% | -2.81% | -120.65% | $-9.12 | [-5.23%, -0.49%] | OK (n >= 30)
+⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | 37 | 13 | 35.1% | 0.13% | 4.75% | $-0.06 | [-1.28%, 1.90%] | OK (n >= 30)
+⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | 35 | 11 | 31.4% | -0.07% | -2.52% | $-0.59 | [-1.15%, 1.01%] | OK (n >= 30)
+🔥 Vertical Exhaustion (Разворот) | 29 | 13 | 44.8% | -0.45% | -13.04% | $-1.21 | [-1.68%, 0.71%] | выборка мала, выводов нет
+💀 Volume Climax Bottom (Recovery) | 19 | 9 | 47.4% | 0.91% | 17.32% | $1.31 | [-2.23%, 5.13%] | выборка мала, выводов нет
+🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | 15 | 4 | 26.7% | -0.74% | -11.10% | $-1.96 | [-6.08%, 7.50%] | выборка мала, выводов нет
+💀 Volume Climax (Predictive Dump) | 7 | 4 | 57.1% | -1.61% | -11.28% | $-0.71 | [-4.36%, 0.93%] | выборка мала, выводов нет
+🎯 Wick Zone Retest (Ретест фитиля) | 4 | 1 | 25.0% | -2.69% | -10.78% | $-1.15 | [-4.96%, 1.60%] | выборка мала, выводов нет
+🔥 Reversal from Dump (Разворот пролива) | 2 | 1 | 50.0% | 0.27% | 0.53% | $0.11 | [-2.02%, 2.55%] | выборка мала, выводов нет
+⚡ 1m Spire Climax Bottom (Шпиль снизу) | 1 | 1 | 100.0% | 4.16% | 4.16% | $0.09 | [4.16%, 4.16%] | выборка мала, выводов нет

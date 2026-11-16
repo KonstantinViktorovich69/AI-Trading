@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response, Router } from 'express';
 import { Type } from '@google/genai';
+import { DEFAULT_AI_MODEL } from '../config/aiModels.ts';
 
 export interface KnowledgeRouterContext {
   getKnowledgeBase: () => any[];
@@ -110,7 +111,7 @@ export function createKnowledgeRouter(ctx: KnowledgeRouterContext): Router {
       const prompt = ctx.getArchivistPrompt(currentRules, 0.3, 5);
 
       const response = await ctx.runAiGeneration({
-        model: 'gemini-4-hydrogen',
+        model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -292,7 +293,7 @@ export function createKnowledgeRouter(ctx: KnowledgeRouterContext): Router {
 
         try {
           const response = await ctx.runAiGeneration({
-            model: 'gemini-4-hydrogen',
+            model: DEFAULT_AI_MODEL,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             config: {
               responseMimeType: "application/json",
