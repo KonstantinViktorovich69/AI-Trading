@@ -303,5 +303,84 @@ describe('AiGatewayService', () => {
     expect(health.lastError?.code).toBe('NETWORK_ERROR');
     expect(health.errorCounts24h['NETWORK']).toBe(1);
   });
+
+  it('enforces daily UTC AI budget with priority shedding (3 cut first, 2 next, 1 allowed until exhaustion) and resets at 00:00 UTC (J5)', async () => {
+    let fakeNow = Date.UTC(2026, 10, 16, 23, 50, 0); // 2026-11-16 23:50:00 UTC
+    const budgetGateway = new AiGatewayService({
+      frontendTimeoutMs: 500,
+      workerTimeoutMs: 500,
+      nowProvider: () => fakeNow,
+      getBudgetSettings: () => ({ enabled: true, dailyLimit: 5 })
+    });
+
+    const generateContentMock = vi.fn().mockResolvedValue({ text: '{"ok":true}' });
+    budgetGateway.setInternalServerGeminiClient({
+      models: { generateContent: generateContentMock }
+    } as any);
+
+    // For dailyLimit = 5:
+    // reserveForP1 = max(1, floor(5*0.2)) = 1 -> p2Max = 4
+    // reserveForP1AndP2 = max(2, ceil(5*0.5)) = 3 -> p3Max = 2
+    // Dispatch 2 background calls (priority 3) -> allowed
+    await budgetGateway.runAiGeneration({ priority: 3, contents: [{ parts: [{ text: 'bg1' }] }] });
+    await budgetGateway.runAiGeneration({ priority: 3, contents: [{ parts: [{ text: 'bg2' }] }] });
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+
+    // 3rd background call (priority 3) must be shedded without API hit
+    const shedBg = await budgetGateway.runAiGeneration({
+      priority: 3,
+      contents: [{ parts: [{ text: 'bg3' }] }],
+      config: { responseMimeType: 'application/json' }
+    });
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+    expect(shedBg.isFallback).toBe(true);
+    expect(shedBg.fallbackReason).toBe('BUDGET');
+
+    // Closed-trade eval (priority 2) still passes up to p2Max=4 (2 more calls)
+    await budgetGateway.runAiGeneration({ priority: 2, contents: [{ parts: [{ text: 'eval1' }] }] });
+    await budgetGateway.runAiGeneration({ priority: 2, contents: [{ parts: [{ text: 'eval2' }] }] });
+    expect(generateContentMock).toHaveBeenCalledTimes(4);
+
+    // Next priority 2 call hits reserve for manual calls -> BUDGET
+    const shedEval = await budgetGateway.runAiGeneration({ priority: 2, contents: [{ parts: [{ text: 'eval3' }] }] });
+    expect(generateContentMock).toHaveBeenCalledTimes(4);
+    expect(shedEval.fallbackReason).toBe('BUDGET');
+
+    // Manual call (priority 1) passes for the final 5th slot
+    const manualOk = await budgetGateway.runAiGeneration({ priority: 1, contents: [{ parts: [{ text: 'manual1' }] }] });
+    expect(generateContentMock).toHaveBeenCalledTimes(5);
+    expect(manualOk.text).toBe('{"ok":true}');
+
+    // 6th call (even priority 1) exceeds dailyLimit=5 -> BUDGET
+    const manualCap = await budgetGateway.runAiGeneration({ priority: 1, contents: [{ parts: [{ text: 'manual2' }] }] });
+    expect(generateContentMock).toHaveBeenCalledTimes(5);
+    expect(manualCap.fallbackReason).toBe('BUDGET');
+
+    const healthDay1 = budgetGateway.getHealth();
+    expect(healthDay1.dailyBudget.utcDate).toBe('2026-11-16');
+    expect(healthDay1.dailyBudget.usedTotal).toBe(5);
+    expect(healthDay1.dailyBudget.blockedTotal).toBe(3);
+
+    // Advance across 00:00 UTC midnight -> 2026-11-17 00:00:05 UTC -> counter resets!
+    fakeNow = Date.UTC(2026, 10, 17, 0, 0, 5);
+    const resetCall = await budgetGateway.runAiGeneration({ priority: 3, contents: [{ parts: [{ text: 'bg next day' }] }] });
+    expect(generateContentMock).toHaveBeenCalledTimes(6);
+    expect(resetCall.text).toBe('{"ok":true}');
+    expect(budgetGateway.getHealth().dailyBudget.utcDate).toBe('2026-11-17');
+    expect(budgetGateway.getHealth().dailyBudget.usedTotal).toBe(1);
+  });
+
+  it('does not block any calls when aiDailyBudgetEnabled is false', async () => {
+    const offGateway = new AiGatewayService({
+      getBudgetSettings: () => ({ enabled: false, dailyLimit: 1 })
+    });
+    const mockCall = vi.fn().mockResolvedValue({ text: '{"ok":true}' });
+    offGateway.setInternalServerGeminiClient({ models: { generateContent: mockCall } } as any);
+
+    await offGateway.runAiGeneration({ priority: 3, contents: [{ parts: [{ text: '1' }] }] });
+    await offGateway.runAiGeneration({ priority: 3, contents: [{ parts: [{ text: '2' }] }] });
+    expect(mockCall).toHaveBeenCalledTimes(2);
+    expect(offGateway.getHealth().dailyBudget.enabled).toBe(false);
+  });
 });
 

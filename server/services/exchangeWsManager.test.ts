@@ -144,4 +144,21 @@ describe('ExchangeWsManager WEEX V3 payload & observeOnly mode (G2)', () => {
     expect(summaryAfter.ticksInWindow).toBe(0);
     expect(summaryAfter.totalTicks).toBe(1);
   });
+
+  it('documents J6.2 small-percentage scaling bug where P="0.01" (+0.01% vs open) satisfies |empiricalRatio - pct| < 0.02 and is scaled x100 to 1', () => {
+    const { manager, globalCcxtTickers } = createHarness();
+    createdManagers.push(manager);
+
+    // Simulate a V3 array tick with o="100", c="100.01" (empiricalRatio = 0.0001 = +0.01%)
+    // Even if P is literally 0.01 (0.01%), Math.abs(0.0001 - 0.01) = 0.0099 < 0.02,
+    // causing current logic to multiply by 100 -> 1.
+    manager.handleIncomingMessage(JSON.stringify({
+      e: 'ticker',
+      E: 1794698319725,
+      s: 'BTCUSDT',
+      d: [{ c: '100.01', o: '100', P: '0.01', q: '1000000' }]
+    }));
+
+    expect(globalCcxtTickers.weex['BTC/USDT'].percentage).toBe(1);
+  });
 });

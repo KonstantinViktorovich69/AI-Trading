@@ -5,6 +5,7 @@ import { isTraditionalEquitySymbol } from './marketSignalScanner.ts';
 import { normalizeSymbol } from '../quant.ts';
 
 let isUpdatingTrueOhlcv = false;
+let isUpdatingBtcFreshnessFast = false;
 
 function formatPricePrecision(price: number): number {
   if (!isFinite(price) || price <= 0) return price;
@@ -43,6 +44,7 @@ export interface MarketDataCollectorContext {
   getVirtualTrades: () => any[];
   getCcxtExchange: (name: string) => any;
   isMainThread: () => boolean;
+  getGlobalSettings?: () => any;
   onIndicatorsUpdated?: (cleanSym: string) => void;
 }
 
@@ -538,6 +540,74 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
   }
 }
 
+/**
+ * Lightweight BTC freshness fast loop (15m + 1h for BTC/USDT:USDT only) gated by btcFreshnessFastLoopEnabled.
+ * Keeps GLOBAL_TRUE_OHLCV['BTCUSDT'].updatedAt fresh without running the full multi-asset collector loop.
+ */
+export async function updateBtcFreshnessFast(
+  ctx: MarketDataCollectorContext,
+  options?: { force?: boolean }
+): Promise<boolean> {
+  if (process.env.OFFLINE_MODE === '1' || process.env.TEST_MODE === '1') {
+    return false;
+  }
+  const settings = ctx.getGlobalSettings ? ctx.getGlobalSettings() : undefined;
+  if (!options?.force && settings?.btcFreshnessFastLoopEnabled !== true) {
+    return false;
+  }
+  if (isUpdatingBtcFreshnessFast) {
+    return false;
+  }
+
+  isUpdatingBtcFreshnessFast = true;
+  try {
+    const weex = ctx.getCcxtExchange('weex');
+    if (!weex || typeof weex.fetchOHLCV !== 'function') {
+      return false;
+    }
+
+    const fetchSymbol = 'BTC/USDT:USDT';
+    ensureExchangeMarket(weex, fetchSymbol);
+
+    const [ohlcv15m, ohlcv1h] = await Promise.all([
+      weex.fetchOHLCV(fetchSymbol, '15m', undefined, 100),
+      weex.fetchOHLCV(fetchSymbol, '1h', undefined, 100).catch(() => [])
+    ]);
+
+    if (!Array.isArray(ohlcv15m) || ohlcv15m.length < 26) {
+      return false;
+    }
+
+    const GLOBAL_RAW_OHLCV = ctx.getGlobalRawOHLCV();
+    const GLOBAL_TRUE_OHLCV = ctx.getGlobalTrueOHLCV();
+
+    const prevRaw = GLOBAL_RAW_OHLCV['BTCUSDT'] || {};
+    GLOBAL_RAW_OHLCV['BTCUSDT'] = {
+      ...prevRaw,
+      '15m': ohlcv15m,
+      '1h': Array.isArray(ohlcv1h) && ohlcv1h.length > 0 ? ohlcv1h : (prevRaw['1h'] || [])
+    };
+
+    recalculateIndicatorsForSymbol('BTCUSDT', ctx);
+
+    if (Array.isArray(ohlcv1h) && ohlcv1h.length >= 50 && GLOBAL_TRUE_OHLCV['BTCUSDT']) {
+      const closes1h = ohlcv1h.map((h: any) => Number(h[4]));
+      GLOBAL_TRUE_OHLCV['BTCUSDT'].ema200_1h = calculateEMA(closes1h, Math.min(closes1h.length, 200));
+    }
+
+    if (GLOBAL_TRUE_OHLCV['BTCUSDT']) {
+      GLOBAL_TRUE_OHLCV['BTCUSDT'].updatedAt = Date.now();
+    }
+
+    return true;
+  } catch (err: any) {
+    console.warn('[BTC FAST LOOP] Warning:', err?.message || err);
+    return false;
+  } finally {
+    isUpdatingBtcFreshnessFast = false;
+  }
+}
+
 let lastWeexFundingWarningTs = 0;
 
 export function resetLastWeexFundingWarningTsForTest(): void {
@@ -967,6 +1037,10 @@ export class MarketDataCollectorService {
 
   public async updateTrueOHLCV(): Promise<void> {
     return updateTrueOHLCV(this.ctx);
+  }
+
+  public async updateBtcFreshnessFast(options?: { force?: boolean }): Promise<boolean> {
+    return updateBtcFreshnessFast(this.ctx, options);
   }
 
   public async updateDerivativesData(): Promise<void> {

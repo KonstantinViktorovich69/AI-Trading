@@ -528,6 +528,7 @@ export async function executeUpdateMarketPulse(ctx: QuantRiskEngineContext): Pro
     if (ctx.runAiGeneration && ctx.getMarketPulsePrompt) {
       const prompt = ctx.getMarketPulsePrompt(context, shortsSq, longsSq);
       const result = await ctx.runAiGeneration({
+        priority: 3,
         model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }
@@ -591,6 +592,7 @@ export async function executeScrapeSocialSentiment(
     if (ctx.runAiGeneration && ctx.getSocialScraperPrompt) {
       const prompt = ctx.getSocialScraperPrompt(cleanSymbol, change, vol);
       const result = await ctx.runAiGeneration({
+        priority: 3,
         model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }

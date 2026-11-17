@@ -129,6 +129,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       );
 
       const response = await ctx.runAiGeneration({
+        priority: 1,
         model: DEFAULT_AI_MODEL,
         contents: [
           { role: 'system', parts: [{ text: systemPrompt }] },
@@ -250,6 +251,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       const rules = kb.filter(r => !r.isArchived).map(r => r.text).join('\n');
       const prompt = ctx.getCommitteePrompt(rules, JSON.stringify(data));
       const response = await ctx.runAiGeneration({
+        priority: 1,
         model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
@@ -317,6 +319,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
           );
 
           const response = await ctx.runAiGeneration({
+            priority: 1,
             model: DEFAULT_AI_MODEL,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             config: {
@@ -420,6 +423,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       const prompt = ctx.getSignalAnalysisPrompt(signalJson, rules);
 
       const response = await ctx.runAiGeneration({
+        priority: 1,
         model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
@@ -463,6 +467,7 @@ export function createAiRoutes(ctx: AiRoutesContext): Router {
       let responseText = "";
       try {
         const response = await ctx.runAiGeneration({
+          priority: 1,
           model: DEFAULT_AI_MODEL,
           contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],
           config: {

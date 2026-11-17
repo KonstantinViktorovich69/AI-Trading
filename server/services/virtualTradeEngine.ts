@@ -1014,6 +1014,7 @@ PnL %: ${trade.pnlPercent?.toFixed(2)}% (${trade.pnl?.toFixed(2)} USDT)
   }
 }`;
           const aiResp = await deps.runAiGeneration({
+            priority: 2,
             model: DEFAULT_AI_MODEL,
             contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],
             config: { responseMimeType: "application/json" }

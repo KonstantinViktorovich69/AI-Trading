@@ -17,11 +17,20 @@ export interface PendingWorkerAiTask {
   createdAt: number;
 }
 
+export type AiCallPriority = 1 | 2 | 3;
+
+export interface AiBudgetConfig {
+  enabled: boolean;
+  dailyLimit: number;
+}
+
 export interface AiGatewayOptions {
   geminiApiKey?: string;
   deepseekApiKey?: string;
   frontendTimeoutMs?: number;
   workerTimeoutMs?: number;
+  getBudgetSettings?: () => Partial<AiBudgetConfig> | { aiDailyBudgetEnabled?: boolean; aiDailyBudgetCalls?: number } | null | undefined;
+  nowProvider?: () => number;
 }
 
 export interface AiGatewayErrorInfo {
@@ -30,6 +39,20 @@ export interface AiGatewayErrorInfo {
   message: string;
   model: string;
   at: number;
+}
+
+export interface AiDailyBudgetStatus {
+  enabled: boolean;
+  utcDate: string;
+  limit: number;
+  usedTotal: number;
+  usedByPriority: { 1: number; 2: number; 3: number };
+  blockedTotal: number;
+  thresholds: {
+    priority1Max: number;
+    priority2Max: number;
+    priority3Max: number;
+  };
 }
 
 export interface AiGatewayHealth {
@@ -44,6 +67,7 @@ export interface AiGatewayHealth {
   cooldownActive: boolean;
   lastError: AiGatewayErrorInfo | null;
   errorCounts24h: Record<string, number>;
+  dailyBudget: AiDailyBudgetStatus;
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -62,9 +86,57 @@ export class AiGatewayService {
   private lastError: AiGatewayErrorInfo | null = null;
   private errorEvents24h: Array<{ bucket: string; at: number }> = [];
   private options: AiGatewayOptions;
+  private budgetSettingsProvider?: AiGatewayOptions['getBudgetSettings'];
+  private budgetUtcDate: string = '';
+  private budgetUsedTotal: number = 0;
+  private budgetUsedByPriority: { 1: number; 2: number; 3: number } = { 1: 0, 2: 0, 3: 0 };
+  private budgetBlockedTotal: number = 0;
 
   constructor(options: AiGatewayOptions = {}) {
     this.options = options;
+    this.budgetSettingsProvider = options.getBudgetSettings;
+  }
+
+  public setBudgetSettingsProvider(provider: AiGatewayOptions['getBudgetSettings']): void {
+    this.budgetSettingsProvider = provider;
+  }
+
+  private now(): number {
+    return typeof this.options.nowProvider === 'function' ? this.options.nowProvider() : Date.now();
+  }
+
+  private getResolvedBudgetConfig(): AiBudgetConfig {
+    const raw: any = typeof this.budgetSettingsProvider === 'function' ? this.budgetSettingsProvider() : undefined;
+    const enabled = raw?.enabled !== undefined ? Boolean(raw.enabled) : Boolean(raw?.aiDailyBudgetEnabled);
+    const rawLimit = Number(raw?.dailyLimit ?? raw?.aiDailyBudgetCalls ?? 20);
+    const dailyLimit = Number.isFinite(rawLimit) && rawLimit >= 1 ? Math.floor(rawLimit) : 20;
+    return { enabled, dailyLimit };
+  }
+
+  private ensureCurrentUtcDay(nowTs = this.now()): void {
+    const utcDay = new Date(nowTs).toISOString().slice(0, 10);
+    if (this.budgetUtcDate !== utcDay) {
+      this.budgetUtcDate = utcDay;
+      this.budgetUsedTotal = 0;
+      this.budgetUsedByPriority = { 1: 0, 2: 0, 3: 0 };
+      this.budgetBlockedTotal = 0;
+    }
+  }
+
+  private getPriorityThresholds(limit: number): { priority1Max: number; priority2Max: number; priority3Max: number } {
+    const safeLimit = Math.max(1, Math.floor(limit));
+    const reserveForP1 = safeLimit >= 2 ? Math.max(1, Math.floor(safeLimit * 0.2)) : 1;
+    const reserveForP1AndP2 = safeLimit >= 3 ? Math.max(2, Math.ceil(safeLimit * 0.5)) : safeLimit;
+    return {
+      priority1Max: safeLimit,
+      priority2Max: Math.max(0, safeLimit - reserveForP1),
+      priority3Max: Math.max(0, safeLimit - reserveForP1AndP2)
+    };
+  }
+
+  private normalizePriority(rawPriority: any): AiCallPriority {
+    if (rawPriority === 1 || rawPriority === 2 || rawPriority === 3) return rawPriority;
+    return 3;
   }
 
   private pruneErrorEvents(nowTs = Date.now()): void {
@@ -224,8 +296,11 @@ export class AiGatewayService {
     return this._aiFallbackCount;
   }
 
-  public getHealth(nowTs = Date.now()): AiGatewayHealth {
+  public getHealth(nowTs = this.now()): AiGatewayHealth {
     this.pruneErrorEvents(nowTs);
+    this.ensureCurrentUtcDay(nowTs);
+    const budgetCfg = this.getResolvedBudgetConfig();
+    const thresholds = this.getPriorityThresholds(budgetCfg.dailyLimit);
     const errorCounts24h: Record<string, number> = {
       '429': 0,
       '404': 0,
@@ -252,7 +327,16 @@ export class AiGatewayService {
       cooldownUntil: this.serverGeminiCooldownUntil > nowTs ? this.serverGeminiCooldownUntil : null,
       cooldownActive: this.serverGeminiCooldownUntil > nowTs,
       lastError: this.lastError ? { ...this.lastError } : null,
-      errorCounts24h
+      errorCounts24h,
+      dailyBudget: {
+        enabled: budgetCfg.enabled,
+        utcDate: this.budgetUtcDate,
+        limit: budgetCfg.dailyLimit,
+        usedTotal: this.budgetUsedTotal,
+        usedByPriority: { ...this.budgetUsedByPriority },
+        blockedTotal: this.budgetBlockedTotal,
+        thresholds
+      }
     };
   }
 
@@ -264,6 +348,10 @@ export class AiGatewayService {
     this.errorEvents24h = [];
     this.serverGeminiCooldownUntil = 0;
     this.lastCooldownReason = '';
+    this.budgetUtcDate = '';
+    this.budgetUsedTotal = 0;
+    this.budgetUsedByPriority = { 1: 0, 2: 0, 3: 0 };
+    this.budgetBlockedTotal = 0;
   }
 
   public getPendingAiTasks(): Map<string, PendingAiTask> {
@@ -499,9 +587,26 @@ export class AiGatewayService {
     }
 
     const task = async () => {
+      const nowTs = this.now();
+      this.ensureCurrentUtcDay(nowTs);
+      const priority = this.normalizePriority(params?.priority);
+      const budgetCfg = this.getResolvedBudgetConfig();
+      if (budgetCfg.enabled) {
+        const thresholds = this.getPriorityThresholds(budgetCfg.dailyLimit);
+        const capForPriority = priority === 1
+          ? thresholds.priority1Max
+          : (priority === 2 ? thresholds.priority2Max : thresholds.priority3Max);
+        if (this.budgetUsedTotal >= capForPriority) {
+          this.budgetBlockedTotal++;
+          return this.getStaticServerSideAiFallback(params, 'BUDGET');
+        }
+      }
+
       const dsKey = this.options.deepseekApiKey || process.env.DEEPSEEK_API_KEY;
 
       if (dsKey) {
+        this.budgetUsedTotal++;
+        this.budgetUsedByPriority[priority]++;
         try {
           let promptText = "";
           const systemPrompts: string[] = [];
@@ -544,7 +649,7 @@ export class AiGatewayService {
           if (resp.ok) {
             const data = await resp.json();
             const text = data.choices?.[0]?.message?.content || "";
-            this.recordSuccessEvent();
+            this.recordSuccessEvent(nowTs);
             return { text };
           } else {
             const errBody = await resp.text();
@@ -555,7 +660,7 @@ export class AiGatewayService {
         }
       }
 
-      if (this.serverGeminiCooldownUntil > Date.now()) {
+      if (this.serverGeminiCooldownUntil > nowTs) {
         const cooldownReason = this.lastCooldownReason === 'QUOTA'
           ? 'QUOTA'
           : 'Gemini API in cooldown due to access/quota status. Using local fallback.';
@@ -564,6 +669,10 @@ export class AiGatewayService {
 
       const ai = this.getInternalServerGeminiClient();
       if (ai) {
+        if (!dsKey) {
+          this.budgetUsedTotal++;
+          this.budgetUsedByPriority[priority]++;
+        }
         const requestedModel = String(params.model || '');
         const isLegacyModel = !requestedModel ||
           requestedModel.includes('gemini-3.') ||
@@ -610,10 +719,10 @@ export class AiGatewayService {
               throw primaryErr;
             }
           }
-          this.recordSuccessEvent();
+          this.recordSuccessEvent(nowTs);
           return { text: response?.text || "" };
         } catch (geminiErr: any) {
-          const classified = this.recordErrorEvent(geminiErr, model);
+          const classified = this.recordErrorEvent(geminiErr, model, nowTs);
 
           if (classified.info.status === 429) {
             console.warn(`[AI ENGINE] QUOTA exceeded (429 ${classified.info.code}) on model ${model}: ${classified.info.message.slice(0, 140)}`);
@@ -623,7 +732,7 @@ export class AiGatewayService {
             const cooldownDurationMs = (classified.isTransportOrNetwork || classified.isOverloadedOrUnavailable)
               ? 2 * 60 * 1000
               : 10 * 60 * 1000;
-            this.serverGeminiCooldownUntil = Date.now() + cooldownDurationMs;
+            this.serverGeminiCooldownUntil = nowTs + cooldownDurationMs;
             this.lastCooldownReason = classified.info.status === 429 ? 'QUOTA' : classified.statusSummary;
             console.log(`[AI ENGINE] Switched to local quantum engine (cloud AI status: ${classified.statusSummary}). Normal operation continues.`);
           } else {

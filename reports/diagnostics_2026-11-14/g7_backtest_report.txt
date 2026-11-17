@@ -1,93 +1,169 @@
-=== H4 / G7 BACKTEST v2 (TOP-30 WEEX FUTURES, 1 POS/SYMBOL, MONTE CARLO BASELINE) ===
+=== H4 / G7 / J1 BACKTEST v2.1 (TOP-30 WEEX FUTURES, 1 POS/SYMBOL, SENSITIVITY & M=32 FDR) ===
 Pre-committed OOS Pass Criterion: OOS-40% PASS <=> (n >= 30) AND (Mean Net@(0.20%) > 0%) AND (95% CI lo > 0%) AND (Mean Net@(0.20%) > Rand p95@(0.20%))
-Depth: 15m=180d (all Top-30), 1m=60d (cached majors) | Leverage=5x, SL=2.0% (-10% ROE), TP=3.0% (+15% ROE)
+Depth: 15m=180d (Top-30), 1m=60d (cached majors) + on-demand 1m slices for ambiguous 15m bars
+Baseline v2 Params: Leverage=5x, SL=2.0% (-10% ROE), TP=3.0% (+15% ROE), Floor=4.0%, Trail=off
 MaxDD unit: linear non-compounded ROE percentage points (п.п. ROE) on fixed margin per trade
 
-Universe (30): fallback Top-30 list
-Symbols: BTCUSDT, ETHUSDT, 1000PEPEUSDT, SOLUSDT, XRPUSDT, IDOLUSDT, XPINUSDT, ZECUSDT, BCHUSDT, DOGEUSDT, ATOMUSDT, AVAXUSDT, LINKUSDT, BNBUSDT, BTWUSDT, CROSSUSDT, ZAMAUSDT, KGENUSDT, TRXUSDT, SUIUSDT, LTCUSDT, ADAUSDT, UNIUSDT, HYPEUSDT, XLMUSDT, ASTERUSDT, BZUSDT, THETAUSDT, DOTUSDT, AKEUSDT
+--- J1.6: BREAK-EVEN ARITHMETIC (LEVERAGE 5x) ---
+Formula: BreakEven_Gross_ROE(%) = RoundTripCostPct(%) * Leverage
+  - Cost 0.16% (live costModel v2: 0.06%x2 + 0.04% slip) * 5x => +0.80% Gross ROE break-even
+  - Cost 0.20% (taker fee: 0.08%x2 + 0.04% slip)        * 5x => +1.00% Gross ROE break-even
+  - Cost 0.30% (stress illiquid altcoin tier)            * 5x => +1.50% Gross ROE break-even
+Interpretation: Whenever 0 < Mean Gross ROE < +1.00% (at 5x, 0.20% cost), strategy edge before fees is positive but smaller than fees+slippage => Mean Net@(0.20%) < 0.
 
-[LOAD] Loaded 5/30 symbols (active with >=150 bars: 5)
-[LOAD] Loaded 10/30 symbols (active with >=150 bars: 10)
-[LOAD] Loaded 15/30 symbols (active with >=150 bars: 15)
-[LOAD] Loaded 20/30 symbols (active with >=150 bars: 20)
-[LOAD] Loaded 25/30 symbols (active with >=150 bars: 25)
-[LOAD] Loaded 30/30 symbols (active with >=150 bars: 30)
+--- J1.1: LIVE VS BACKTEST v2 INDICATORS & CONFIG COMPARISON ---
+Parameter | Live Production (Code & settings.json) | Backtest v2 (Baseline) | Impact / Gap
+---|---|---|---
+rsi1h | RSI-14 on 15m (marketDataCollectorService.ts:241-243) | RSI-14 on 15m | Match
+bb1h | BB(20,2) on 15m (marketDataCollectorService.ts:307-313) | BB(20,2) on 15m | Match
+vwap | VWAP on 100 x 15m bars (marketDataCollectorService.ts:375-379) | VWAP on 48 x 15m bars (12h) | Minor drift (48 vs 100 bars)
+psarStatus1m / flips | PSAR(0.02,0.2) on 60 x 1m bars (collector:335-363) | PSAR(0.02,0.2) on 15m bars | Moderate divergence (15m smoother than 1m)
+volumeSpike | Closed bar[-2] / median(prev <=20 closed 15m bars) | Exact computeVolumeSpikeRatio() | Match
+change/high/low/vol | Live WEEX 24h rolling ticker | Rolling 96 x 15m bars | Near match (~24h window)
+Leverage | conservative 3-5x -> cap 2x (vol>=5/|24h|>=7) / 3x (vol>3.5/|24h|>=4) | Fixed 5x | Tested below in J1.4 Live Sensitivity
+SL / TP & ExitPolicy | Struct SL [1.0%,2.2%], TP4>=4.5%, minClose=6%, bypassTP=true, Trail 14%/3%, timeoutProfit 18h@6%, cost=0.16% | Fixed SL 2% / TP 3%, minClose=4%, bypassTP=false, Trail=false, cost=0.20% | Tested below in J1.4 Live Sensitivity
 
-Total trades simulated (1 active pos/symbol/engine): 26798
-  - patternScannerService (15m): 9330
+Universe (30): live WEEX ccxt.fetchTickers (631 non-equity USDT perpetuals)
+Symbols: BTCUSDT, CROSSUSDT, ETHUSDT, 1000PEPEUSDT, BZUSDT, SOLUSDT, XPINUSDT, XRPUSDT, ZECUSDT, IDOLUSDT, AIOTUSDT, AVAXUSDT, LINKUSDT, BNBUSDT, DOGEUSDT, BCHUSDT, TRXUSDT, LTCUSDT, SUIUSDT, BTWUSDT, UNIUSDT, ZAMAUSDT, HYPEUSDT, KGENUSDT, ADAUSDT, XLMUSDT, PIEVERSEUSDT, XMRUSDT, BLESSUSDT, ONDOUSDT
+
+[LOAD] Loaded 5/30 symbols (active: 5)
+[LOAD] Loaded 10/30 symbols (active: 10)
+[LOAD] Loaded 15/30 symbols (active: 15)
+[LOAD] Loaded 20/30 symbols (active: 20)
+[LOAD] Loaded 25/30 symbols (active: 25)
+[LOAD] Loaded 30/30 symbols (active: 30)
+
+--- J1.2: AMBIGUOUS 15m BARS & TIE-BREAKER SENSITIVITY (ALL 15m TRADES, n=27234) ---
+Ambiguous 15m trades (both SL & TP touched on same 15m bar): 383/27234 (1.41%) | Resolved via 60d 1m: 0, via on-demand 1m WEEX slice: 383 (newly fetched: 346), unresolved fallback: 0 (0.00%)
+  - SL_FIRST    (pure 15m conservative): WR=37.09%, MeanNet@0.20%=-1.030%, Sum=-28061.8 п.п.
+  - 1M_RESOLVED (actual 1m intra-bar)  : WR=37.96%, MeanNet@0.20%=-0.813%, Sum=-22136.8 п.п.
+  - TP_FIRST    (pure 15m optimistic)  : WR=38.50%, MeanNet@0.20%=-0.679%, Sum=-18486.8 п.п.
+
+Total trades simulated (1 active pos/symbol/engine): 27234
+  - patternScannerService (15m): 9324
   - patternScannerService (1m):  0
-  - marketSignalScanner (15m):   17468
+  - marketSignalScanner (15m):   17910
 
---- ENGINE=patternScannerService | TF=15m (IS 60% <= 2026-09-05T19:57:00.000Z < OOS 40%) ---
-Pattern | Side | Split | n | WR% | Mean Gross% | Mean Net@(0.20%) | Sum ROE (п.п.) | PF | MaxDD (п.п. ROE) | 95% CI Net% | Rand p95% | Лучше случайного | OOS Pass
----|---|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|
-Шпиль на 1м / Ложный пробой (SHORT) | SHORT | ALL | 4484 | 36.3% | 0.07% | -0.93% | -4149.2 | 0.80 | 4830.3 | [-1.20%, -0.64%] | 0.79% | нет | -
-Шпиль на 1м / Ложный пробой (SHORT) | SHORT | IS-60% | 2643 | 34.4% | -0.35% | -1.35% | -3570.7 | 0.70 | 3712.7 | [-1.70%, -1.01%] | -0.26% | нет | -
-Шпиль на 1м / Ложный пробой (SHORT) | SHORT | OOS-40% | 1841 | 39.0% | 0.69% | -0.31% | -578.4 | 0.93 | 1225.6 | [-0.78%, 0.14%] | 0.27% | нет | FAIL
-Отскок от дна / Пинбар поддержки (LONG) | LONG | ALL | 4700 | 34.3% | -0.12% | -1.12% | -5248.5 | 0.76 | 5299.9 | [-1.39%, -0.84%] | -1.10% | нет | -
-Отскок от дна / Пинбар поддержки (LONG) | LONG | IS-60% | 2540 | 35.9% | 0.29% | -0.71% | -1801.6 | 0.83 | 2023.4 | [-1.10%, -0.34%] | 0.02% | нет | -
-Отскок от дна / Пинбар поддержки (LONG) | LONG | OOS-40% | 2160 | 32.3% | -0.60% | -1.60% | -3446.9 | 0.68 | 3583.2 | [-2.00%, -1.18%] | -0.76% | нет | FAIL
-SAR Peak Reversal / Параболический разворот (SHORT) | SHORT | ALL | 80 | 37.5% | -1.03% | -2.03% | -162.6 | 0.66 | 233.1 | [-4.46%, 0.34%] | 0.54% | нет | -
-SAR Peak Reversal / Параболический разворот (SHORT) | SHORT | IS-60% | 56 | 44.6% | 0.76% | -0.24% | -13.3 | 0.95 | 83.8 | [-3.33%, 2.69%] | 0.63% | нет | -
-SAR Peak Reversal / Параболический разворот (SHORT) | SHORT | OOS-40% | 24 | 20.8% | -5.22% | -6.22% | -149.3 | 0.22 | 149.3 | [-9.22%, -2.44%] | 2.62% | нет | FAIL
-SAR Bottom Reversal / Отскок пролива (LONG) | LONG | ALL | 66 | 34.8% | -0.96% | -1.96% | -129.2 | 0.67 | 144.7 | [-4.43%, 0.77%] | 0.86% | нет | -
-SAR Bottom Reversal / Отскок пролива (LONG) | LONG | IS-60% | 27 | 40.7% | 0.12% | -0.88% | -23.7 | 0.83 | 49.9 | [-4.87%, 3.27%] | 1.75% | нет | -
-SAR Bottom Reversal / Отскок пролива (LONG) | LONG | OOS-40% | 39 | 30.8% | -1.70% | -2.70% | -105.4 | 0.58 | 126.0 | [-6.03%, 0.76%] | 1.58% | нет | FAIL
+--- ENGINE=patternScannerService | TF=15m (IS 60% <= 2026-09-06T08:42:00.000Z < OOS 40%) ---
+Pattern | Side | Split | n | Ambig15m% | WR% | Mean Gross% | Mean Net@(0.20%) [SL/1m/TP] | Sum ROE | PF | MaxDD | 95% CI Net% | Rand p95 (Uncond / |24h|>=3%) | Better? | p_raw(1s) | OOS Pass
+---|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---|---|---|---|---|---|
+Отскок от дна / Пинбар поддержки (LONG) | LONG | ALL | 4644 | 0.3% | 34.7% | -0.03% | -1.03% / -1.00% / -0.97% | -4798.8 | 0.78 | 4855.1 | [-1.32%, -0.75%] | -0.94% / -0.23% | нет/нет | 1.0000 | -
+Отскок от дна / Пинбар поддержки (LONG) | LONG | IS-60% | 2571 | 0.2% | 36.6% | 0.35% | -0.65% / -0.62% / -0.60% | -1668.7 | 0.86 | 1919.6 | [-1.03%, -0.25%] | 0.19% / 0.38% | нет/нет | 0.9996 | -
+Отскок от дна / Пинбар поддержки (LONG) | LONG | OOS-40% | 2073 | 0.3% | 32.3% | -0.51% | -1.51% / -1.47% / -1.43% | -3130.1 | 0.70 | 3203.2 | [-1.93%, -1.08%] | -1.05% / -0.79% | нет/нет | 1.0000 | FAIL
+Шпиль на 1м / Ложный пробой (SHORT) | SHORT | ALL | 4523 | 0.5% | 36.2% | 0.03% | -0.97% / -0.88% / -0.85% | -4372.4 | 0.79 | 4745.6 | [-1.25%, -0.68%] | 0.72% / 0.33% | нет/нет | 1.0000 | -
+Шпиль на 1м / Ложный пробой (SHORT) | SHORT | IS-60% | 2650 | 0.5% | 34.9% | -0.34% | -1.34% / -1.27% / -1.23% | -3553.3 | 0.72 | 3727.8 | [-1.71%, -0.98%] | -0.26% / -0.23% | нет/нет | 1.0000 | -
+Шпиль на 1м / Ложный пробой (SHORT) | SHORT | OOS-40% | 1873 | 0.5% | 38.0% | 0.56% | -0.44% / -0.34% / -0.30% | -819.2 | 0.90 | 1273.7 | [-0.89%, 0.03%] | 0.44% / 0.38% | нет/нет | 0.9695 | FAIL
+SAR Peak Reversal / Параболический разворот (SHORT) | SHORT | ALL | 94 | 5.3% | 35.1% | -1.44% | -2.44% / -1.64% / -1.11% | -229.5 | 0.61 | 257.1 | [-4.59%, -0.19%] | 0.28% / 0.47% | нет/нет | 0.9847 | -
+SAR Peak Reversal / Параболический разворот (SHORT) | SHORT | IS-60% | 57 | 5.3% | 40.4% | -0.36% | -1.36% / -0.49% / -0.05% | -77.7 | 0.76 | 91.3 | [-4.23%, 1.56%] | 0.54% / 0.54% | нет/нет | 0.8217 | -
+SAR Peak Reversal / Параболический разворот (SHORT) | SHORT | OOS-40% | 37 | 5.4% | 27.0% | -3.10% | -4.10% / -3.43% / -2.75% | -151.8 | 0.43 | 165.8 | [-7.15%, -0.73%] | 1.37% / 1.49% | нет/нет | 0.9901 | FAIL
+SAR Bottom Reversal / Отскок пролива (LONG) | LONG | ALL | 63 | 0.0% | 30.2% | -2.05% | -3.05% / -3.05% / -3.05% | -192.2 | 0.53 | 206.2 | [-5.41%, -0.43%] | 1.34% / 1.17% | нет/нет | 0.9883 | -
+SAR Bottom Reversal / Отскок пролива (LONG) | LONG | IS-60% | 29 | 0.0% | 34.5% | -1.30% | -2.30% / -2.30% / -2.30% | -66.7 | 0.64 | 80.7 | [-6.03%, 1.80%] | 2.36% / 2.76% | нет/нет | 0.8649 | -
+SAR Bottom Reversal / Отскок пролива (LONG) | LONG | OOS-40% | 34 | 0.0% | 26.5% | -2.69% | -3.69% / -3.69% / -3.69% | -125.4 | 0.45 | 140.0 | [-6.84%, -0.19%] | 1.62% / 2.10% | нет/нет | 0.9805 | FAIL
 
---- ENGINE=marketSignalScanner | TF=15m (IS 60% <= 2026-09-06T00:54:00.000Z < OOS 40%) ---
-Pattern | Side | Split | n | WR% | Mean Gross% | Mean Net@(0.20%) | Sum ROE (п.п.) | PF | MaxDD (п.п. ROE) | 95% CI Net% | Rand p95% | Лучше случайного | OOS Pass
----|---|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---|---|
-🧹 False Breakout (Ложный пробой) | SHORT | ALL | 8427 | 37.5% | -0.42% | -1.42% | -11936.2 | 0.78 | 12547.4 | [-1.68%, -1.17%] | 0.48% | нет | -
-🧹 False Breakout (Ложный пробой) | SHORT | IS-60% | 4432 | 37.1% | -0.44% | -1.44% | -6370.4 | 0.78 | 6928.0 | [-1.78%, -1.08%] | -0.29% | нет | -
-🧹 False Breakout (Ложный пробой) | SHORT | OOS-40% | 3995 | 37.9% | -0.39% | -1.39% | -5565.8 | 0.78 | 5736.8 | [-1.77%, -1.02%] | 0.30% | нет | FAIL
-💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock) | SHORT | ALL | 1705 | 38.3% | 0.06% | -0.94% | -1594.7 | 0.83 | 2032.4 | [-1.43%, -0.39%] | 0.33% | нет | -
-💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock) | SHORT | IS-60% | 985 | 35.6% | -0.48% | -1.48% | -1458.7 | 0.73 | 1593.0 | [-2.12%, -0.81%] | -0.34% | нет | -
-💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock) | SHORT | OOS-40% | 720 | 41.9% | 0.81% | -0.19% | -136.0 | 0.96 | 620.6 | [-0.98%, 0.64%] | 0.40% | нет | FAIL
-⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | LONG | ALL | 430 | 33.0% | -0.18% | -1.18% | -508.1 | 0.73 | 534.7 | [-2.01%, -0.33%] | -0.56% | нет | -
-⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | LONG | IS-60% | 247 | 34.8% | 0.17% | -0.83% | -204.2 | 0.80 | 264.7 | [-1.93%, 0.30%] | -0.08% | нет | -
-⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | LONG | OOS-40% | 183 | 30.6% | -0.66% | -1.66% | -303.8 | 0.65 | 360.7 | [-2.92%, -0.28%] | -0.57% | нет | FAIL
-⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | SHORT | ALL | 348 | 35.6% | 0.26% | -0.74% | -258.3 | 0.83 | 510.4 | [-1.76%, 0.26%] | 0.26% | нет | -
-⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | SHORT | IS-60% | 209 | 36.4% | 0.33% | -0.67% | -139.4 | 0.84 | 351.5 | [-1.91%, 0.56%] | -0.08% | нет | -
-⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | SHORT | OOS-40% | 139 | 34.5% | 0.14% | -0.86% | -118.9 | 0.82 | 232.6 | [-2.49%, 0.76%] | 1.32% | нет | FAIL
-💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor) | LONG | ALL | 1759 | 39.6% | 0.64% | -0.36% | -627.1 | 0.93 | 1368.2 | [-0.84%, 0.13%] | -1.00% | да | -
-💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor) | LONG | IS-60% | 838 | 43.4% | 1.68% | 0.68% | 568.3 | 1.17 | 404.7 | [-0.02%, 1.40%] | -0.10% | да | -
-💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor) | LONG | OOS-40% | 921 | 36.0% | -0.30% | -1.30% | -1195.4 | 0.76 | 1368.2 | [-2.00%, -0.61%] | -0.76% | нет | FAIL
-🎯 Wick Zone Retest (Ретест фитиля) | SHORT | ALL | 440 | 35.5% | 0.17% | -0.83% | -363.4 | 0.82 | 548.9 | [-1.73%, 0.11%] | 0.11% | нет | -
-🎯 Wick Zone Retest (Ретест фитиля) | SHORT | IS-60% | 233 | 31.3% | -0.38% | -1.38% | -321.2 | 0.71 | 366.7 | [-2.60%, -0.11%] | -0.19% | нет | -
-🎯 Wick Zone Retest (Ретест фитиля) | SHORT | OOS-40% | 207 | 40.1% | 0.80% | -0.20% | -42.1 | 0.95 | 221.6 | [-1.49%, 1.19%] | 0.85% | нет | FAIL
-🎯 Bottom Wick Retest (Ретест дна) | LONG | ALL | 1333 | 35.3% | -0.38% | -1.38% | -1836.1 | 0.73 | 1904.9 | [-1.91%, -0.81%] | -0.93% | нет | -
-🎯 Bottom Wick Retest (Ретест дна) | LONG | IS-60% | 710 | 37.3% | 0.03% | -0.97% | -689.0 | 0.81 | 844.3 | [-1.73%, -0.21%] | -0.17% | нет | -
-🎯 Bottom Wick Retest (Ретест дна) | LONG | OOS-40% | 623 | 33.1% | -0.84% | -1.84% | -1147.1 | 0.66 | 1224.7 | [-2.59%, -1.08%] | -0.83% | нет | FAIL
-⚡ 1m Spire Climax (Шпиль на 1м) | SHORT | ALL | 152 | 39.5% | 0.10% | -0.90% | -136.2 | 0.85 | 314.9 | [-2.67%, 0.96%] | 0.31% | нет | -
-⚡ 1m Spire Climax (Шпиль на 1м) | SHORT | IS-60% | 85 | 45.9% | 1.57% | 0.57% | 48.4 | 1.11 | 152.8 | [-1.88%, 3.00%] | 0.63% | нет | -
-⚡ 1m Spire Climax (Шпиль на 1м) | SHORT | OOS-40% | 67 | 31.3% | -1.76% | -2.76% | -184.6 | 0.58 | 207.4 | [-5.34%, -0.13%] | 1.55% | нет | FAIL
-💀 Volume Climax (Predictive Dump) | SHORT | ALL | 175 | 38.9% | 0.81% | -0.19% | -32.8 | 0.96 | 249.9 | [-1.59%, 1.28%] | 0.22% | нет | -
-💀 Volume Climax (Predictive Dump) | SHORT | IS-60% | 95 | 29.5% | -1.12% | -2.12% | -201.4 | 0.59 | 249.9 | [-3.95%, -0.32%] | 0.73% | нет | -
-💀 Volume Climax (Predictive Dump) | SHORT | OOS-40% | 80 | 50.0% | 3.11% | 2.11% | 168.6 | 1.60 | 75.9 | [-0.15%, 4.43%] | 1.06% | да | FAIL
-⚡ 1m Spire Climax Bottom (Шпиль снизу) | LONG | ALL | 1480 | 39.1% | 0.06% | -0.94% | -1391.9 | 0.85 | 1489.1 | [-1.55%, -0.32%] | -0.64% | нет | -
-⚡ 1m Spire Climax Bottom (Шпиль снизу) | LONG | IS-60% | 696 | 39.9% | 0.32% | -0.68% | -472.1 | 0.89 | 566.3 | [-1.59%, 0.19%] | 0.01% | нет | -
-⚡ 1m Spire Climax Bottom (Шпиль снизу) | LONG | OOS-40% | 784 | 38.4% | -0.17% | -1.17% | -919.8 | 0.81 | 1010.3 | [-1.99%, -0.37%] | -0.55% | нет | FAIL
-💀 Volume Climax Bottom (Recovery) | LONG | ALL | 233 | 33.9% | -0.97% | -1.97% | -459.5 | 0.62 | 503.7 | [-3.29%, -0.71%] | -0.32% | нет | -
-💀 Volume Climax Bottom (Recovery) | LONG | IS-60% | 127 | 36.2% | -0.55% | -1.55% | -196.9 | 0.67 | 281.2 | [-3.12%, 0.09%] | 0.71% | нет | -
-💀 Volume Climax Bottom (Recovery) | LONG | OOS-40% | 106 | 31.1% | -1.48% | -2.48% | -262.6 | 0.56 | 304.0 | [-4.30%, -0.59%] | 0.21% | нет | FAIL
-🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | ALL | 374 | 34.0% | -0.05% | -1.05% | -391.1 | 0.79 | 518.4 | [-2.05%, 0.02%] | -0.33% | нет | -
-🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | IS-60% | 188 | 30.3% | -1.25% | -2.25% | -422.3 | 0.61 | 518.4 | [-3.72%, -0.82%] | 0.39% | нет | -
-🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | OOS-40% | 186 | 37.6% | 1.17% | 0.17% | 31.2 | 1.04 | 140.1 | [-1.28%, 1.63%] | -0.28% | да | FAIL
-💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak) | SHORT | ALL | 505 | 33.1% | -1.66% | -2.66% | -1344.1 | 0.63 | 1441.1 | [-3.68%, -1.63%] | 0.07% | нет | -
-💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak) | SHORT | IS-60% | 254 | 29.1% | -2.62% | -3.62% | -920.0 | 0.53 | 957.0 | [-4.94%, -2.21%] | 0.56% | нет | -
-💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak) | SHORT | OOS-40% | 251 | 37.1% | -0.69% | -1.69% | -424.1 | 0.75 | 490.1 | [-3.11%, -0.16%] | 0.70% | нет | FAIL
-💥 ПРОЛИВ (SAR Bottom Reversal) | LONG | ALL | 85 | 49.4% | 1.99% | 0.99% | 84.4 | 1.19 | 60.4 | [-1.63%, 3.57%] | 1.27% | нет | -
-💥 ПРОЛИВ (SAR Bottom Reversal) | LONG | IS-60% | 37 | 45.9% | 1.41% | 0.41% | 15.1 | 1.07 | 52.5 | [-3.27%, 4.35%] | 2.26% | нет | -
-💥 ПРОЛИВ (SAR Bottom Reversal) | LONG | OOS-40% | 48 | 52.1% | 2.44% | 1.44% | 69.3 | 1.30 | 39.6 | [-2.01%, 4.64%] | 1.37% | да | FAIL
-🔥 Reversal from Dump (Разворот пролива) | LONG | ALL | 11 | 36.4% | 0.32% | -0.68% | -7.5 | 0.81 | 23.2 | [-5.27%, 4.40%] | 3.40% | нет | -
-🔥 Reversal from Dump (Разворот пролива) | LONG | IS-60% | 8 | 37.5% | 1.79% | 0.79% | 6.3 | 1.24 | 16.8 | [-4.77%, 6.51%] | 5.42% | нет | -
-🔥 Reversal from Dump (Разворот пролива) | LONG | OOS-40% | 3 | 33.3% | -3.60% | -4.60% | -13.8 | 0.02 | 13.8 | [-11.00%, 0.33%] | 8.57% | нет | FAIL
-🔥 Vertical Exhaustion (Разворот) | SHORT | ALL | 11 | 45.5% | 1.50% | 0.50% | 5.5 | 1.17 | 24.1 | [-3.95%, 5.08%] | 3.83% | нет | -
-🔥 Vertical Exhaustion (Разворот) | SHORT | IS-60% | 10 | 40.0% | 1.50% | 0.50% | 5.0 | 1.16 | 24.1 | [-4.22%, 6.14%] | 3.59% | нет | -
-🔥 Vertical Exhaustion (Разворот) | SHORT | OOS-40% | 1 | 100.0% | 1.49% | 0.49% | 0.5 | INF | 0.0 | [0.49%, 0.49%] | 14.00% | нет | FAIL
+--- ENGINE=marketSignalScanner | TF=15m (IS 60% <= 2026-09-06T08:42:00.000Z < OOS 40%) ---
+Pattern | Side | Split | n | Ambig15m% | WR% | Mean Gross% | Mean Net@(0.20%) [SL/1m/TP] | Sum ROE | PF | MaxDD | 95% CI Net% | Rand p95 (Uncond / |24h|>=3%) | Better? | p_raw(1s) | OOS Pass
+---|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---|---|---|---|---|---|
+🧹 False Breakout (Ложный пробой) | SHORT | ALL | 8634 | 2.9% | 37.9% | -0.31% | -1.31% / -0.85% / -0.59% | -11282.3 | 0.80 | 11674.1 | [-1.55%, -1.06%] | 0.40% / 0.26% | нет/нет | 1.0000 | -
+🧹 False Breakout (Ложный пробой) | SHORT | IS-60% | 4918 | 2.6% | 38.1% | -0.20% | -1.20% / -0.76% / -0.55% | -5882.2 | 0.81 | 6245.0 | [-1.52%, -0.86%] | -0.41% / -0.17% | нет/нет | 1.0000 | -
+🧹 False Breakout (Ложный пробой) | SHORT | OOS-40% | 3716 | 3.2% | 37.5% | -0.45% | -1.45% / -0.98% / -0.65% | -5400.1 | 0.77 | 5496.1 | [-1.83%, -1.07%] | 0.44% / 0.37% | нет/нет | 1.0000 | FAIL
+⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | LONG | ALL | 403 | 0.0% | 32.0% | -0.43% | -1.43% / -1.43% / -1.43% | -576.6 | 0.68 | 590.6 | [-2.31%, -0.53%] | -0.37% / -0.11% | нет/нет | 0.9992 | -
+⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | LONG | IS-60% | 240 | 0.0% | 32.9% | -0.24% | -1.24% / -1.24% / -1.24% | -298.7 | 0.71 | 332.6 | [-2.32%, -0.10%] | 0.23% / 0.47% | нет/нет | 0.9852 | -
+⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | LONG | OOS-40% | 163 | 0.0% | 30.7% | -0.71% | -1.71% / -1.71% / -1.71% | -277.9 | 0.65 | 358.5 | [-3.16%, -0.23%] | -0.28% / 0.27% | нет/нет | 0.9885 | FAIL
+💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock) | SHORT | ALL | 1830 | 0.9% | 38.8% | 0.21% | -0.79% / -0.60% / -0.56% | -1449.3 | 0.86 | 1794.5 | [-1.33%, -0.30%] | 0.22% / 0.23% | нет/нет | 0.9989 | -
+💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock) | SHORT | IS-60% | 1066 | 0.8% | 37.1% | -0.12% | -1.12% / -0.98% / -0.93% | -1195.3 | 0.80 | 1346.4 | [-1.74%, -0.46%] | -0.40% / -0.23% | нет/нет | 0.9996 | -
+💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock) | SHORT | OOS-40% | 764 | 1.2% | 41.1% | 0.67% | -0.33% / -0.07% / -0.04% | -254.0 | 0.94 | 694.7 | [-1.12%, 0.43%] | 0.10% / 0.18% | нет/нет | 0.7962 | FAIL
+⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | SHORT | ALL | 359 | 0.0% | 35.9% | 0.13% | -0.87% / -0.87% / -0.87% | -311.5 | 0.80 | 510.6 | [-1.85%, 0.12%] | 0.13% / -0.07% | нет/нет | 0.9579 | -
+⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | SHORT | IS-60% | 215 | 0.0% | 36.3% | 0.33% | -0.67% / -0.67% / -0.67% | -143.5 | 0.84 | 275.2 | [-1.91%, 0.59%] | 0.02% / -0.01% | нет/нет | 0.8515 | -
+⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | SHORT | OOS-40% | 144 | 0.0% | 35.4% | -0.17% | -1.17% / -1.17% / -1.17% | -168.1 | 0.75 | 306.8 | [-2.67%, 0.36%] | 1.22% / 0.76% | нет/нет | 0.9242 | FAIL
+💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor) | LONG | ALL | 1705 | 0.6% | 38.6% | 0.45% | -0.55% / -0.46% / -0.39% | -940.3 | 0.89 | 1272.0 | [-1.02%, -0.05%] | -0.76% / -0.34% | да/нет | 0.9841 | -
+💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor) | LONG | IS-60% | 821 | 0.6% | 41.4% | 1.11% | 0.11% / 0.20% / 0.27% | 93.3 | 1.03 | 540.4 | [-0.57%, 0.87%] | 0.07% / 0.30% | да/нет | 0.3773 | -
+💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor) | LONG | OOS-40% | 884 | 0.7% | 36.0% | -0.17% | -1.17% / -1.08% / -1.00% | -1033.5 | 0.79 | 1206.0 | [-1.85%, -0.47%] | -0.74% / -0.27% | нет/нет | 0.9994 | FAIL
+🎯 Wick Zone Retest (Ретест фитиля) | SHORT | ALL | 431 | 0.0% | 38.1% | 0.75% | -0.25% / -0.25% / -0.25% | -109.0 | 0.94 | 456.6 | [-1.23%, 0.71%] | 0.10% / -0.12% | нет/нет | 0.6972 | -
+🎯 Wick Zone Retest (Ретест фитиля) | SHORT | IS-60% | 227 | 0.0% | 35.2% | 0.32% | -0.68% / -0.68% / -0.68% | -155.2 | 0.85 | 313.1 | [-2.05%, 0.60%] | -0.14% / -0.23% | нет/нет | 0.8461 | -
+🎯 Wick Zone Retest (Ретест фитиля) | SHORT | OOS-40% | 204 | 0.0% | 41.2% | 1.23% | 0.23% / 0.23% / 0.23% | 46.2 | 1.05 | 216.8 | [-1.19%, 1.63%] | 0.59% / 0.40% | нет/нет | 0.3764 | FAIL
+🎯 Bottom Wick Retest (Ретест дна) | LONG | ALL | 1426 | 0.0% | 36.7% | -0.02% | -1.02% / -1.02% / -1.02% | -1451.7 | 0.80 | 1515.8 | [-1.52%, -0.46%] | -0.68% / -0.23% | нет/нет | 0.9999 | -
+🎯 Bottom Wick Retest (Ретест дна) | LONG | IS-60% | 809 | 0.0% | 37.3% | 0.11% | -0.89% / -0.89% / -0.89% | -721.1 | 0.83 | 894.2 | [-1.64%, -0.13%] | 0.02% / 0.19% | нет/нет | 0.9919 | -
+🎯 Bottom Wick Retest (Ретест дна) | LONG | OOS-40% | 617 | 0.0% | 35.8% | -0.18% | -1.18% / -1.18% / -1.18% | -730.6 | 0.76 | 839.8 | [-1.98%, -0.38%] | -0.53% / -0.13% | нет/нет | 0.9981 | FAIL
+⚡ 1m Spire Climax (Шпиль на 1м) | SHORT | ALL | 160 | 0.6% | 34.4% | -1.04% | -2.04% / -2.04% / -1.89% | -326.6 | 0.68 | 374.6 | [-3.67%, -0.36%] | 0.28% / 0.06% | нет/нет | 0.9893 | -
+⚡ 1m Spire Climax (Шпиль на 1м) | SHORT | IS-60% | 109 | 0.0% | 36.7% | -0.59% | -1.59% / -1.59% / -1.59% | -173.3 | 0.74 | 249.5 | [-3.66%, 0.61%] | 0.13% / 0.25% | нет/нет | 0.9279 | -
+⚡ 1m Spire Climax (Шпиль на 1м) | SHORT | OOS-40% | 51 | 2.0% | 29.4% | -2.01% | -3.01% / -3.01% / -2.52% | -153.4 | 0.55 | 170.4 | [-5.91%, 0.16%] | 1.60% / 0.97% | нет/нет | 0.9743 | FAIL
+💀 Volume Climax (Predictive Dump) | SHORT | ALL | 174 | 0.0% | 36.2% | 0.28% | -0.72% / -0.72% / -0.72% | -125.2 | 0.84 | 301.3 | [-2.16%, 0.68%] | 0.48% / 0.21% | нет/нет | 0.8311 | -
+💀 Volume Climax (Predictive Dump) | SHORT | IS-60% | 89 | 0.0% | 30.3% | -0.77% | -1.77% / -1.77% / -1.77% | -157.9 | 0.64 | 201.6 | [-3.58%, 0.14%] | 0.52% / 0.73% | нет/нет | 0.9644 | -
+💀 Volume Climax (Predictive Dump) | SHORT | OOS-40% | 85 | 0.0% | 42.4% | 1.38% | 0.38% / 0.38% / 0.38% | 32.7 | 1.09 | 129.3 | [-1.81%, 2.56%] | 0.83% / 0.65% | нет/нет | 0.3683 | FAIL
+⚡ 1m Spire Climax Bottom (Шпиль снизу) | LONG | ALL | 1524 | 1.7% | 41.8% | 0.76% | -0.24% / 0.02% / 0.19% | -367.1 | 0.96 | 639.2 | [-0.86%, 0.35%] | -0.47% / -0.26% | да/да | 0.7844 | -
+⚡ 1m Spire Climax Bottom (Шпиль снизу) | LONG | IS-60% | 805 | 1.2% | 42.1% | 0.90% | -0.10% / 0.12% / 0.21% | -82.0 | 0.98 | 384.4 | [-0.91%, 0.71%] | 0.27% / 0.27% | нет/нет | 0.5954 | -
+⚡ 1m Spire Climax Bottom (Шпиль снизу) | LONG | OOS-40% | 719 | 2.2% | 41.4% | 0.60% | -0.40% / -0.08% / 0.16% | -285.1 | 0.93 | 639.2 | [-1.28%, 0.48%] | -0.27% / -0.19% | нет/нет | 0.8136 | FAIL
+💀 Volume Climax Bottom (Recovery) | LONG | ALL | 244 | 0.0% | 37.3% | 0.01% | -0.99% / -0.99% / -0.99% | -241.7 | 0.80 | 324.0 | [-2.25%, 0.31%] | 0.11% / 0.58% | нет/нет | 0.9316 | -
+💀 Volume Climax Bottom (Recovery) | LONG | IS-60% | 130 | 0.0% | 38.5% | 0.40% | -0.60% / -0.60% / -0.60% | -77.5 | 0.88 | 198.5 | [-2.28%, 1.21%] | 1.16% / 0.80% | нет/нет | 0.7437 | -
+💀 Volume Climax Bottom (Recovery) | LONG | OOS-40% | 114 | 0.0% | 36.0% | -0.44% | -1.44% / -1.44% / -1.44% | -164.2 | 0.73 | 253.0 | [-3.34%, 0.55%] | 0.43% / 0.78% | нет/нет | 0.9289 | FAIL
+🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | ALL | 404 | 0.2% | 35.9% | 0.32% | -0.68% / -0.68% / -0.61% | -273.0 | 0.87 | 512.9 | [-1.68%, 0.38%] | -0.00% / 0.11% | нет/нет | 0.9011 | -
+🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | IS-60% | 223 | 0.4% | 33.2% | -0.64% | -1.64% / -1.64% / -1.53% | -366.4 | 0.71 | 512.9 | [-3.01%, -0.23%] | 0.53% / 0.76% | нет/нет | 0.9888 | -
+🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | OOS-40% | 181 | 0.0% | 39.2% | 1.52% | 0.52% / 0.52% / 0.52% | 93.4 | 1.12 | 134.4 | [-0.99%, 1.99%] | -0.24% / 0.12% | да/да | 0.2496 | FAIL
+💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak) | SHORT | ALL | 497 | 7.4% | 36.0% | -0.92% | -1.92% / -1.01% / -0.06% | -952.9 | 0.72 | 1037.9 | [-2.94%, -0.86%] | -0.17% / -0.04% | нет/нет | 0.9998 | -
+💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak) | SHORT | IS-60% | 264 | 6.1% | 34.1% | -1.37% | -2.37% / -1.52% / -0.86% | -626.9 | 0.67 | 687.9 | [-3.73%, -0.85%] | -0.41% / -0.24% | нет/нет | 0.9994 | -
+💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak) | SHORT | OOS-40% | 233 | 9.0% | 38.2% | -0.40% | -1.40% / -0.43% / 0.85% | -326.1 | 0.79 | 380.1 | [-2.97%, 0.24%] | 0.48% / 0.85% | нет/нет | 0.9610 | FAIL
+💥 ПРОЛИВ (SAR Bottom Reversal) | LONG | ALL | 98 | 3.1% | 41.8% | 0.47% | -0.53% / -0.02% / 0.23% | -52.1 | 0.91 | 120.0 | [-2.86%, 1.74%] | 1.43% / 1.19% | нет/нет | 0.6698 | -
+💥 ПРОЛИВ (SAR Bottom Reversal) | LONG | IS-60% | 50 | 2.0% | 40.0% | 0.42% | -0.58% / -0.08% / -0.08% | -29.2 | 0.91 | 58.5 | [-3.97%, 2.77%] | 2.11% / 2.18% | нет/нет | 0.6322 | -
+💥 ПРОЛИВ (SAR Bottom Reversal) | LONG | OOS-40% | 48 | 4.2% | 43.8% | 0.52% | -0.48% / 0.04% / 0.56% | -22.9 | 0.92 | 87.7 | [-3.86%, 2.84%] | 1.43% / 1.73% | нет/нет | 0.6094 | FAIL
+🔥 Reversal from Dump (Разворот пролива) | LONG | ALL | 10 | 0.0% | 30.0% | 0.22% | -0.78% / -0.78% / -0.78% | -7.8 | 0.81 | 23.5 | [-5.98%, 4.69%] | 3.83% / 4.33% | нет/нет | 0.6052 | -
+🔥 Reversal from Dump (Разворот пролива) | LONG | IS-60% | 8 | 0.0% | 37.5% | 1.79% | 0.79% / 0.79% / 0.79% | 6.3 | 1.24 | 16.8 | [-4.77%, 6.51%] | 4.36% / 5.00% | нет/нет | 0.4082 | -
+🔥 Reversal from Dump (Разворот пролива) | LONG | OOS-40% | 2 | 0.0% | 0.0% | -6.07% | -7.07% / -7.07% / -7.07% | -14.1 | 0.00 | 14.1 | [-11.00%, -3.13%] | 7.22% / 14.00% | нет/нет | 0.8383 | FAIL
+🔥 Vertical Exhaustion (Разворот) | SHORT | ALL | 11 | 0.0% | 45.5% | 0.85% | -0.15% / -0.15% / -0.15% | -1.7 | 0.96 | 27.1 | [-4.94%, 4.77%] | 4.01% / 4.52% | нет/нет | 0.5222 | -
+🔥 Vertical Exhaustion (Разворот) | SHORT | IS-60% | 10 | 0.0% | 40.0% | 0.78% | -0.22% / -0.22% / -0.22% | -2.2 | 0.94 | 27.1 | [-5.46%, 5.77%] | 3.43% / 3.46% | нет/нет | 0.5285 | -
+🔥 Vertical Exhaustion (Разворот) | SHORT | OOS-40% | 1 | 0.0% | 100.0% | 1.49% | 0.49% / 0.49% / 0.49% | 0.5 | INF | 0.0 | [0.49%, 0.49%] | 14.00% / 14.00% | нет/нет | 1.0000 | FAIL
+
+--- J1.5: IS-60% VS OOS-40% STABILITY & MULTIPLE-TESTING CORRECTIONS (M = 32 HYPOTHESES, alpha_bonf = 0.00156) ---
+Engine | Pattern | Side | TF | IS MeanNet% (n) | OOS MeanNet% (n) | OOS CondRandP95% | t-stat | p_raw (1-sided) | p_Bonf(32) | q_BH(32)
+---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+marketSignalScanner | 🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep) | LONG | 15m | -1.64% (n=223) | 0.52% (n=181) | 0.12% | 0.68 | 0.24963 | 1.00000 | 1.00000
+marketSignalScanner | 💀 Volume Climax (Predictive Dump) | SHORT | 15m | -1.77% (n=89) | 0.39% (n=85) | 0.65% | 0.34 | 0.36829 | 1.00000 | 1.00000
+marketSignalScanner | 🎯 Wick Zone Retest (Ретест фитиля) | SHORT | 15m | -0.68% (n=227) | 0.23% (n=204) | 0.40% | 0.32 | 0.37644 | 1.00000 | 1.00000
+marketSignalScanner | 💥 ПРОЛИВ (SAR Bottom Reversal) | LONG | 15m | -0.58% (n=50) | -0.48% (n=48) | 1.73% | -0.28 | 0.60937 | 1.00000 | 1.00000
+marketSignalScanner | 💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock) | SHORT | 15m | -1.12% (n=1066) | -0.33% (n=764) | 0.18% | -0.83 | 0.79623 | 1.00000 | 1.00000
+marketSignalScanner | ⚡ 1m Spire Climax Bottom (Шпиль снизу) | LONG | 15m | -0.10% (n=805) | -0.40% (n=719) | -0.19% | -0.89 | 0.81364 | 1.00000 | 1.00000
+marketSignalScanner | 🔥 Reversal from Dump (Разворот пролива) | LONG | 15m | 0.79% (n=8) | -7.07% (n=2) | 14.00% | -1.80 | 0.83832 | 1.00000 | 1.00000
+marketSignalScanner | ⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry) | SHORT | 15m | -0.67% (n=215) | -1.17% (n=144) | 0.76% | -1.44 | 0.92420 | 1.00000 | 1.00000
+marketSignalScanner | 💀 Volume Climax Bottom (Recovery) | LONG | 15m | -0.60% (n=130) | -1.44% (n=114) | 0.78% | -1.48 | 0.92888 | 1.00000 | 1.00000
+marketSignalScanner | 💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak) | SHORT | 15m | -2.37% (n=264) | -1.40% (n=233) | 0.85% | -1.77 | 0.96101 | 1.00000 | 1.00000
+patternScannerService | Шпиль на 1м / Ложный пробой (SHORT) | SHORT | 15m | -1.34% (n=2650) | -0.44% (n=1873) | 0.38% | -1.88 | 0.96953 | 1.00000 | 1.00000
+marketSignalScanner | ⚡ 1m Spire Climax (Шпиль на 1м) | SHORT | 15m | -1.59% (n=109) | -3.01% (n=51) | 0.97% | -2.00 | 0.97435 | 1.00000 | 1.00000
+patternScannerService | SAR Bottom Reversal / Отскок пролива (LONG) | LONG | 15m | -2.30% (n=29) | -3.69% (n=34) | 2.10% | -2.15 | 0.98050 | 1.00000 | 1.00000
+marketSignalScanner | ⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry) | LONG | 15m | -1.25% (n=240) | -1.71% (n=163) | 0.27% | -2.29 | 0.98847 | 1.00000 | 1.00000
+patternScannerService | SAR Peak Reversal / Параболический разворот (SHORT) | SHORT | 15m | -1.36% (n=57) | -4.10% (n=37) | 1.49% | -2.44 | 0.99009 | 1.00000 | 1.00000
+marketSignalScanner | 🎯 Bottom Wick Retest (Ретест дна) | LONG | 15m | -0.89% (n=809) | -1.18% (n=617) | -0.13% | -2.90 | 0.99810 | 1.00000 | 1.00000
+marketSignalScanner | 💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor) | LONG | 15m | 0.11% (n=821) | -1.17% (n=884) | -0.27% | -3.23 | 0.99937 | 1.00000 | 1.00000
+patternScannerService | Отскок от дна / Пинбар поддержки (LONG) | LONG | 15m | -0.65% (n=2571) | -1.51% (n=2073) | -0.79% | -7.02 | 1.00000 | 1.00000 | 1.00000
+marketSignalScanner | 🧹 False Breakout (Ложный пробой) | SHORT | 15m | -1.20% (n=4918) | -1.45% (n=3716) | 0.38% | -7.56 | 1.00000 | 1.00000 | 1.00000
+marketSignalScanner | 🔥 Vertical Exhaustion (Разворот) | SHORT | 15m | -0.22% (n=10) | 0.49% (n=1) | 14.00% | 0.00 | 1.00000 | 1.00000 | 1.00000
+
+--- J1.4: LIVE CONFIG SENSITIVITY RUN ON OOS-40% (15m) ---
+Baseline v2: fixed 5x, SL 2.0%, TP 3.0%, minNormalAutoClose=4%, bypassTP=false, Trail=off, cost=0.20%
+Live Approx: settings.json conservative vol-capped leverage (5x->3x/2x), Struct SL [1.0%,2.2%], TP4=4.5%, minNormalAutoClose=6%, bypassTP=true, Trail 14%/3%, timeoutProfit 18h@6%, cost=0.16% & 0.20%
+Group | n | AvgLev | AvgSL% | Base@0.20% | Live@0.16% (CostModel v2) | Live@0.20% (Taker) | Live WR@0.16% | Live Sum@0.16% | Live MaxDD@0.16%
+---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+patternScannerService:Отскок от дна / Пинбар поддержки (LONG):LONG | 2073 | 2.65x | 1.18% | -1.51% | -0.62% | -0.72% | 27.1% | -1277.8 | 1278.7
+patternScannerService:Шпиль на 1м / Ложный пробой (SHORT):SHORT | 1873 | 2.64x | 1.19% | -0.44% | -0.26% | -0.36% | 30.3% | -478.4 | 738.1
+patternScannerService:SAR Peak Reversal / Параболический разворот (SHORT):SHORT | 37 | 2.14x | 1.66% | -4.10% | -1.06% | -1.14% | 24.3% | -39.1 | 48.2
+patternScannerService:SAR Bottom Reversal / Отскок пролива (LONG):LONG | 34 | 2.29x | 1.43% | -3.69% | 0.16% | 0.07% | 29.4% | 5.5 | 36.9
+marketSignalScanner:🧹 False Breakout (Ложный пробой):SHORT | 3716 | 2.01x | 1.76% | -1.45% | -0.27% | -0.35% | 30.0% | -986.3 | 1101.1
+marketSignalScanner:⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry):LONG | 163 | 2.61x | 1.04% | -1.71% | -0.86% | -0.96% | 25.8% | -139.4 | 151.0
+marketSignalScanner:💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock):SHORT | 764 | 2.24x | 1.01% | -0.33% | 0.27% | 0.18% | 29.3% | 208.7 | 159.4
+marketSignalScanner:⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry):SHORT | 144 | 2.66x | 1.01% | -1.17% | -0.60% | -0.70% | 25.7% | -85.8 | 128.2
+marketSignalScanner:💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor):LONG | 884 | 2.25x | 1.07% | -1.17% | -0.32% | -0.41% | 24.9% | -284.8 | 412.1
+marketSignalScanner:🎯 Wick Zone Retest (Ретест фитиля):SHORT | 204 | 2.11x | 1.05% | 0.23% | -0.16% | -0.25% | 33.8% | -33.2 | 88.0
+marketSignalScanner:🎯 Bottom Wick Retest (Ретест дна):LONG | 617 | 2.06x | 1.16% | -1.18% | -0.50% | -0.59% | 25.4% | -310.3 | 339.0
+marketSignalScanner:⚡ 1m Spire Climax (Шпиль на 1м):SHORT | 51 | 2.00x | 1.00% | -3.01% | -1.44% | -1.52% | 17.6% | -73.7 | 84.3
+marketSignalScanner:💀 Volume Climax (Predictive Dump):SHORT | 85 | 2.34x | 1.14% | 0.38% | -0.20% | -0.30% | 30.6% | -17.2 | 67.4
+marketSignalScanner:⚡ 1m Spire Climax Bottom (Шпиль снизу):LONG | 719 | 2.00x | 1.66% | -0.40% | -0.09% | -0.17% | 30.6% | -63.3 | 246.3
+marketSignalScanner:💀 Volume Climax Bottom (Recovery):LONG | 114 | 2.26x | 1.19% | -1.44% | -0.39% | -0.48% | 29.8% | -44.0 | 101.7
+marketSignalScanner:🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep):LONG | 181 | 2.02x | 1.66% | 0.52% | 0.22% | 0.14% | 33.7% | 39.9 | 55.8
+marketSignalScanner:💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak):SHORT | 233 | 2.00x | 2.11% | -1.40% | 0.36% | 0.28% | 37.8% | 84.0 | 91.9
+marketSignalScanner:💥 ПРОЛИВ (SAR Bottom Reversal):LONG | 48 | 2.00x | 1.94% | -0.48% | 0.72% | 0.64% | 41.7% | 34.4 | 31.2
+marketSignalScanner:🔥 Reversal from Dump (Разворот пролива):LONG | 2 | 3.50x | 1.60% | -7.07% | -3.49% | -3.63% | 0.0% | -7.0 | 7.0
+marketSignalScanner:🔥 Vertical Exhaustion (Разворот):SHORT | 1 | 5.00x | 1.00% | 0.49% | 0.34% | 0.14% | 100.0% | 0.3 | 0.0
 
 --- POOLED SUMMARY & COST SENSITIVITY BY ENGINE/TIMEFRAME ---
-patternScannerService (15m, n=9330, WR=35.3%): MeanGross=-0.04% | Net@0.16%=-0.84% | Net@0.20%=-1.04% (Sum=-9689.4 п.п., MaxDD=9703.4 п.п.) | Net@0.30%=-1.54%
-marketSignalScanner (15m, n=17468, WR=37.4%): MeanGross=-0.19% | Net@0.16%=-0.99% | Net@0.20%=-1.19% (Sum=-20797.0 п.п., MaxDD=21055.5 п.п.) | Net@0.30%=-1.69%
+patternScannerService (15m, n=9324, WR=35.4%): MeanGross=-0.03% | Net@0.16%=-0.83% | Net@0.20%=-1.03% (Sum=-9593.0 п.п., MaxDD=9638.4 п.п.) | Net@0.30%=-1.53%
+marketSignalScanner (15m, n=17910, WR=38.0%): MeanGross=-0.03% | Net@0.16%=-0.83% | Net@0.20%=-1.03% (Sum=-18468.8 п.п., MaxDD=18595.6 п.п.) | Net@0.30%=-1.53%
 
 OOS PASSING STRATEGIES (0): NONE

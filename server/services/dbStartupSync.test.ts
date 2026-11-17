@@ -1,5 +1,8 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { describe, it, expect, vi } from 'vitest';
-import { serviceLoadStateFromDB, type DbStartupSyncContext } from './dbStartupSync.ts';
+import { serviceLoadStateFromDB, inspectStartupPersistenceDiagnostics, type DbStartupSyncContext } from './dbStartupSync.ts';
 
 describe('dbStartupSync stale trade cleanup', () => {
   it('preserves realized Multi-TP partial closes when force-closing stale trades older than 48h', async () => {
@@ -82,5 +85,59 @@ describe('dbStartupSync stale trade cleanup', () => {
     expect(closed.pnl).toBeCloseTo(7.0, 2);
     expect(closed.pnlPercent).toBeCloseTo(7.0, 2);
     expect(closed.history.filter((h: any) => h.type === 'CLOSE')).toHaveLength(2);
+  });
+
+  it('logs would_restore_from when backup revision exceeds database.json without mutating or auto-restoring state (J2)', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'j2-startup-diag-'));
+    try {
+      const backupsDir = path.join(tmpDir, 'data', 'backups');
+      const kgDir = path.join(tmpDir, 'data', 'known_good');
+      fs.mkdirSync(backupsDir, { recursive: true });
+      fs.mkdirSync(kgDir, { recursive: true });
+
+      const currentDbPayload = {
+        stateRevision: 100,
+        trades: [{ id: 'OLD-1', symbol: 'BTC/USDT', side: 'SHORT', status: 'CLOSED', openTime: Date.now() - 1000, closeTime: Date.now(), pnl: 1, pnlPercent: 1 }],
+        knowledge: [],
+        settings: { main: { virtualBalance: 500, startOfDayBalance: 500 } }
+      };
+      const newerBackupPayload = {
+        stateRevision: 250,
+        trades: [
+          ...currentDbPayload.trades,
+          { id: 'BACKUP-ONLY-2', symbol: 'ETH/USDT', side: 'LONG', status: 'CLOSED', openTime: Date.now() - 500, closeTime: Date.now(), pnl: 2, pnlPercent: 2 }
+        ]
+      };
+
+      fs.writeFileSync(path.join(tmpDir, 'database.json'), JSON.stringify(currentDbPayload), 'utf8');
+      fs.writeFileSync(path.join(kgDir, 'known-good-database-copy'), JSON.stringify(currentDbPayload), 'utf8');
+      fs.writeFileSync(path.join(backupsDir, 'database.json.bak_latest.json'), JSON.stringify({ stateRevision: 99 }), 'utf8');
+      fs.writeFileSync(path.join(backupsDir, 'backup_2026-11-17T03-39-12-220Z.json'), JSON.stringify(newerBackupPayload), 'utf8');
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const report = inspectStartupPersistenceDiagnostics(currentDbPayload, { baseDir: tmpDir, log: true });
+
+      expect(report.databaseJson.stateRevision).toBe(100);
+      expect(report.bakLatestJson.stateRevision).toBe(99);
+      expect(report.newestBackup.stateRevision).toBe(250);
+      expect(report.databaseMatchesKnownGoodSha256).toBe(true);
+      expect(report.wouldRestoreFrom).toEqual({
+        file: 'backup_2026-11-17T03-39-12-220Z.json',
+        rev: 250,
+        currentRev: 100
+      });
+
+      const loggedLines = logSpy.mock.calls.map(c => c.join(' '));
+      expect(loggedLines.some(l => l.includes('[STARTUP DB] would_restore_from=backup_2026-11-17T03-39-12-220Z.json rev=250 > current=100'))).toBe(true);
+      expect(loggedLines.some(l => l.includes('[STARTUP DB FILES]'))).toBe(true);
+
+      // database.json on disk must NOT be auto-restored or overwritten
+      const diskAfter = JSON.parse(fs.readFileSync(path.join(tmpDir, 'database.json'), 'utf8'));
+      expect(diskAfter.stateRevision).toBe(100);
+      expect(diskAfter.trades.find((t: any) => t.id === 'BACKUP-ONLY-2')).toBeUndefined();
+      logSpy.mockRestore();
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

@@ -111,6 +111,7 @@ export function createKnowledgeRouter(ctx: KnowledgeRouterContext): Router {
       const prompt = ctx.getArchivistPrompt(currentRules, 0.3, 5);
 
       const response = await ctx.runAiGeneration({
+        priority: 1,
         model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
@@ -293,6 +294,7 @@ export function createKnowledgeRouter(ctx: KnowledgeRouterContext): Router {
 
         try {
           const response = await ctx.runAiGeneration({
+            priority: 1,
             model: DEFAULT_AI_MODEL,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             config: {

@@ -57,6 +57,7 @@ export interface SystemRouterContext {
       at: number;
     } | null;
     errorCounts24h?: Record<string, number>;
+    dailyBudget?: any;
   };
   setExpertInstructions?: (instructions: string, source: string, reason?: string) => any;
   saveSettings?: () => any;
@@ -451,7 +452,10 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         evidenceGateMinDays: Number(globalSettings.evidenceGateMinDays) || 14,
         evidenceGateMaxDrawdownPct: Number(globalSettings.evidenceGateMaxDrawdownPct) || 15,
         staleDataPauseSec: typeof globalSettings.staleDataPauseSec === 'number' ? globalSettings.staleDataPauseSec : 300,
-        exchangeWsObserveOnly: !!globalSettings.exchangeWsObserveOnly
+        exchangeWsObserveOnly: !!globalSettings.exchangeWsObserveOnly,
+        btcFreshnessFastLoopEnabled: !!globalSettings.btcFreshnessFastLoopEnabled,
+        aiDailyBudgetEnabled: !!globalSettings.aiDailyBudgetEnabled,
+        aiDailyBudgetCalls: Number(globalSettings.aiDailyBudgetCalls) || 20
       };
 
       const versions = {
@@ -549,7 +553,10 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         staleDataPauseSec: typeof globalSettings.staleDataPauseSec === 'number' ? globalSettings.staleDataPauseSec : 300,
         learningProtectedPatternsPolicy: globalSettings.learningProtectedPatternsPolicy || 'PENALIZE_ONLY',
         aggregatedLearningMode: globalSettings.aggregatedLearningMode || 'SHADOW',
-        exchangeWsObserveOnly: !!globalSettings.exchangeWsObserveOnly
+        exchangeWsObserveOnly: !!globalSettings.exchangeWsObserveOnly,
+        btcFreshnessFastLoopEnabled: !!globalSettings.btcFreshnessFastLoopEnabled,
+        aiDailyBudgetEnabled: !!globalSettings.aiDailyBudgetEnabled,
+        aiDailyBudgetCalls: Number(globalSettings.aiDailyBudgetCalls) || 20
       };
 
       res.json({
@@ -567,11 +574,13 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         marketData: {
           tickersAgeSec: freshness.tickerAgeSec,
           btcOhlcvAgeSec: freshness.btcOhlcvAgeSec,
+          btcOhlcvAgeMax10mSec: freshness.btcOhlcvAgeMax10mSec,
           tickerTimestamp: freshness.tickerTimestamp,
           btcOhlcvTimestamp: freshness.btcOhlcvTimestamp
         },
         tickersAgeSec: freshness.tickerAgeSec,
         btcOhlcvAgeSec: freshness.btcOhlcvAgeSec,
+        btcOhlcvAgeMax10mSec: freshness.btcOhlcvAgeMax10mSec,
         entryGate,
         aiGateway: {
           ...aiHealth,

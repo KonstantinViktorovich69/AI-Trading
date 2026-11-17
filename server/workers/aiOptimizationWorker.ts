@@ -75,6 +75,7 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       const prompt = ctx.getArchivistPrompt(currentRules, 0.35, 3);
 
       const response = await ctx.runAiGeneration({
+        priority: 3,
         model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
@@ -353,6 +354,7 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       );
 
       const response = await ctx.runAiGeneration({
+        priority: 3,
         model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
@@ -610,6 +612,7 @@ export function createAiOptimizationWorker(ctx: AiOptimizationWorkerContext) {
       let rawDecision: any = null;
       try {
         const response = await ctx.runAiGeneration({
+          priority: 3,
           model: DEFAULT_AI_MODEL,
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {

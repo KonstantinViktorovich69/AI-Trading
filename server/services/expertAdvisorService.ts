@@ -447,6 +447,7 @@ ${memoryString}
 
       try {
         const aiResponse = await deps.runAiGeneration({
+          priority: 3,
           model: DEFAULT_AI_MODEL,
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: { responseMimeType: "application/json" }

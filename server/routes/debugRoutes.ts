@@ -436,6 +436,7 @@ Each object must contain these keys exactly:
 
       try {
         const aiResponse = await ctx.runAiGeneration({
+          priority: 1,
           model: DEFAULT_AI_MODEL,
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {

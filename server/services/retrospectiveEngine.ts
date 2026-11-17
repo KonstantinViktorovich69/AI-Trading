@@ -221,6 +221,7 @@ export function createRetrospectiveEngine(ctx: RetrospectiveEngineContext) {
       `;
 
       const response = await ctx.runAiGeneration({
+        priority: 2,
         model: DEFAULT_AI_MODEL,
         contents: [{ role: 'user', parts: [{ text: retrospectivePrompt }] }],
         config: { 

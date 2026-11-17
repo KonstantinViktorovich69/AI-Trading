@@ -20,6 +20,30 @@ export interface EntryGateStatus {
 let pausedUntilTs = 0;
 let pauseReason = '';
 let lastStaleLogTs = 0;
+const BTC_AGE_WINDOW_MS = 10 * 60 * 1000;
+const btcAgeSamples: Array<{ ts: number; ageSec: number }> = [];
+
+export function recordBtcOhlcvAgeSample(ageSec: number | null | undefined, nowTs = Date.now()): void {
+  if (typeof ageSec !== 'number' || !Number.isFinite(ageSec) || ageSec < 0) return;
+  const cutoff = nowTs - BTC_AGE_WINDOW_MS;
+  while (btcAgeSamples.length > 0 && btcAgeSamples[0].ts < cutoff) {
+    btcAgeSamples.shift();
+  }
+  btcAgeSamples.push({ ts: nowTs, ageSec });
+}
+
+export function getBtcOhlcvAgeMax10mSec(nowTs = Date.now()): number | null {
+  const cutoff = nowTs - BTC_AGE_WINDOW_MS;
+  while (btcAgeSamples.length > 0 && btcAgeSamples[0].ts < cutoff) {
+    btcAgeSamples.shift();
+  }
+  if (btcAgeSamples.length === 0) return null;
+  let maxAge = btcAgeSamples[0].ageSec;
+  for (let i = 1; i < btcAgeSamples.length; i++) {
+    if (btcAgeSamples[i].ageSec > maxAge) maxAge = btcAgeSamples[i].ageSec;
+  }
+  return maxAge;
+}
 
 /**
  * Manually or programmatically pause new entries for `sec` seconds.
@@ -97,15 +121,21 @@ export function getMarketDataFreshness(nowTs?: number, deps?: EntryGateDeps): {
   tickerAgeSec: number | null;
   btcOhlcvTimestamp: number | null;
   btcOhlcvAgeSec: number | null;
+  btcOhlcvAgeMax10mSec: number | null;
 } {
   const now = nowTs || Date.now();
   const tickerTs = resolveTickerTimestamp(deps);
   const btcOhlcvTs = resolveBtcOhlcvTimestamp(deps);
+  const btcOhlcvAgeSec = typeof btcOhlcvTs === 'number' && btcOhlcvTs > 0 ? Math.max(0, Math.round((now - btcOhlcvTs) / 1000)) : null;
+  if (btcOhlcvAgeSec !== null) {
+    recordBtcOhlcvAgeSample(btcOhlcvAgeSec, now);
+  }
   return {
     tickerTimestamp: tickerTs ?? null,
     tickerAgeSec: typeof tickerTs === 'number' && tickerTs > 0 ? Math.max(0, Math.round((now - tickerTs) / 1000)) : null,
     btcOhlcvTimestamp: btcOhlcvTs ?? null,
-    btcOhlcvAgeSec: typeof btcOhlcvTs === 'number' && btcOhlcvTs > 0 ? Math.max(0, Math.round((now - btcOhlcvTs) / 1000)) : null
+    btcOhlcvAgeSec,
+    btcOhlcvAgeMax10mSec: getBtcOhlcvAgeMax10mSec(now)
   };
 }
 
@@ -181,16 +211,19 @@ export function isEntryPaused(nowTs?: number, deps?: EntryGateDeps): EntryGateSt
     }
 
     const btcOhlcvTs = resolveBtcOhlcvTimestamp(deps);
-    if (typeof btcOhlcvTs === 'number' && btcOhlcvTs > 0 && (now - btcOhlcvTs) > thresholdMs) {
-      const ageSec = Math.round((now - btcOhlcvTs) / 1000);
-      if (!deps?.silent && (now - lastStaleLogTs > 60000)) {
-        lastStaleLogTs = now;
-        console.warn(`[ENTRY GATE] Pausing entries: BTC OHLCV age ${ageSec}s > ${staleDataPauseSec}s`);
+    if (typeof btcOhlcvTs === 'number' && btcOhlcvTs > 0) {
+      const ageSec = Math.max(0, Math.round((now - btcOhlcvTs) / 1000));
+      recordBtcOhlcvAgeSample(ageSec, now);
+      if ((now - btcOhlcvTs) > thresholdMs) {
+        if (!deps?.silent && (now - lastStaleLogTs > 60000)) {
+          lastStaleLogTs = now;
+          console.warn(`[ENTRY GATE] Pausing entries: BTC OHLCV age ${ageSec}s > ${staleDataPauseSec}s`);
+        }
+        return {
+          paused: true,
+          reason: `stale_data_btc_ohlcv (${ageSec}s > ${staleDataPauseSec}s)`
+        };
       }
-      return {
-        paused: true,
-        reason: `stale_data_btc_ohlcv (${ageSec}s > ${staleDataPauseSec}s)`
-      };
     }
   }
 
@@ -204,4 +237,5 @@ export function resetEntryGateForTest(): void {
   pausedUntilTs = 0;
   pauseReason = '';
   lastStaleLogTs = 0;
+  btcAgeSamples.length = 0;
 }

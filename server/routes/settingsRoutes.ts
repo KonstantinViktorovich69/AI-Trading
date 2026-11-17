@@ -322,6 +322,16 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
     if (req.body.kbDedupeCap !== undefined) {
       globalSettings.kbDedupeCap = !!req.body.kbDedupeCap;
     }
+    if (req.body.btcFreshnessFastLoopEnabled !== undefined) {
+      globalSettings.btcFreshnessFastLoopEnabled = !!req.body.btcFreshnessFastLoopEnabled;
+    }
+    if (req.body.aiDailyBudgetEnabled !== undefined) {
+      globalSettings.aiDailyBudgetEnabled = !!req.body.aiDailyBudgetEnabled;
+    }
+    if (req.body.aiDailyBudgetCalls !== undefined) {
+      const v = Number(req.body.aiDailyBudgetCalls);
+      if (Number.isFinite(v) && v >= 1 && v <= 10000) globalSettings.aiDailyBudgetCalls = Math.round(v);
+    }
     const exitFields = [
       'exitTrailingTriggerPct', 'exitTrailingDistancePct', 'exitEnableTrailingStop',
       'exitMinPttpActivationNetPnlPct', 'exitMinPttpPeakNetPnlPct', 'exitPttpTrailingDropPct',
@@ -536,6 +546,7 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       const systemPrompt = ctx.getSettingsOptimizerPrompt(currentSettingsString, message);
 
       const response = await ctx.runAiGeneration({
+        priority: 1,
         contents: [
           { role: 'system', parts: [{ text: systemPrompt }] },
           { role: 'user', parts: [{ text: `Обработай команду: "${message}" и выведи СТРОГО JSON с обязательным непустым полем "explanation".` }] }

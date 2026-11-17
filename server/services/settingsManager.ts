@@ -117,6 +117,9 @@ export interface GlobalSettings {
   modelMinSamplesForAdjustment?: number;
   kbDedupeCap?: boolean;
   exchangeWsObserveOnly?: boolean;
+  btcFreshnessFastLoopEnabled?: boolean;
+  aiDailyBudgetEnabled?: boolean;
+  aiDailyBudgetCalls?: number;
 }
 
 export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPERT_INSTRUCTIONS): GlobalSettings {
@@ -179,7 +182,10 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     evidenceGateMaxDrawdownPct: 15,
     staleDataPauseSec: 300,
     kbDedupeCap: true,
-    exchangeWsObserveOnly: false
+    exchangeWsObserveOnly: false,
+    btcFreshnessFastLoopEnabled: false,
+    aiDailyBudgetEnabled: false,
+    aiDailyBudgetCalls: 20
   };
 }
 

@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 import { processIncomingStateMessage } from './stateSync.ts';
 import { withFirestoreTimeout } from './dbStorageService.ts';
 import { ensureHistoricalDataSeeded } from '../db/seedData.ts';
@@ -5,6 +8,7 @@ import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive
 import { updatePatternBlacklistFromStats } from './signalEngine.ts';
 import { enrichKnowledgeBaseWithStructuredFilters } from './quantRiskEngine.ts';
 import { getUnifiedTradeClosePnl } from '../quant.ts';
+import { safeJsonParse } from '../utils/jsonRepair.ts';
 
 export interface AgentExchangeLog {
   id: string;
@@ -54,6 +58,136 @@ export interface DbStartupSyncContext {
   getSyncedKnowledgeCache: () => Map<string, string>;
   getLastSyncedSettingsStr: () => string;
   setLastSyncedSettingsStr: (str: string) => void;
+  baseDir?: string;
+}
+
+export interface StartupPersistenceFileInfo {
+  exists: boolean;
+  file?: string;
+  stateRevision: number | null;
+  mtimeIso: string | null;
+  sha256: string | null;
+}
+
+export interface StartupPersistenceReport {
+  databaseJson: StartupPersistenceFileInfo;
+  bakLatestJson: StartupPersistenceFileInfo;
+  newestBackup: StartupPersistenceFileInfo;
+  knownGoodCopy: StartupPersistenceFileInfo;
+  databaseMatchesKnownGoodSha256: boolean;
+  wouldRestoreFrom: { file: string; rev: number; currentRev: number } | null;
+}
+
+function inspectJsonFileInfo(filePath: string, fileLabel?: string): StartupPersistenceFileInfo {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { exists: false, file: fileLabel, stateRevision: null, mtimeIso: null, sha256: null };
+    }
+    const stat = fs.statSync(filePath);
+    const raw = fs.readFileSync(filePath);
+    const sha256 = crypto.createHash('sha256').update(raw).digest('hex');
+    const parsed = safeJsonParse(raw.toString('utf8'), null);
+    const rev = parsed && typeof parsed.stateRevision === 'number' && Number.isFinite(parsed.stateRevision)
+      ? parsed.stateRevision
+      : null;
+    return {
+      exists: true,
+      file: fileLabel || path.basename(filePath),
+      stateRevision: rev,
+      mtimeIso: stat.mtime.toISOString(),
+      sha256
+    };
+  } catch {
+    return { exists: false, file: fileLabel, stateRevision: null, mtimeIso: null, sha256: null };
+  }
+}
+
+export function inspectStartupPersistenceDiagnostics(
+  currentDbData: any,
+  options?: { baseDir?: string; log?: boolean }
+): StartupPersistenceReport {
+  const baseDir = options?.baseDir || process.cwd();
+  const shouldLog = options?.log !== false;
+
+  const dbPath = path.join(baseDir, 'database.json');
+  const bakLatestPath = path.join(baseDir, 'data', 'backups', 'database.json.bak_latest.json');
+  const backupsDir = path.join(baseDir, 'data', 'backups');
+  const knownGoodPath = path.join(baseDir, 'data', 'known_good', 'known-good-database-copy');
+
+  const databaseJson = inspectJsonFileInfo(dbPath, 'database.json');
+  if (databaseJson.stateRevision === null && typeof currentDbData?.stateRevision === 'number') {
+    databaseJson.stateRevision = currentDbData.stateRevision;
+  }
+  const currentRev = typeof currentDbData?.stateRevision === 'number'
+    ? currentDbData.stateRevision
+    : (databaseJson.stateRevision ?? 0);
+
+  const bakLatestJson = inspectJsonFileInfo(bakLatestPath, 'data/backups/database.json.bak_latest.json');
+  const knownGoodCopy = inspectJsonFileInfo(knownGoodPath, 'data/known_good/known-good-database-copy');
+
+  let newestBackup: StartupPersistenceFileInfo = {
+    exists: false,
+    file: 'none',
+    stateRevision: null,
+    mtimeIso: null,
+    sha256: null
+  };
+
+  try {
+    if (fs.existsSync(backupsDir)) {
+      const candidates = fs.readdirSync(backupsDir)
+        .filter((f) => f.startsWith('backup_') && f.endsWith('.json'))
+        .map((f) => {
+          const full = path.join(backupsDir, f);
+          return { name: f, full, mtimeMs: fs.statSync(full).mtimeMs };
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name));
+      if (candidates.length > 0) {
+        newestBackup = inspectJsonFileInfo(candidates[0].full, candidates[0].name);
+      }
+    }
+  } catch {}
+
+  const databaseMatchesKnownGoodSha256 = Boolean(
+    databaseJson.sha256 && knownGoodCopy.sha256 && databaseJson.sha256 === knownGoodCopy.sha256
+  );
+
+  let wouldRestoreFrom: { file: string; rev: number; currentRev: number } | null = null;
+  if (
+    newestBackup.exists &&
+    typeof newestBackup.stateRevision === 'number' &&
+    newestBackup.stateRevision > currentRev
+  ) {
+    wouldRestoreFrom = {
+      file: newestBackup.file || 'backup_unknown.json',
+      rev: newestBackup.stateRevision,
+      currentRev
+    };
+  }
+
+  if (shouldLog) {
+    const shortHash = (h: string | null) => (h ? h.slice(0, 12) : 'none');
+    console.log(
+      `[STARTUP DB FILES] database.json(rev=${currentRev}, mtime=${databaseJson.mtimeIso || 'none'}, sha256=${shortHash(databaseJson.sha256)}) ` +
+      `bak_latest(rev=${bakLatestJson.stateRevision ?? 'none'}, mtime=${bakLatestJson.mtimeIso || 'none'}) ` +
+      `newest_backup(file=${newestBackup.file || 'none'}, rev=${newestBackup.stateRevision ?? 'none'}, mtime=${newestBackup.mtimeIso || 'none'}) ` +
+      `known_good(rev=${knownGoodCopy.stateRevision ?? 'none'}, sha256=${shortHash(knownGoodCopy.sha256)}, matchesDb=${databaseMatchesKnownGoodSha256})`
+    );
+    if (wouldRestoreFrom) {
+      console.log(
+        `[STARTUP DB] would_restore_from=${wouldRestoreFrom.file} rev=${wouldRestoreFrom.rev} > current=${wouldRestoreFrom.currentRev}`
+      );
+    }
+  }
+
+  return {
+    databaseJson,
+    bakLatestJson,
+    newestBackup,
+    knownGoodCopy,
+    databaseMatchesKnownGoodSha256,
+    wouldRestoreFrom
+  };
 }
 
 export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise<void> {
@@ -61,6 +195,7 @@ export async function serviceLoadStateFromDB(ctx: DbStartupSyncContext): Promise
   try {
     const dbData = ctx.readLocalDB();
     ctx.setCachedDBData(dbData);
+    inspectStartupPersistenceDiagnostics(dbData, { baseDir: ctx.baseDir, log: true });
     let startupSource = 'local_file';
 
     if (ctx.isPostgresConfigured() && typeof ctx.loadAllFromPg === 'function') {

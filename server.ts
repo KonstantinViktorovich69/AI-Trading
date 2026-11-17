@@ -89,6 +89,7 @@ import { type KnowledgeRule, DEFAULT_KNOWLEDGE_BASE, DEFAULT_BASELINE_EXPERT_INS
 import { systemMetricsCollector } from './server/services/systemMetricsCollector.ts';
 import { buildEvidenceReport } from './server/services/evidenceReport.ts';
 import { getAllLearningCells } from './server/services/learningCellService.ts';
+import { startPersistenceProbeTimer } from './server/services/persistenceProbe.ts';
 
 // Global error handlers with Sentry integration registered at the very start of lifecycle
 process.on('uncaughtException', (err) => {
@@ -1079,6 +1080,14 @@ function startMainThreadScannerFallback() {
       }).catch(() => {});
     }, 2 * 60 * 1000);
 
+    setInterval(() => {
+      if (globalSettings?.btcFreshnessFastLoopEnabled === true) {
+        runGuarded('btc_freshness_fast', 60000, () => marketDataCollectorService.updateBtcFreshnessFast(), {
+          loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+        }).catch(() => {});
+      }
+    }, 35000);
+
     setTimeout(checkOrderBooks, 10000);
     setInterval(checkOrderBooks, 15000);
 
@@ -1143,6 +1152,14 @@ if (isMainThread) {
         loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
       }).catch(() => {});
     }, 2 * 60 * 1000);
+
+    setInterval(() => {
+      if (globalSettings?.btcFreshnessFastLoopEnabled === true) {
+        runGuarded('btc_freshness_fast', 60000, () => marketDataCollectorService.updateBtcFreshnessFast(), {
+          loopGuardEnabled: (globalSettings as any).loopGuardEnabled !== false
+        }).catch(() => {});
+      }
+    }, 35000);
     
     setTimeout(checkOrderBooks, 15000);
     setInterval(checkOrderBooks, 15000);
@@ -1330,8 +1347,14 @@ const marketDataCollectorCtx: MarketDataCollectorContext = {
   getCacheSignals: () => CACHE.signals,
   getVirtualTrades: () => virtualTrades,
   getCcxtExchange: (name: string) => marketDataHubService.getExchangeInstance(name),
-  isMainThread: () => isMainThread
+  isMainThread: () => isMainThread,
+  getGlobalSettings: () => globalSettings
 };
+
+aiGatewayService.setBudgetSettingsProvider(() => ({
+  enabled: Boolean(globalSettings?.aiDailyBudgetEnabled),
+  dailyLimit: Number(globalSettings?.aiDailyBudgetCalls || 20)
+}));
 
 const marketDataCollectorService = new MarketDataCollectorService(marketDataCollectorCtx);
 marketDataCollectorService.startBackgroundSchedules();
@@ -1770,6 +1793,7 @@ async function startServer() {
     }
 
     backgroundSchedulerService.start();
+    startPersistenceProbeTimer(60000, (globalThis as any).SERVER_START_TIME || Date.now());
 
     if (globalSettings?.exchangeWsObserveOnly === true) {
       exchangeWsManager.startAll({ observeOnly: true });
