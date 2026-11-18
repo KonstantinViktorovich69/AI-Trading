@@ -88,4 +88,7 @@
 | `isSessionFilterEnabled` | `true` (все 5 сессий разрешены) | **B** | Фильтр активен, но при всех 5 разрешённых сессиях и `blockedHoursUtc: []` блокировок не создаёт (`0` отказов). |
 | `btcFreshnessFastLoopEnabled` | не задан (`false`) | **B** | В живом `settings.json` выключен (по умолчанию `false`); не запущен в Round 8 («НЕ НАВРЕДИ»). |
 | `aiDailyBudgetEnabled` / `aiDailyBudgetCalls` | не заданы (`false` / `20`) | **B** | В живом `settings.json` выключены (по умолчанию `false` / `20`); не активированы в Round 8 («НЕ НАВРЕДИ»). |
+| `evidenceUsesArchive` | `false` (`settingsManager.ts:191`) | **B** | Включает объединение `DB ∪ data/trades-archive.jsonl` (дедупликация по `id`, read-only) для `evaluateEvidenceGate` и `buildEvidenceReport` без изменения критериев гейта. По умолчанию `false`. |
+| `disabledPatterns` | `[]` (`settingsManager.ts:192`) | **B** | Список названий паттернов, подавляемых в `evaluateScannerPatternPure` / `executeUpdateSignalsCache` до `NEUTRAL` (`matchedPattern: 'None'`, `scoreBonus: 0`) при сохранении сканирования всех остальных. По умолчанию `[]`. |
+
 

@@ -336,6 +336,48 @@ describe('Phase 7 — Self-control & Real Trading Protection (T7.1 - T7.6)', () 
       expect(cleaned.staleDataPauseSec).toBeUndefined();
       expect(cleaned.btcShockThreshold).toBe(2.0);
     });
+
+    it('ignores archive when evidenceUsesArchive is false and merges deduplicated DB ∪ archive when true with unchanged gate criteria', () => {
+      const tmpDir = makeTempDir('p7-arc-');
+      const archivePath = path.join(tmpDir, 'trades-archive.jsonl');
+
+      // Put 155 clean v2 winning trades spanning > 14 days into archive (including duplicate lines)
+      const archivedTrades = Array.from({ length: 155 }, (_, i) =>
+        makeCleanTrade(i, i % 5 === 0 ? -0.4 : 1.2, { id: `ARC-${i}` })
+      );
+      const duplicateLine = JSON.stringify(archivedTrades[0]);
+      fs.writeFileSync(
+        archivePath,
+        [...archivedTrades.map(t => JSON.stringify(t)), duplicateLine].join('\n') + '\n',
+        'utf-8'
+      );
+
+      // Put 5 recent clean v2 trades into DB, overriding one id if needed
+      const dbTrades = Array.from({ length: 5 }, (_, i) =>
+        makeCleanTrade(160 + i, 1.1, { id: `DB-${i}` })
+      );
+
+      const defaultSettings = createDefaultGlobalSettings();
+      expect(defaultSettings.evidenceUsesArchive).toBe(false);
+
+      const reportOff = buildEvidenceReport(dbTrades, defaultSettings, undefined, { archiveFilePath: archivePath });
+      expect(reportOff.totalTrades).toBe(5);
+      expect(reportOff.evidenceGate.eligibleTradesCount).toBe(5);
+      expect(reportOff.evidenceGate.passed).toBe(false);
+
+      const reportOn = buildEvidenceReport(
+        dbTrades,
+        { ...defaultSettings, evidenceUsesArchive: true },
+        undefined,
+        { archiveFilePath: archivePath }
+      );
+      expect(reportOn.totalTrades).toBe(160); // 155 archived (deduped) + 5 DB
+      expect(reportOn.evidenceGate.eligibleTradesCount).toBe(160);
+      expect(reportOn.evidenceGate.minTrades).toBe(150);
+      expect(reportOn.evidenceGate.minDays).toBe(14);
+      expect(reportOn.evidenceGate.maxAllowedDrawdownPct).toBe(15);
+      expect(reportOn.evidenceGate.passed).toBe(true);
+    });
   });
 
   describe('T7.2 — Evidence Report & Snapshot', () => {

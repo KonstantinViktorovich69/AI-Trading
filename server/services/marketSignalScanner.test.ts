@@ -234,4 +234,74 @@ describe('marketSignalScanner', () => {
       expect(estRes.matchedPattern).toBe('None');
     });
   });
+
+  describe('disabledPatterns kill-switch (K3)', () => {
+    it('keeps signal unchanged when disabledPatterns is empty and suppresses matched pattern to NEUTRAL when listed', async () => {
+      const input = {
+        tickerPrice: 65000,
+        change: 8.5,
+        high: 65500,
+        low: 60000,
+        volume: 1000000,
+        rawIndicators: {
+          sar: 65000,
+          vwap: 64800,
+          rsi1h: 78,
+          bb1h: 'OVERBOUGHT',
+          psarStatus1m: 'BEARISH',
+          isSarBearishFlipped1m: true,
+          wicks: { topPct: 0.65, bottomPct: 0.1, bodySize: 0 },
+          volumeSpike: 1.5
+        }
+      };
+
+      const baseline = evaluateScannerPatternPure({ ...input, disabledPatterns: [] });
+      expect(baseline.signalSide).toBe('SHORT');
+      expect(baseline.matchedPattern).toBe('💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)');
+      expect(baseline.scoreBonus).toBe(16);
+
+      const suppressed = evaluateScannerPatternPure({
+        ...input,
+        disabledPatterns: ['  💀 слив монеты (SAR Reversal at Peak)  ']
+      });
+      expect(suppressed.signalSide).toBe('NEUTRAL');
+      expect(suppressed.matchedPattern).toBe('None');
+      expect(suppressed.scoreBonus).toBe(0);
+
+      let cachedSignals: any = null;
+      await executeUpdateSignalsCache({
+        getGlobalTrueOHLCV: () => ({
+          BTCUSDT: { ...input.rawIndicators, isLiquiditySweep: true }
+        }),
+        getGlobalCcxtTickers: () => ({
+          weex: {
+            'BTC/USDT': {
+              last: 65000,
+              percentage: 8.5,
+              high: 65500,
+              low: 60000,
+              quoteVolume: 1000000
+            }
+          }
+        }),
+        getGlobalSettings: () => ({
+          isEma200FilterEnabled: true,
+          isFvgAboveFilterEnabled: true,
+          isFvgSupportBelowFilterEnabled: true,
+          isLiquiditySweepFilterEnabled: true,
+          liquiditySweepWickThreshold: 0.60,
+          isLateShortFilterEnabled: true,
+          disabledPatterns: ['💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)']
+        }),
+        setCachedSignals: (obj) => { cachedSignals = obj; },
+        emitSignalsUpdated: vi.fn(),
+        isMainThread: false
+      });
+
+      expect(cachedSignals?.data).toHaveLength(1);
+      expect(cachedSignals.data[0].signal).toBe('NEUTRAL');
+      expect(cachedSignals.data[0].matchedPattern).toBe('None');
+    });
+  });
 });
+

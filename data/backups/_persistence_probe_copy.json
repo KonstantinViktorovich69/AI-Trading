@@ -1,18 +1,18 @@
 {
-  "counter": 1,
-  "timestamp": 1794890385874,
-  "iso": "2026-11-17T04:39:45.874Z",
-  "startedAt": 1794890384947,
-  "pid": 2663,
+  "counter": 18,
+  "timestamp": 1794982132490,
+  "iso": "2026-11-18T06:08:52.490Z",
+  "startedAt": 1794981171686,
+  "pid": 140,
   "previousProbeOnBoot": {
-    "found": false,
-    "counter": null,
-    "timestamp": null,
-    "iso": null,
-    "startedAt": null,
-    "copyFound": false,
-    "copyCounter": null
+    "found": true,
+    "counter": 1,
+    "timestamp": 1794890385874,
+    "iso": "2026-11-17T04:39:45.874Z",
+    "startedAt": 1794890384947,
+    "copyFound": true,
+    "copyCounter": 1
   },
   "stateRevision": 2,
-  "updatedAt": 1794890385875
+  "updatedAt": 1794982132492
 }

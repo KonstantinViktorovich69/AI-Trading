@@ -1,13 +1,13 @@
 {
   "settings": {
     "main": {
-      "virtualBalance": 85.77,
-      "startOfDayBalance": 85.48,
-      "lastResetDate": "2026-11-17",
-      "startOfWeekBalance": 77.38,
+      "virtualBalance": 80.77,
+      "startOfDayBalance": 85.77,
+      "lastResetDate": "2026-11-18",
+      "startOfWeekBalance": 85.77,
       "lastWeekCheckTime": 1790150445705,
       "userId": "polyakovats3110@gmail.com",
-      "updatedAt": 1794889463496,
+      "updatedAt": 1794982182408,
       "virtualEquity": 85.77,
       "uiStatsResetTimestamp": 1791122286530
     },
@@ -110,789 +110,10 @@
       "requireModelMaturity": true,
       "modelMinSamplesForAdjustment": 100
     },
-    "virtualBalance": 85.77,
-    "startOfDayBalance": 85.48
+    "virtualBalance": 80.77,
+    "startOfDayBalance": 85.77
   },
   "trades": [
-    {
-      "id": "TR-1792136510941-G2",
-      "symbol": "LPT/USDT:USDT",
-      "side": "SHORT",
-      "action": "SELL",
-      "entryPrice": 1.73898,
-      "amount": 1.66,
-      "initialAmount": 3.7,
-      "margin": 3.7,
-      "initialMargin": 3.7,
-      "leverage": 4,
-      "status": "CLOSED",
-      "openTime": 1792136511074,
-      "mode": "AUTO",
-      "isReal": false,
-      "isPaper": true,
-      "dataOrigin": "PAPER",
-      "decisionSource": "COMMITTEE",
-      "marketRegime": "RANGING_FLAT",
-      "decisionTrace": {
-        "id": "dt_1792136509577_7j1q7x",
-        "timestamp": 1792136509577,
-        "symbol": "LPT/USDT:USDT",
-        "side": "SHORT",
-        "marketRegime": "RANGING_FLAT",
-        "regimeConfidence": 0.82,
-        "factors": [
-          {
-            "name": "RSI_15M",
-            "category": "TECHNICAL",
-            "value": 59.9232,
-            "weight": 15,
-            "direction": "NEUTRAL",
-            "passed": false,
-            "notes": "RSI на уровне 59.9 (Нейтральный)"
-          },
-          {
-            "name": "SAR_REVERSAL_TRIGGER",
-            "category": "TECHNICAL",
-            "value": 1,
-            "weight": 20,
-            "direction": "SHORT",
-            "passed": true,
-            "notes": "Parabolic SAR переключился в сторону входа"
-          },
-          {
-            "name": "VOLUME_CLIMAX_SPIKE",
-            "category": "VOLUME",
-            "value": "3.5x",
-            "weight": 18,
-            "direction": "SHORT",
-            "passed": true,
-            "notes": "Аномальный всплеск объема торгов: 3.5x от среднего"
-          },
-          {
-            "name": "TOP_WICK_REJECTION",
-            "category": "STRUCTURE",
-            "value": "35.8%",
-            "weight": 15,
-            "direction": "SHORT",
-            "passed": true,
-            "notes": "Размер разворотного фитиля: 35.8% (отказ от продолжения движения)"
-          },
-          {
-            "name": "LIQUIDITY_SWEEP",
-            "category": "STRUCTURE",
-            "value": "CONFIRMED",
-            "weight": 15,
-            "direction": "SHORT",
-            "passed": true,
-            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
-          },
-          {
-            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
-            "category": "STRUCTURE",
-            "value": "CONFIRMED",
-            "weight": 15,
-            "direction": "SHORT",
-            "passed": true,
-            "notes": "Локальный слом структуры (BOS/ChoCh) подтвержден"
-          }
-        ],
-        "agentVotes": [
-          {
-            "agentId": "scout_agent",
-            "agentName": "ИИ-Сканер (Scout Agent)",
-            "role": "SCOUT",
-            "vote": "APPROVE_SHORT",
-            "confidence": 89,
-            "assignedWeight": 1,
-            "weightedScore": 89,
-            "reason": "Обнаружен паттерн \"🧹 False Breakout (Ложный пробой)\"",
-            "timestamp": 1792136509577
-          },
-          {
-            "agentId": "bull_analyst",
-            "agentName": "Бычий Аналитик (Bull Analyst)",
-            "role": "BULL_ANALYST",
-            "vote": "HOLD",
-            "confidence": 50,
-            "assignedWeight": 1,
-            "weightedScore": 50,
-            "reason": "Покупательские импульсы иссякли (сопротивление покупателей отсутствует)",
-            "timestamp": 1792136509577
-          },
-          {
-            "agentId": "bear_analyst",
-            "agentName": "Медвежий Аналитик (Bear Analyst)",
-            "role": "BEAR_ANALYST",
-            "vote": "APPROVE_SHORT",
-            "confidence": 89,
-            "assignedWeight": 1,
-            "weightedScore": 89,
-            "reason": "Медвежий сетап: фитиль 35.8%",
-            "timestamp": 1792136509577
-          },
-          {
-            "agentId": "liquidity_hunter",
-            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
-            "role": "LIQUIDITY_HUNTER",
-            "vote": "APPROVE_SHORT",
-            "confidence": 90,
-            "assignedWeight": 1,
-            "weightedScore": 90,
-            "reason": "Снятие ликвидности подтверждено",
-            "timestamp": 1792136509577
-          },
-          {
-            "agentId": "risk_sentinel",
-            "agentName": "Риск-Страж (Risk Sentinel)",
-            "role": "RISK_SENTINEL",
-            "vote": "APPROVE_SHORT",
-            "confidence": 85,
-            "assignedWeight": 1.2,
-            "weightedScore": 102,
-            "reason": "Риск-фильтры пройдены успешно",
-            "timestamp": 1792136509577
-          }
-        ],
-        "consensusScore": 76,
-        "requiredScore": 68,
-        "passedConsensus": true,
-        "rejectionReasons": [],
-        "executionMode": "PAPER",
-        "triggerPattern": "🧹 False Breakout (Ложный пробой)",
-        "metadata": {
-          "indicatorsSource": "TICKER_ESTIMATE",
-          "hasRealOhlcv": false,
-          "volumeSpike": 3.5
-        }
-      },
-      "stopLoss": 1.7275,
-      "takeProfit": 1.64334,
-      "tpStages": [
-        {
-          "targetPrice": 1.71029,
-          "targetPercent": 1.38,
-          "closeRatio": 0.55,
-          "executed": true
-        },
-        {
-          "targetPrice": 1.68638,
-          "targetPercent": 2.75,
-          "closeRatio": 0.25,
-          "executed": false
-        },
-        {
-          "targetPrice": 1.66246,
-          "targetPercent": 4.13,
-          "closeRatio": 0.12,
-          "executed": false
-        },
-        {
-          "targetPrice": 1.64334,
-          "targetPercent": 5.5,
-          "closeRatio": 1,
-          "executed": false
-        }
-      ],
-      "gridOrders": [],
-      "correlationId": "corr_mv_1792136510939_1635k",
-      "correlationContext": {
-        "correlationId": "corr_mv_1792136510939_1635k",
-        "proposedTradeId": "TR-1792136510941-G2",
-        "entryIntentId": "intent_1792136510939_6oq4usa",
-        "signalId": "sig_1792136510939",
-        "strategyId": "CANONICAL_QUANT_SCALP_V2",
-        "strategyVersion": "2.1.0",
-        "stateRevision": 892716,
-        "emittedAt": 1792136510943
-      },
-      "entryIntentId": "intent_1792136510939_6oq4usa",
-      "intentId": "intent_1792136510939_6oq4usa",
-      "tradeIntentId": "intent_1792136510939_6oq4usa",
-      "signalId": "sig_1792136510939",
-      "strategyId": "CANONICAL_QUANT_SCALP_V2",
-      "strategyVersion": "2.1.0",
-      "matchedRuleIds": [
-        "al_1790492268219_88",
-        "al_1790492276431_625"
-      ],
-      "matchedRules": [
-        "al_1790492268219_88",
-        "al_1790492276431_625"
-      ],
-      "features": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-      ],
-      "committeeDecisionId": "comm_1792136510943_5h0q3",
-      "agentDecisionIds": [
-        "dec_hunter_1792136510943_abh5j",
-        "dec_bear_1792136510943_wwenc",
-        "comm_1792136510943_5h0q3"
-      ],
-      "stateRevision": 892716,
-      "lineageStatus": "COMPLIANT",
-      "history": [
-        {
-          "time": 1792136511074,
-          "type": "OPEN",
-          "price": 1.73898,
-          "amount": 3.7
-        },
-        {
-          "time": 1792176353796,
-          "type": "CLOSE",
-          "price": 1.698,
-          "amount": 2.04
-        },
-        {
-          "time": 1792192768736,
-          "type": "ADJUST_SL_TP",
-          "price": 1.7275,
-          "amount": 1.64334,
-          "notes": "Позиция уже частично зафиксирована в плюс на уровне $1.698. В настоящий момент наблюдается откат цены к $1.721 после достижения максимального PnL 10.12%. Согласно правилам управления шорт-позицией и использованию трейлинг-стопа, подтягиваем защитный Stop Loss с $1.73029 до $1.72750. Это позволяет гарантированно зафиксировать чистую прибыль по остатку позиции в случае продолжения коррекционного отскока, при этом сохраняя потенциал движения к основному Take Profit на $1.64334."
-        },
-        {
-          "time": 1792312223650,
-          "type": "CLOSE",
-          "price": 1.73898,
-          "amount": 1.66
-        }
-      ],
-      "marketType": "FUTURES",
-      "resolvedMarketType": "FUTURES",
-      "requestedMode": "FUTURES",
-      "allowedDirections": "BOTH",
-      "scannerSide": "SHORT",
-      "strategySide": "SHORT",
-      "committeeSide": "SHORT",
-      "executionSide": "SHORT",
-      "gateDiagnostics": {
-        "dataCompleteness": true,
-        "spreadSafety": true,
-        "spreadGate": true,
-        "liquiditySafety": true,
-        "volumeGate": true,
-        "fundingSafety": true,
-        "fundingGate": true,
-        "sideInvariantMatch": true,
-        "directionAllowed": true,
-        "patternNotBlacklisted": true,
-        "confidenceGate": true
-      },
-      "sourcePath": "MAIN_VIRTUAL",
-      "configVersion": "95534503-ffa25ad8",
-      "buildId": "95534503",
-      "processStartedAt": 1792136288412,
-      "entryDiagnostics": {
-        "indicatorsSource": "TICKER_ESTIMATE",
-        "features": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "featuresHadIndicators": false,
-        "featuresV2": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "featuresV2HadIndicators": false,
-        "quantPV2": null,
-        "aiScoreRaw": 89,
-        "kbPenalty": 10,
-        "kbPenaltyCapped": 0,
-        "kbBonus": 0,
-        "quantP": 0.5,
-        "aiScoreFinal": 79,
-        "marketRegime": "RANGING_FLAT",
-        "cellVerdict": {
-          "cellKey": "Ложный пробой (VWAP Reclaim)|SHORT|RANGING_FLAT",
-          "level": "none",
-          "n": 0,
-          "verdict": "NEUTRAL",
-          "adjustment": 0
-        }
-      },
-      "matchedRuleTexts": [
-        "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте.",
-        "[Авто-Обучение | 1000PEPE/USDT:USDT | PnL 5.7%] При нейтральном тренде шортить только при подтвержденной перекупленности (RSI > 60), исключая затяжное зависание в боковике."
-      ],
-      "lastAliveAt": 1792223651220,
-      "stalePriceSince": 1792179063831,
-      "lastAiCheck": 1792223614681,
-      "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
-      "userId": "polyakovats3110@gmail.com",
-      "gapEvents": [
-        {
-          "id": "gap_1792178104508_w278j",
-          "kind": "STALE_FEED",
-          "from": 1792177260797,
-          "to": 1792178104508
-        },
-        {
-          "id": "gap_1792179004985_pe60r",
-          "kind": "STALE_FEED",
-          "from": 1792178160596,
-          "to": 1792179004985
-        },
-        {
-          "id": "gap_1792179016521_a09v7",
-          "kind": "FREEZE_GAP",
-          "from": 1792179004985,
-          "to": 1792179016521
-        },
-        {
-          "id": "gap_1792218243642_dqzp4",
-          "kind": "FREEZE_GAP",
-          "from": 1792218232889,
-          "to": 1792221272047
-        },
-        {
-          "id": "gap_1792221816304_am4de",
-          "kind": "RESTART_GAP",
-          "from": 1792221255377,
-          "to": 1792221816302
-        },
-        {
-          "id": "gap_1792221856728_gn124",
-          "kind": "FREEZE_GAP",
-          "from": 1792221812740,
-          "to": 1792222009993
-        },
-        {
-          "id": "gap_1792222041012_z8wnr",
-          "kind": "RESTART_GAP",
-          "from": 1792221988341,
-          "to": 1792222091099
-        },
-        {
-          "id": "gap_1792222111669_aqi1q",
-          "kind": "FREEZE_GAP",
-          "from": 1792222088024,
-          "to": 1792223035386
-        },
-        {
-          "id": "gap_1792223035576_h90lu",
-          "kind": "RESTART_GAP_ESTIMATED",
-          "from": 1792222982183,
-          "to": 1792223035576
-        },
-        {
-          "id": "gap_1792223086363_h52w8",
-          "kind": "FREEZE_GAP",
-          "from": 1792223012889,
-          "to": 1792223684035
-        }
-      ],
-      "gapAffected": true,
-      "gapFrom": 1792136516828,
-      "gapTo": 1792223684035,
-      "gapSec": 967676709,
-      "gapReplayFrom": 1792136760637,
-      "gapReplayStatus": "PENDING",
-      "gapReplayAttempts": 2,
-      "highestPrice": 1.743,
-      "lowestPrice": 1.698,
-      "maxReachedUnleveragedPnl": 2.356553841907326,
-      "gapReplayNoHit": true,
-      "slViolationSeconds": 0,
-      "maxReachedPnl": 10.116275057792478,
-      "gapReplayLastError": "REQUEST_TIMEOUT",
-      "isProtected": true,
-      "protectionLevel": 1,
-      "lastAiAction": "UPDATE_SL",
-      "closeReason": "System Cleanup (Stale/Ghost)",
-      "isSystemCleanup": true,
-      "isForcedReset": true,
-      "closeReasonCode": "FORCED_RESET",
-      "closeTime": 1792312223650,
-      "closePrice": 1.73898,
-      "pnlPercent": -0.4,
-      "pnl": -0.00664,
-      "outcome": 0
-    },
-    {
-      "id": "TR-1792325220326-ET",
-      "symbol": "JCT/USDT:USDT",
-      "side": "LONG",
-      "action": "BUY",
-      "entryPrice": 0.001948,
-      "amount": 3.6,
-      "initialAmount": 3.6,
-      "margin": 3.6,
-      "initialMargin": 3.6,
-      "leverage": 2,
-      "status": "CLOSED",
-      "openTime": 1792325220396,
-      "mode": "AUTO",
-      "isReal": false,
-      "isPaper": true,
-      "dataOrigin": "PAPER",
-      "decisionSource": "COMMITTEE",
-      "marketRegime": "RANGING_FLAT",
-      "decisionTrace": {
-        "id": "dt_1792325215117_i7ise7",
-        "timestamp": 1792325215117,
-        "symbol": "JCT/USDT:USDT",
-        "side": "LONG",
-        "marketRegime": "RANGING_FLAT",
-        "regimeConfidence": 0.82,
-        "factors": [
-          {
-            "name": "RSI_15M",
-            "category": "TECHNICAL",
-            "value": 38.6873,
-            "weight": 15,
-            "direction": "NEUTRAL",
-            "passed": true,
-            "notes": "RSI на уровне 38.7 (Нейтральный)"
-          },
-          {
-            "name": "SAR_REVERSAL_TRIGGER",
-            "category": "TECHNICAL",
-            "value": 1,
-            "weight": 20,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Parabolic SAR переключился в сторону входа"
-          },
-          {
-            "name": "VOLUME_CLIMAX_SPIKE",
-            "category": "VOLUME",
-            "value": "1.2x",
-            "weight": 18,
-            "direction": "LONG",
-            "passed": false,
-            "notes": "Аномальный всплеск объема торгов: 1.2x от среднего"
-          },
-          {
-            "name": "BOTTOM_WICK_REJECTION",
-            "category": "STRUCTURE",
-            "value": "51.9%",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Размер разворотного фитиля: 51.9% (отказ от продолжения движения)"
-          },
-          {
-            "name": "LIQUIDITY_SWEEP",
-            "category": "STRUCTURE",
-            "value": "CONFIRMED",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
-          },
-          {
-            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
-            "category": "STRUCTURE",
-            "value": "CONFIRMED",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Локальный слом структуры (BOS/ChoCh) подтвержден"
-          }
-        ],
-        "agentVotes": [
-          {
-            "agentId": "scout_agent",
-            "agentName": "ИИ-Сканер (Scout Agent)",
-            "role": "SCOUT",
-            "vote": "APPROVE_LONG",
-            "confidence": 89,
-            "assignedWeight": 1,
-            "weightedScore": 89,
-            "reason": "Обнаружен паттерн \"🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)\"",
-            "timestamp": 1792325215117
-          },
-          {
-            "agentId": "bull_analyst",
-            "agentName": "Бычий Аналитик (Bull Analyst)",
-            "role": "BULL_ANALYST",
-            "vote": "APPROVE_LONG",
-            "confidence": 89,
-            "assignedWeight": 1,
-            "weightedScore": 89,
-            "reason": "Бычий импульс с RSI 38.7",
-            "timestamp": 1792325215117
-          },
-          {
-            "agentId": "bear_analyst",
-            "agentName": "Медвежий Аналитик (Bear Analyst)",
-            "role": "BEAR_ANALYST",
-            "vote": "HOLD",
-            "confidence": 50,
-            "assignedWeight": 1,
-            "weightedScore": 50,
-            "reason": "Продажи иссякли (давление продавцов отсутствует)",
-            "timestamp": 1792325215117
-          },
-          {
-            "agentId": "liquidity_hunter",
-            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
-            "role": "LIQUIDITY_HUNTER",
-            "vote": "APPROVE_LONG",
-            "confidence": 90,
-            "assignedWeight": 1,
-            "weightedScore": 90,
-            "reason": "Снятие ликвидности подтверждено",
-            "timestamp": 1792325215117
-          },
-          {
-            "agentId": "risk_sentinel",
-            "agentName": "Риск-Страж (Risk Sentinel)",
-            "role": "RISK_SENTINEL",
-            "vote": "APPROVE_LONG",
-            "confidence": 85,
-            "assignedWeight": 1.2,
-            "weightedScore": 102,
-            "reason": "Риск-фильтры пройдены успешно",
-            "timestamp": 1792325215117
-          }
-        ],
-        "consensusScore": 76,
-        "requiredScore": 68,
-        "passedConsensus": true,
-        "rejectionReasons": [],
-        "executionMode": "PAPER",
-        "triggerPattern": "🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)",
-        "metadata": {
-          "indicatorsSource": "TICKER_ESTIMATE",
-          "hasRealOhlcv": false,
-          "volumeSpike": 1.2
-        }
-      },
-      "stopLoss": 0.00193,
-      "takeProfit": 0.00206,
-      "tpStages": [
-        {
-          "targetPrice": 0.00198,
-          "targetPercent": 1.38,
-          "closeRatio": 0.55,
-          "executed": false
-        },
-        {
-          "targetPrice": 0.00201,
-          "targetPercent": 2.75,
-          "closeRatio": 0.25,
-          "executed": false
-        },
-        {
-          "targetPrice": 0.00203,
-          "targetPercent": 4.13,
-          "closeRatio": 0.12,
-          "executed": false
-        },
-        {
-          "targetPrice": 0.00206,
-          "targetPercent": 5.5,
-          "closeRatio": 1,
-          "executed": false
-        }
-      ],
-      "gridOrders": [],
-      "correlationId": "corr_mv_1792325220323_za6p0",
-      "correlationContext": {
-        "correlationId": "corr_mv_1792325220323_za6p0",
-        "proposedTradeId": "TR-1792325220326-ET",
-        "entryIntentId": "intent_1792325220324_cjc3th4",
-        "signalId": "sig_1792325220323",
-        "strategyId": "CANONICAL_QUANT_SCALP_V2",
-        "strategyVersion": "2.1.0",
-        "stateRevision": 1066966,
-        "emittedAt": 1792325220328
-      },
-      "entryIntentId": "intent_1792325220324_cjc3th4",
-      "intentId": "intent_1792325220324_cjc3th4",
-      "tradeIntentId": "intent_1792325220324_cjc3th4",
-      "signalId": "sig_1792325220323",
-      "strategyId": "CANONICAL_QUANT_SCALP_V2",
-      "strategyVersion": "2.1.0",
-      "matchedRuleIds": [
-        "al_1790492268219_88",
-        "al_1790492276431_625"
-      ],
-      "matchedRules": [
-        "al_1790492268219_88",
-        "al_1790492276431_625"
-      ],
-      "features": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-      ],
-      "committeeDecisionId": "comm_1792325220328_q4aw5",
-      "agentDecisionIds": [
-        "dec_hunter_1792325220328_31v02",
-        "dec_bear_1792325220328_v1yp3",
-        "comm_1792325220328_q4aw5"
-      ],
-      "stateRevision": 1066966,
-      "lineageStatus": "COMPLIANT",
-      "history": [
-        {
-          "time": 1792325220396,
-          "type": "OPEN",
-          "price": 0.001948,
-          "amount": 3.6
-        },
-        {
-          "time": 1792339255891,
-          "type": "CLOSE",
-          "price": 0.001841,
-          "amount": 3.6
-        }
-      ],
-      "marketType": "FUTURES",
-      "resolvedMarketType": "FUTURES",
-      "requestedMode": "HYBRID",
-      "allowedDirections": "BOTH",
-      "scannerSide": "LONG",
-      "strategySide": "LONG",
-      "committeeSide": "LONG",
-      "executionSide": "LONG",
-      "gateDiagnostics": {
-        "dataCompleteness": true,
-        "spreadSafety": true,
-        "spreadGate": true,
-        "liquiditySafety": true,
-        "volumeGate": true,
-        "fundingSafety": true,
-        "fundingGate": true,
-        "sideInvariantMatch": true,
-        "directionAllowed": true,
-        "patternNotBlacklisted": true,
-        "confidenceGate": true
-      },
-      "sourcePath": "MAIN_VIRTUAL",
-      "configVersion": "95534503-9548b84a",
-      "buildId": "95534503",
-      "processStartedAt": 1792324969800,
-      "entryDiagnostics": {
-        "indicatorsSource": "TICKER_ESTIMATE",
-        "features": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "featuresHadIndicators": false,
-        "featuresV2": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "featuresV2HadIndicators": false,
-        "quantPV2": null,
-        "aiScoreRaw": 89,
-        "kbPenalty": 10,
-        "kbPenaltyCapped": 0,
-        "kbBonus": 0,
-        "quantP": 0.5,
-        "aiScoreFinal": 79,
-        "marketRegime": "RANGING_FLAT",
-        "cellVerdict": {
-          "cellKey": "🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)|LONG|RANGING_FLAT",
-          "level": "none",
-          "n": 0,
-          "verdict": "NEUTRAL",
-          "adjustment": 0
-        }
-      },
-      "matchedRuleTexts": [
-        "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте.",
-        "[Авто-Обучение | 1000PEPE/USDT:USDT | PnL 5.7%] При нейтральном тренде шортить только при подтвержденной перекупленности (RSI > 60), исключая затяжное зависание в боковике."
-      ],
-      "lastAliveAt": 1792339255890,
-      "lastAiCheck": 1792339153655,
-      "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
-      "userId": "polyakovats3110@gmail.com",
-      "gapEvents": [
-        {
-          "id": "gap_1792338544790_8518i",
-          "kind": "RESTART_GAP_ESTIMATED",
-          "from": 1792325473403,
-          "to": 1792338544790
-        },
-        {
-          "id": "gap_1792339203884_syw1a",
-          "kind": "STALE_FEED",
-          "from": 1792325226369,
-          "to": 1792339203883
-        }
-      ],
-      "gapAffected": true,
-      "gapFrom": 1792325226369,
-      "gapTo": 1792339203883,
-      "gapSec": 27049,
-      "gapReplayFrom": 1792325226369,
-      "gapReplayStatus": "FALLBACK_LIVE",
-      "gapReplayAttempts": 0,
-      "manualCloseRequested": true,
-      "closeReason": "Ручное закрытие по запросу пользователя",
-      "closeReasonCode": "MANUAL",
-      "lastAiAction": "CLOSE",
-      "gapReplayLastError": "REQUEST_TIMEOUT",
-      "highestPrice": 0.001841,
-      "lowestPrice": 0.001841,
-      "maxReachedUnleveragedPnl": 0,
-      "slViolationSeconds": 1,
-      "isClosing": true,
-      "closeTime": 1792339255891,
-      "closePrice": 0.001841,
-      "notes": "Ручное закрытие по запросу пользователя",
-      "pnl": -0.40268254620123234,
-      "pnlPercent": -11.185626283367563,
-      "outcome": 0
-    },
     {
       "id": "TR-1792325228572-OK",
       "symbol": "MORPHO/USDT:USDT",
@@ -1745,742 +966,6 @@
       "pnlPercent": -0.2,
       "pnl": -0.0016200000000000001,
       "outcome": 0
-    },
-    {
-      "id": "TR-1792325276439-5U",
-      "symbol": "SOPH/USDT:USDT",
-      "side": "LONG",
-      "action": "BUY",
-      "entryPrice": 0.002185,
-      "amount": 2.3,
-      "initialAmount": 2.3,
-      "margin": 2.3,
-      "initialMargin": 2.3,
-      "leverage": 2,
-      "status": "CLOSED",
-      "openTime": 1792325276505,
-      "mode": "AUTO",
-      "isReal": false,
-      "isPaper": true,
-      "dataOrigin": "PAPER",
-      "decisionSource": "COMMITTEE",
-      "marketRegime": "RANGING_FLAT",
-      "decisionTrace": {
-        "id": "dt_1792325275194_p1mqfq",
-        "timestamp": 1792325275194,
-        "symbol": "SOPH/USDT:USDT",
-        "side": "LONG",
-        "marketRegime": "RANGING_FLAT",
-        "regimeConfidence": 0.82,
-        "factors": [
-          {
-            "name": "RSI_15M",
-            "category": "TECHNICAL",
-            "value": 38.97535,
-            "weight": 15,
-            "direction": "NEUTRAL",
-            "passed": true,
-            "notes": "RSI на уровне 39.0 (Нейтральный)"
-          },
-          {
-            "name": "SAR_REVERSAL_TRIGGER",
-            "category": "TECHNICAL",
-            "value": 1,
-            "weight": 20,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Parabolic SAR переключился в сторону входа"
-          },
-          {
-            "name": "VOLUME_CLIMAX_SPIKE",
-            "category": "VOLUME",
-            "value": "1.2x",
-            "weight": 18,
-            "direction": "LONG",
-            "passed": false,
-            "notes": "Аномальный всплеск объема торгов: 1.2x от среднего"
-          },
-          {
-            "name": "BOTTOM_WICK_REJECTION",
-            "category": "STRUCTURE",
-            "value": "55.2%",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Размер разворотного фитиля: 55.2% (отказ от продолжения движения)"
-          },
-          {
-            "name": "LIQUIDITY_SWEEP",
-            "category": "STRUCTURE",
-            "value": "CONFIRMED",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
-          },
-          {
-            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
-            "category": "STRUCTURE",
-            "value": "CONFIRMED",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Локальный слом структуры (BOS/ChoCh) подтвержден"
-          }
-        ],
-        "agentVotes": [
-          {
-            "agentId": "scout_agent",
-            "agentName": "ИИ-Сканер (Scout Agent)",
-            "role": "SCOUT",
-            "vote": "APPROVE_LONG",
-            "confidence": 89,
-            "assignedWeight": 1,
-            "weightedScore": 89,
-            "reason": "Обнаружен паттерн \"🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)\"",
-            "timestamp": 1792325275194
-          },
-          {
-            "agentId": "bull_analyst",
-            "agentName": "Бычий Аналитик (Bull Analyst)",
-            "role": "BULL_ANALYST",
-            "vote": "APPROVE_LONG",
-            "confidence": 89,
-            "assignedWeight": 1,
-            "weightedScore": 89,
-            "reason": "Бычий импульс с RSI 39.0",
-            "timestamp": 1792325275194
-          },
-          {
-            "agentId": "bear_analyst",
-            "agentName": "Медвежий Аналитик (Bear Analyst)",
-            "role": "BEAR_ANALYST",
-            "vote": "HOLD",
-            "confidence": 50,
-            "assignedWeight": 1,
-            "weightedScore": 50,
-            "reason": "Продажи иссякли (давление продавцов отсутствует)",
-            "timestamp": 1792325275194
-          },
-          {
-            "agentId": "liquidity_hunter",
-            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
-            "role": "LIQUIDITY_HUNTER",
-            "vote": "APPROVE_LONG",
-            "confidence": 90,
-            "assignedWeight": 1,
-            "weightedScore": 90,
-            "reason": "Снятие ликвидности подтверждено",
-            "timestamp": 1792325275194
-          },
-          {
-            "agentId": "risk_sentinel",
-            "agentName": "Риск-Страж (Risk Sentinel)",
-            "role": "RISK_SENTINEL",
-            "vote": "APPROVE_LONG",
-            "confidence": 85,
-            "assignedWeight": 1.2,
-            "weightedScore": 102,
-            "reason": "Риск-фильтры пройдены успешно",
-            "timestamp": 1792325275194
-          }
-        ],
-        "consensusScore": 76,
-        "requiredScore": 68,
-        "passedConsensus": true,
-        "rejectionReasons": [],
-        "executionMode": "PAPER",
-        "triggerPattern": "🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)",
-        "metadata": {
-          "indicatorsSource": "TICKER_ESTIMATE",
-          "hasRealOhlcv": false,
-          "volumeSpike": 1.2
-        }
-      },
-      "stopLoss": 0.00216,
-      "takeProfit": 0.00231,
-      "tpStages": [
-        {
-          "targetPrice": 0.00222,
-          "targetPercent": 1.38,
-          "closeRatio": 0.55,
-          "executed": false
-        },
-        {
-          "targetPrice": 0.00225,
-          "targetPercent": 2.75,
-          "closeRatio": 0.25,
-          "executed": false
-        },
-        {
-          "targetPrice": 0.00228,
-          "targetPercent": 4.13,
-          "closeRatio": 0.12,
-          "executed": false
-        },
-        {
-          "targetPrice": 0.00231,
-          "targetPercent": 5.5,
-          "closeRatio": 1,
-          "executed": false
-        }
-      ],
-      "gridOrders": [],
-      "correlationId": "corr_mv_1792325276439_cj1mb",
-      "correlationContext": {
-        "correlationId": "corr_mv_1792325276439_cj1mb",
-        "proposedTradeId": "TR-1792325276439-5U",
-        "entryIntentId": "intent_1792325276439_jy2g0uf",
-        "signalId": "sig_1792325276439",
-        "strategyId": "CANONICAL_QUANT_SCALP_V2",
-        "strategyVersion": "2.1.0",
-        "stateRevision": 1066986,
-        "emittedAt": 1792325276440
-      },
-      "entryIntentId": "intent_1792325276439_jy2g0uf",
-      "intentId": "intent_1792325276439_jy2g0uf",
-      "tradeIntentId": "intent_1792325276439_jy2g0uf",
-      "signalId": "sig_1792325276439",
-      "strategyId": "CANONICAL_QUANT_SCALP_V2",
-      "strategyVersion": "2.1.0",
-      "matchedRuleIds": [
-        "al_1790492268219_88",
-        "al_1790492276431_625"
-      ],
-      "matchedRules": [
-        "al_1790492268219_88",
-        "al_1790492276431_625"
-      ],
-      "features": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-      ],
-      "committeeDecisionId": "comm_1792325276440_r136t",
-      "agentDecisionIds": [
-        "dec_hunter_1792325276440_qguhq",
-        "dec_bear_1792325276440_asa34",
-        "comm_1792325276440_r136t"
-      ],
-      "stateRevision": 1066986,
-      "lineageStatus": "COMPLIANT",
-      "history": [
-        {
-          "time": 1792325276505,
-          "type": "OPEN",
-          "price": 0.002185,
-          "amount": 2.3
-        },
-        {
-          "time": 1792339255899,
-          "type": "CLOSE",
-          "price": 0.002086,
-          "amount": 2.3
-        }
-      ],
-      "marketType": "FUTURES",
-      "resolvedMarketType": "FUTURES",
-      "requestedMode": "HYBRID",
-      "allowedDirections": "BOTH",
-      "scannerSide": "LONG",
-      "strategySide": "LONG",
-      "committeeSide": "LONG",
-      "executionSide": "LONG",
-      "gateDiagnostics": {
-        "dataCompleteness": true,
-        "spreadSafety": true,
-        "spreadGate": true,
-        "liquiditySafety": true,
-        "volumeGate": true,
-        "fundingSafety": true,
-        "fundingGate": true,
-        "sideInvariantMatch": true,
-        "directionAllowed": true,
-        "patternNotBlacklisted": true,
-        "confidenceGate": true
-      },
-      "sourcePath": "MAIN_VIRTUAL",
-      "configVersion": "95534503-9548b84a",
-      "buildId": "95534503",
-      "processStartedAt": 1792324969800,
-      "entryDiagnostics": {
-        "indicatorsSource": "TICKER_ESTIMATE",
-        "features": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "featuresHadIndicators": false,
-        "featuresV2": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "featuresV2HadIndicators": false,
-        "quantPV2": null,
-        "aiScoreRaw": 89,
-        "kbPenalty": 10,
-        "kbPenaltyCapped": 0,
-        "kbBonus": 0,
-        "quantP": 0.5,
-        "aiScoreFinal": 79,
-        "marketRegime": "RANGING_FLAT",
-        "cellVerdict": {
-          "cellKey": "🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)|LONG|RANGING_FLAT",
-          "level": "none",
-          "n": 0,
-          "verdict": "NEUTRAL",
-          "adjustment": 0
-        }
-      },
-      "matchedRuleTexts": [
-        "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте.",
-        "[Авто-Обучение | 1000PEPE/USDT:USDT | PnL 5.7%] При нейтральном тренде шортить только при подтвержденной перекупленности (RSI > 60), исключая затяжное зависание в боковике."
-      ],
-      "lastAliveAt": 1792339255899,
-      "lastAiCheck": 1792339153655,
-      "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
-      "userId": "polyakovats3110@gmail.com",
-      "gapEvents": [
-        {
-          "id": "gap_1792338544790_8518i",
-          "kind": "RESTART_GAP_ESTIMATED",
-          "from": 1792325473403,
-          "to": 1792338544790
-        },
-        {
-          "id": "gap_1792339203890_zvt5q",
-          "kind": "STALE_FEED",
-          "from": 1792325281592,
-          "to": 1792339203890
-        }
-      ],
-      "gapAffected": true,
-      "gapFrom": 1792325281592,
-      "gapTo": 1792339203890,
-      "gapSec": 26993,
-      "gapReplayFrom": 1792325281592,
-      "gapReplayStatus": "FALLBACK_LIVE",
-      "gapReplayAttempts": 0,
-      "gapReplayLastError": "REQUEST_TIMEOUT",
-      "highestPrice": 0.002086,
-      "lowestPrice": 0.002086,
-      "maxReachedUnleveragedPnl": 0,
-      "closeReasonCode": "STOP_LOSS",
-      "slViolationSeconds": 1,
-      "isClosing": true,
-      "closeTime": 1792339255899,
-      "closePrice": 0.002086,
-      "closeReason": "Сработал стоп-лосс на уровне $0.00216 (PnL: -9.38%)",
-      "notes": "Сработал стоп-лосс на уровне $0.00216 (PnL: -9.38%)",
-      "pnl": -0.2130210526315783,
-      "pnlPercent": -9.261784897025144,
-      "outcome": 0
-    },
-    {
-      "id": "TR-1792325350987-7X",
-      "symbol": "M/USDT:USDT",
-      "side": "LONG",
-      "action": "BUY",
-      "entryPrice": 0.761883,
-      "amount": 0.48,
-      "initialAmount": 1.6,
-      "margin": 1.6,
-      "initialMargin": 1.6,
-      "leverage": 2,
-      "status": "CLOSED",
-      "openTime": 1792325351058,
-      "mode": "AUTO",
-      "isReal": false,
-      "isPaper": true,
-      "dataOrigin": "PAPER",
-      "decisionSource": "COMMITTEE",
-      "marketRegime": "RANGING_FLAT",
-      "decisionTrace": {
-        "id": "dt_1792325350921_5oqrz1",
-        "timestamp": 1792325350921,
-        "symbol": "M/USDT:USDT",
-        "side": "LONG",
-        "marketRegime": "RANGING_FLAT",
-        "regimeConfidence": 0.82,
-        "factors": [
-          {
-            "name": "RSI_15M",
-            "category": "TECHNICAL",
-            "value": 36.9422,
-            "weight": 15,
-            "direction": "NEUTRAL",
-            "passed": true,
-            "notes": "RSI на уровне 36.9 (Нейтральный)"
-          },
-          {
-            "name": "SAR_REVERSAL_TRIGGER",
-            "category": "TECHNICAL",
-            "value": 1,
-            "weight": 20,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Parabolic SAR переключился в сторону входа"
-          },
-          {
-            "name": "VOLUME_CLIMAX_SPIKE",
-            "category": "VOLUME",
-            "value": "3.5x",
-            "weight": 18,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Аномальный всплеск объема торгов: 3.5x от среднего"
-          },
-          {
-            "name": "BOTTOM_WICK_REJECTION",
-            "category": "STRUCTURE",
-            "value": "40.8%",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Размер разворотного фитиля: 40.8% (отказ от продолжения движения)"
-          },
-          {
-            "name": "LIQUIDITY_SWEEP",
-            "category": "STRUCTURE",
-            "value": "CONFIRMED",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
-          },
-          {
-            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
-            "category": "STRUCTURE",
-            "value": "CONFIRMED",
-            "weight": 15,
-            "direction": "LONG",
-            "passed": true,
-            "notes": "Локальный слом структуры (BOS/ChoCh) подтвержден"
-          }
-        ],
-        "agentVotes": [
-          {
-            "agentId": "scout_agent",
-            "agentName": "ИИ-Сканер (Scout Agent)",
-            "role": "SCOUT",
-            "vote": "APPROVE_LONG",
-            "confidence": 88,
-            "assignedWeight": 1,
-            "weightedScore": 88,
-            "reason": "Обнаружен паттерн \"🎯 Bottom Wick Retest (Ретест дна)\"",
-            "timestamp": 1792325350921
-          },
-          {
-            "agentId": "bull_analyst",
-            "agentName": "Бычий Аналитик (Bull Analyst)",
-            "role": "BULL_ANALYST",
-            "vote": "APPROVE_LONG",
-            "confidence": 88,
-            "assignedWeight": 1,
-            "weightedScore": 88,
-            "reason": "Бычий импульс с RSI 36.9",
-            "timestamp": 1792325350921
-          },
-          {
-            "agentId": "bear_analyst",
-            "agentName": "Медвежий Аналитик (Bear Analyst)",
-            "role": "BEAR_ANALYST",
-            "vote": "HOLD",
-            "confidence": 50,
-            "assignedWeight": 1,
-            "weightedScore": 50,
-            "reason": "Продажи иссякли (давление продавцов отсутствует)",
-            "timestamp": 1792325350921
-          },
-          {
-            "agentId": "liquidity_hunter",
-            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
-            "role": "LIQUIDITY_HUNTER",
-            "vote": "APPROVE_LONG",
-            "confidence": 90,
-            "assignedWeight": 1,
-            "weightedScore": 90,
-            "reason": "Снятие ликвидности подтверждено",
-            "timestamp": 1792325350921
-          },
-          {
-            "agentId": "risk_sentinel",
-            "agentName": "Риск-Страж (Risk Sentinel)",
-            "role": "RISK_SENTINEL",
-            "vote": "APPROVE_LONG",
-            "confidence": 85,
-            "assignedWeight": 1.2,
-            "weightedScore": 102,
-            "reason": "Риск-фильтры пройдены успешно",
-            "timestamp": 1792325350921
-          }
-        ],
-        "consensusScore": 76,
-        "requiredScore": 68,
-        "passedConsensus": true,
-        "rejectionReasons": [],
-        "executionMode": "PAPER",
-        "triggerPattern": "🎯 Bottom Wick Retest (Ретест дна)",
-        "metadata": {
-          "indicatorsSource": "TICKER_ESTIMATE",
-          "hasRealOhlcv": false,
-          "volumeSpike": 3.5
-        }
-      },
-      "stopLoss": 0.77864,
-      "takeProfit": 0.80379,
-      "tpStages": [
-        {
-          "targetPrice": 0.77445,
-          "targetPercent": 1.38,
-          "closeRatio": 0.55,
-          "executed": true
-        },
-        {
-          "targetPrice": 0.78493,
-          "targetPercent": 2.75,
-          "closeRatio": 0.25,
-          "executed": true
-        },
-        {
-          "targetPrice": 0.79541,
-          "targetPercent": 4.13,
-          "closeRatio": 0.12,
-          "executed": true
-        },
-        {
-          "targetPrice": 0.80379,
-          "targetPercent": 5.5,
-          "closeRatio": 1,
-          "executed": false
-        }
-      ],
-      "gridOrders": [],
-      "correlationId": "corr_mv_1792325350986_w5s5b",
-      "correlationContext": {
-        "correlationId": "corr_mv_1792325350986_w5s5b",
-        "proposedTradeId": "TR-1792325350987-7X",
-        "entryIntentId": "intent_1792325350986_8fgqe01",
-        "signalId": "sig_1792325350986",
-        "strategyId": "CANONICAL_QUANT_SCALP_V2",
-        "strategyVersion": "2.1.0",
-        "stateRevision": 1067001,
-        "emittedAt": 1792325350988
-      },
-      "entryIntentId": "intent_1792325350986_8fgqe01",
-      "intentId": "intent_1792325350986_8fgqe01",
-      "tradeIntentId": "intent_1792325350986_8fgqe01",
-      "signalId": "sig_1792325350986",
-      "strategyId": "CANONICAL_QUANT_SCALP_V2",
-      "strategyVersion": "2.1.0",
-      "matchedRuleIds": [
-        "al_1790492268219_88",
-        "al_1790492276431_625"
-      ],
-      "matchedRules": [
-        "al_1790492268219_88",
-        "al_1790492276431_625"
-      ],
-      "features": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
-      ],
-      "committeeDecisionId": "comm_1792325350988_85voq",
-      "agentDecisionIds": [
-        "dec_hunter_1792325350988_kxgux",
-        "dec_bear_1792325350988_dk5bn",
-        "comm_1792325350988_85voq"
-      ],
-      "stateRevision": 1067001,
-      "lineageStatus": "COMPLIANT",
-      "history": [
-        {
-          "time": 1792325351058,
-          "type": "OPEN",
-          "price": 0.761883,
-          "amount": 1.6
-        },
-        {
-          "time": 1792328280000,
-          "type": "CLOSE",
-          "price": 0.77445,
-          "amount": 0.88
-        },
-        {
-          "time": 1792329240000,
-          "type": "CLOSE",
-          "price": 0.78493,
-          "amount": 0.18
-        },
-        {
-          "time": 1792329420000,
-          "type": "CLOSE",
-          "price": 0.79541,
-          "amount": 0.06
-        },
-        {
-          "time": 1792340156486,
-          "type": "CLOSE",
-          "price": 0.767,
-          "amount": 0.48
-        }
-      ],
-      "marketType": "FUTURES",
-      "resolvedMarketType": "FUTURES",
-      "requestedMode": "HYBRID",
-      "allowedDirections": "BOTH",
-      "scannerSide": "LONG",
-      "strategySide": "LONG",
-      "committeeSide": "LONG",
-      "executionSide": "LONG",
-      "gateDiagnostics": {
-        "dataCompleteness": true,
-        "spreadSafety": true,
-        "spreadGate": true,
-        "liquiditySafety": true,
-        "volumeGate": true,
-        "fundingSafety": true,
-        "fundingGate": true,
-        "sideInvariantMatch": true,
-        "directionAllowed": true,
-        "patternNotBlacklisted": true,
-        "confidenceGate": true
-      },
-      "sourcePath": "MAIN_VIRTUAL",
-      "configVersion": "95534503-9548b84a",
-      "buildId": "95534503",
-      "processStartedAt": 1792324969800,
-      "entryDiagnostics": {
-        "indicatorsSource": "TICKER_ESTIMATE",
-        "features": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "featuresHadIndicators": false,
-        "featuresV2": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          0
-        ],
-        "featuresV2HadIndicators": false,
-        "quantPV2": null,
-        "aiScoreRaw": 88,
-        "kbPenalty": 10,
-        "kbPenaltyCapped": 0,
-        "kbBonus": 0,
-        "quantP": 0.5,
-        "aiScoreFinal": 78,
-        "marketRegime": "RANGING_FLAT",
-        "cellVerdict": {
-          "cellKey": "Ретест Фитиля / Двойная Вершина/Дно|LONG|RANGING_FLAT",
-          "level": "none",
-          "n": 0,
-          "verdict": "NEUTRAL",
-          "adjustment": 0
-        }
-      },
-      "matchedRuleTexts": [
-        "[Авто-Обучение | HYPE/USDT:USDT | PnL 1.5%] При нейтральном рынке (bias_score = 0) избегать входов без подтвержденного импульса во избежание заморозки маржи в затяжном флэте.",
-        "[Авто-Обучение | 1000PEPE/USDT:USDT | PnL 5.7%] При нейтральном тренде шортить только при подтвержденной перекупленности (RSI > 60), исключая затяжное зависание в боковике."
-      ],
-      "lastAliveAt": 1792340156486,
-      "lastAiCheck": 1792340113678,
-      "aiAdvice": "Позиция находится в зоне консолидации над ключевым уровнем. На основании правила '3-15' и динамической волатильности, корректируем Take Profit для фиксирования профита при локальном отскоке и подтягиваем Stop Loss в область защиты капитала.",
-      "userId": "polyakovats3110@gmail.com",
-      "gapEvents": [
-        {
-          "id": "gap_1792338544790_8518i",
-          "kind": "RESTART_GAP_ESTIMATED",
-          "from": 1792325473403,
-          "to": 1792338544790
-        },
-        {
-          "id": "gap_1792339215884_5v1yr",
-          "kind": "STALE_FEED",
-          "from": 1792325356808,
-          "to": 1792339215884
-        },
-        {
-          "id": "gap_1792340104481_fo2ot",
-          "kind": "STALE_FEED",
-          "from": 1792339267289,
-          "to": 1792340104481
-        }
-      ],
-      "gapAffected": true,
-      "gapFrom": 1792325356808,
-      "gapTo": 1792340104481,
-      "gapSec": 27767,
-      "gapReplayFrom": 1792339267289,
-      "gapReplayStatus": "FALLBACK_LIVE",
-      "gapReplayAttempts": 0,
-      "isProtected": true,
-      "maxReachedPnl": 1.8682658623437036,
-      "gapReplayLastError": "REQUEST_TIMEOUT",
-      "highestPrice": 0.767,
-      "lowestPrice": 0.767,
-      "maxReachedUnleveragedPnl": 0.6716254333014436,
-      "closeReasonCode": "STOP_LOSS",
-      "slViolationSeconds": 1,
-      "isClosing": true,
-      "closeTime": 1792340156486,
-      "closePrice": 0.767,
-      "closeReason": "Сработал стоп-лосс на уровне $0.77864 (PnL: 1.02%)",
-      "notes": "Сработал стоп-лосс на уровне $0.77864 (PnL: 1.02%)",
-      "pnl": 0.048448875220998555,
-      "pnlPercent": 3.0280547013124095,
-      "outcome": 1
     },
     {
       "id": "TR-1792941700443-M8",
@@ -14388,6 +12873,342 @@
       "netPnlTakerFee": 3.2827,
       "netPnlTakerFeeUsd": 0.068936,
       "outcome": 1
+    },
+    {
+      "id": "TR-1794981701177-BQ",
+      "symbol": "AIN/USDT:USDT",
+      "side": "SHORT",
+      "action": "SELL",
+      "entryPrice": 0.10967,
+      "amount": 5,
+      "initialAmount": 5,
+      "margin": 5,
+      "initialMargin": 5,
+      "leverage": 2,
+      "status": "OPEN",
+      "openTime": 1794981701192,
+      "mode": "AUTO",
+      "isReal": false,
+      "isPaper": true,
+      "dataOrigin": "PAPER",
+      "decisionSource": "COMMITTEE",
+      "marketRegime": "RANGING_FLAT",
+      "decisionTrace": {
+        "id": "dt_1794981592580_rih0rt",
+        "timestamp": 1794981592580,
+        "symbol": "AIN/USDT:USDT",
+        "side": "SHORT",
+        "marketRegime": "RANGING_FLAT",
+        "regimeConfidence": 0.82,
+        "factors": [
+          {
+            "name": "RSI_15M",
+            "category": "TECHNICAL",
+            "value": 55.07,
+            "weight": 15,
+            "direction": "NEUTRAL",
+            "passed": false,
+            "notes": "RSI на уровне 55.1 (Нейтральный)"
+          },
+          {
+            "name": "SAR_REVERSAL_TRIGGER",
+            "category": "TECHNICAL",
+            "value": 0,
+            "weight": 20,
+            "direction": "SHORT",
+            "passed": false,
+            "notes": "SAR не подтверждает разворот"
+          },
+          {
+            "name": "VOLUME_CLIMAX_SPIKE",
+            "category": "VOLUME",
+            "value": "0.8x",
+            "weight": 18,
+            "direction": "SHORT",
+            "passed": false,
+            "notes": "Аномальный всплеск объема торгов: 0.8x от среднего"
+          },
+          {
+            "name": "TOP_WICK_REJECTION",
+            "category": "STRUCTURE",
+            "value": "46.0%",
+            "weight": 15,
+            "direction": "SHORT",
+            "passed": true,
+            "notes": "Размер разворотного фитиля: 46.0% (отказ от продолжения движения)"
+          },
+          {
+            "name": "LIQUIDITY_SWEEP",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "SHORT",
+            "passed": true,
+            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
+          },
+          {
+            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "SHORT",
+            "passed": true,
+            "notes": "Локальный слом структуры (BOS/ChoCh) подтвержден"
+          }
+        ],
+        "agentVotes": [
+          {
+            "agentId": "scout_agent",
+            "agentName": "ИИ-Сканер (Scout Agent)",
+            "role": "SCOUT",
+            "vote": "APPROVE_SHORT",
+            "confidence": 89,
+            "assignedWeight": 1,
+            "weightedScore": 89,
+            "reason": "Обнаружен паттерн \"🧹 False Breakout (Ложный пробой)\"",
+            "timestamp": 1794981592580
+          },
+          {
+            "agentId": "bull_analyst",
+            "agentName": "Бычий Аналитик (Bull Analyst)",
+            "role": "BULL_ANALYST",
+            "vote": "HOLD",
+            "confidence": 50,
+            "assignedWeight": 1,
+            "weightedScore": 50,
+            "reason": "Покупательские импульсы иссякли (сопротивление покупателей отсутствует)",
+            "timestamp": 1794981592580
+          },
+          {
+            "agentId": "bear_analyst",
+            "agentName": "Медвежий Аналитик (Bear Analyst)",
+            "role": "BEAR_ANALYST",
+            "vote": "APPROVE_SHORT",
+            "confidence": 89,
+            "assignedWeight": 1,
+            "weightedScore": 89,
+            "reason": "Медвежий сетап: фитиль 46.0%",
+            "timestamp": 1794981592580
+          },
+          {
+            "agentId": "liquidity_hunter",
+            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
+            "role": "LIQUIDITY_HUNTER",
+            "vote": "APPROVE_SHORT",
+            "confidence": 90,
+            "assignedWeight": 1,
+            "weightedScore": 90,
+            "reason": "Снятие ликвидности подтверждено",
+            "timestamp": 1794981592580
+          },
+          {
+            "agentId": "risk_sentinel",
+            "agentName": "Риск-Страж (Risk Sentinel)",
+            "role": "RISK_SENTINEL",
+            "vote": "APPROVE_SHORT",
+            "confidence": 85,
+            "assignedWeight": 1.2,
+            "weightedScore": 102,
+            "reason": "Риск-фильтры пройдены успешно",
+            "timestamp": 1794981592580
+          }
+        ],
+        "consensusScore": 76,
+        "requiredScore": 68,
+        "passedConsensus": true,
+        "rejectionReasons": [],
+        "executionMode": "PAPER",
+        "triggerPattern": "🧹 False Breakout (Ложный пробой)",
+        "metadata": {
+          "indicatorsSource": "OHLCV",
+          "hasRealOhlcv": true,
+          "volumeSpike": 0.78,
+          "dataQuality": "REAL",
+          "estimatedFields": []
+        }
+      },
+      "stopLoss": 0.11039,
+      "takeProfit": 0.09804,
+      "tpStages": [
+        {
+          "targetPrice": 0.10592,
+          "targetPercent": 2.57,
+          "closeRatio": 0.55,
+          "executed": false
+        },
+        {
+          "targetPrice": 0.10311,
+          "targetPercent": 5.15,
+          "closeRatio": 0.25,
+          "executed": false
+        },
+        {
+          "targetPrice": 0.10029,
+          "targetPercent": 7.72,
+          "closeRatio": 0.12,
+          "executed": false
+        },
+        {
+          "targetPrice": 0.09804,
+          "targetPercent": 10.3,
+          "closeRatio": 1,
+          "executed": false
+        }
+      ],
+      "gridOrders": [],
+      "correlationId": "corr_mv_1794981596488_x6irc",
+      "correlationContext": {
+        "correlationId": "corr_mv_1794981596488_x6irc",
+        "proposedTradeId": "TR-1794981701177-BQ",
+        "entryIntentId": "intent_1794981596488_8ankho6",
+        "signalId": "sig_1794981596488",
+        "strategyId": "CANONICAL_QUANT_SCALP_V2",
+        "strategyVersion": "2.1.0",
+        "stateRevision": 1295494,
+        "emittedAt": 1794981701179
+      },
+      "entryIntentId": "intent_1794981596488_8ankho6",
+      "intentId": "intent_1794981596488_8ankho6",
+      "tradeIntentId": "intent_1794981596488_8ankho6",
+      "signalId": "sig_1794981596488",
+      "strategyId": "CANONICAL_QUANT_SCALP_V2",
+      "strategyVersion": "2.1.0",
+      "matchedRuleIds": [
+        "RULE_SAR_M1_M15",
+        "RULE_VWAP_ALIGNMENT",
+        "PAT_EXPLICIT_SHORT_STRATEGY_SIGNAL"
+      ],
+      "matchedRules": [
+        "RULE_SAR_M1_M15",
+        "RULE_VWAP_ALIGNMENT",
+        "PAT_EXPLICIT_SHORT_STRATEGY_SIGNAL"
+      ],
+      "features": [
+        0,
+        5.07,
+        -0.24533497177893548,
+        1.568698705806363,
+        -0.2187784867821368,
+        1,
+        0,
+        0.4599999999999878,
+        0,
+        2.721933786851983,
+        -1
+      ],
+      "committeeDecisionId": "comm_1794981701179_s6l2f",
+      "agentDecisionIds": [
+        "dec_hunter_1794981701179_bb1kd",
+        "dec_bear_1794981701179_g175c",
+        "comm_1794981701179_s6l2f"
+      ],
+      "stateRevision": 1295494,
+      "lineageStatus": "COMPLIANT",
+      "history": [
+        {
+          "time": 1794981701192,
+          "type": "OPEN",
+          "price": 0.10967,
+          "amount": 5
+        }
+      ],
+      "marketType": "FUTURES",
+      "resolvedMarketType": "FUTURES",
+      "requestedMode": "HYBRID",
+      "allowedDirections": "BOTH",
+      "scannerSide": "SHORT",
+      "strategySide": "SHORT",
+      "committeeSide": "SHORT",
+      "executionSide": "SHORT",
+      "gateDiagnostics": {
+        "dataCompleteness": true,
+        "spreadSafety": true,
+        "spreadGate": true,
+        "liquiditySafety": true,
+        "volumeGate": true,
+        "strictLiquidityWouldBlock": false,
+        "fundingSafety": true,
+        "fundingGate": true,
+        "strategy_ADAPTIVE_DYNAMIC": true,
+        "sideInvariantMatch": true,
+        "directionAllowed": true,
+        "patternNotBlacklisted": true,
+        "confidenceGate": true
+      },
+      "sourcePath": "MAIN_VIRTUAL",
+      "configVersion": "a2e696c0-aca42b2b",
+      "buildId": "a2e696c0",
+      "processStartedAt": 1794981170976,
+      "featuresVersion": 2,
+      "entryDiagnostics": {
+        "indicatorsSource": "OHLCV",
+        "dataQuality": "REAL",
+        "estimatedFields": [],
+        "featuresVersion": 2,
+        "features": [
+          0,
+          5.07,
+          -0.24533497177893548,
+          1.568698705806363,
+          -0.2187784867821368,
+          1,
+          0,
+          0.4599999999999878,
+          0,
+          2.721933786851983,
+          -1
+        ],
+        "featuresHadIndicators": true,
+        "featuresV2": [
+          0,
+          5.07,
+          -0.24533497177893548,
+          1.568698705806363,
+          -0.2187784867821368,
+          0,
+          0,
+          0.4599999999999878,
+          0,
+          2.721933786851983,
+          -1
+        ],
+        "featuresV2HadIndicators": true,
+        "featuresV2KeyUsed": "AINUSDT",
+        "quantPV2": null,
+        "aiScoreRaw": 89,
+        "kbPenalty": 0,
+        "kbPenaltyCapped": 0,
+        "kbBonus": 0,
+        "quantP": 0.9680903314921255,
+        "aiScoreFinal": 89,
+        "volume24h": 4914600.385,
+        "volumeSpike": 0.78,
+        "marketRegime": "RANGING_FLAT",
+        "cellVerdict": {
+          "cellKey": "Ложный пробой (VWAP Reclaim)|SHORT|RANGING_FLAT",
+          "level": "none",
+          "n": 3,
+          "verdict": "NEUTRAL",
+          "adjustment": 0
+        },
+        "shadow": {
+          "regimeReal": "RANGING_FLAT",
+          "wouldBlockEstimatedFeatures": false,
+          "pSideAware": 0.9680903314921255,
+          "pAdjustmentWouldBeZero": true,
+          "strictLiquidityWouldBlock": false
+        }
+      },
+      "lastAliveAt": 1794982182408,
+      "currentPrice": 0.10957,
+      "highestPrice": 0.10984,
+      "lowestPrice": 0.10957,
+      "maxReachedUnleveragedPnl": 0.09118263882557022,
+      "slViolationSeconds": 0,
+      "lastAiCheck": 1794982092684,
+      "aiAdvice": "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
+      "maxReachedPnl": 0.05470958329534466,
+      "userId": "polyakovats3110@gmail.com"
     }
   ],
   "knowledge": [
@@ -23304,15 +22125,6 @@
   ],
   "agentExchangeLogs": [
     {
-      "id": "el_1792394080510_2jhvo",
-      "timestamp": 1792394080510,
-      "fromAgent": "EXPERT",
-      "toAgent": "RETROSPECTIVE",
-      "message": "Приняты адаптивные ретроспективные корректировки",
-      "details": "Экспертные инструкции обновлены: Внедрить обязательное использование скользящих лимитных заявок (Pegged/Post-Only) для защиты от рыно...",
-      "type": "success"
-    },
-    {
       "id": "el_1792395029164_3f3m3",
       "timestamp": 1792395029164,
       "fromAgent": "RETROSPECTIVE",
@@ -24202,11 +23014,20 @@
       "message": "Ретроспективное совещание завершено",
       "details": "Все агенты подтвердили стабильность торговых показателей и соответствие риск-лимитам.",
       "type": "success"
+    },
+    {
+      "id": "el_1794981351907_gqnbk",
+      "timestamp": 1794981351907,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "ALL",
+      "message": "Ретроспективное совещание завершено",
+      "details": "Все агенты подтвердили стабильность торговых показателей и соответствие риск-лимитам.",
+      "type": "success"
     }
   ],
   "aiCommitteeHistory": [],
-  "stateRevision": 1295489,
-  "updatedAt": 1794890385626,
+  "stateRevision": 1295512,
+  "updatedAt": 1794982182409,
   "aiExpertTraderInstructionsHistory": [
     {
       "id": "inst_1792223010329_4wtk3",
@@ -24350,44 +23171,12 @@
     }
   ],
   "optimizerSummary": {
-    "timestamp": 1794889635691,
+    "timestamp": 1794981351907,
     "winRate": 0,
     "summary": "ИИ недоступен, ретроспектива пропущена",
     "expertModifications": ""
   },
   "aiPerformanceReports": [
-    {
-      "id": "rep_1792383094380_h4qyr",
-      "timestamp": 1792383094380,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 28.26086956521739,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 25,
-          "count": 4,
-          "profitCount": 1,
-          "totalPnl": -0.5738947236118122
-        },
-        "week": {
-          "winRate": 28.26086956521739,
-          "count": 46,
-          "profitCount": 13,
-          "totalPnl": -5.507478248684062
-        },
-        "month": {
-          "winRate": 33.74083129584352,
-          "count": 409,
-          "profitCount": 138,
-          "totalPnl": -28.168915437011034
-        }
-      }
-    },
     {
       "id": "rep_1792384024537_9f4o4",
       "timestamp": 1792384024537,
@@ -25970,6 +24759,38 @@
           "count": 36,
           "profitCount": 14,
           "totalPnl": -0.7848077418938331
+        }
+      }
+    },
+    {
+      "id": "rep_1794981351908_fv162",
+      "timestamp": 1794981351908,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 41.66666666666667,
+      "winRateAfter": 0,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Оптимизация пропущена из-за недоступности ИИ",
+      "impactAssessment": "Нейтрально",
+      "historicalSelfReview": "Пропущено",
+      "stats": {
+        "day": {
+          "winRate": 0,
+          "count": 0,
+          "profitCount": 0,
+          "totalPnl": 0
+        },
+        "week": {
+          "winRate": 41.66666666666667,
+          "count": 12,
+          "profitCount": 5,
+          "totalPnl": 0.3036334674254527
+        },
+        "month": {
+          "winRate": 40.625,
+          "count": 32,
+          "profitCount": 13,
+          "totalPnl": -0.21091301828202133
         }
       }
     }

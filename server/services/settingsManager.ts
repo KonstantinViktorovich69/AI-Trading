@@ -120,6 +120,8 @@ export interface GlobalSettings {
   btcFreshnessFastLoopEnabled?: boolean;
   aiDailyBudgetEnabled?: boolean;
   aiDailyBudgetCalls?: number;
+  evidenceUsesArchive?: boolean;
+  disabledPatterns?: string[];
 }
 
 export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPERT_INSTRUCTIONS): GlobalSettings {
@@ -185,7 +187,9 @@ export function createDefaultGlobalSettings(instructions = DEFAULT_BASELINE_EXPE
     exchangeWsObserveOnly: false,
     btcFreshnessFastLoopEnabled: false,
     aiDailyBudgetEnabled: false,
-    aiDailyBudgetCalls: 20
+    aiDailyBudgetCalls: 20,
+    evidenceUsesArchive: false,
+    disabledPatterns: []
   };
 }
 

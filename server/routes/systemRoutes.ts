@@ -8,6 +8,7 @@ import { buildExitPolicyConfig } from '../services/virtualTradeEngine.ts';
 import { getCostModel } from '../services/costModel.ts';
 import { buildEvidenceReport } from '../services/evidenceReport.ts';
 import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
+import { resolveEvidenceTrades } from '../services/tradeArchive.ts';
 import { isEntryPaused, getMarketDataFreshness } from '../services/entryGate.ts';
 import { getLastLoopTickTimes } from '../services/heartbeatService.ts';
 import { getAllLearningCells } from '../services/learningCellService.ts';
@@ -455,7 +456,9 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         exchangeWsObserveOnly: !!globalSettings.exchangeWsObserveOnly,
         btcFreshnessFastLoopEnabled: !!globalSettings.btcFreshnessFastLoopEnabled,
         aiDailyBudgetEnabled: !!globalSettings.aiDailyBudgetEnabled,
-        aiDailyBudgetCalls: Number(globalSettings.aiDailyBudgetCalls) || 20
+        aiDailyBudgetCalls: Number(globalSettings.aiDailyBudgetCalls) || 20,
+        evidenceUsesArchive: !!globalSettings.evidenceUsesArchive,
+        disabledPatterns: Array.isArray(globalSettings.disabledPatterns) ? globalSettings.disabledPatterns : []
       };
 
       const versions = {
@@ -533,7 +536,8 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
 
       const openVirtual = virtualTrades.filter(t => t && t.status === 'OPEN' && !t.isReal).length;
       const openReal = virtualTrades.filter(t => t && t.status === 'OPEN' && t.isReal).length;
-      const evidenceGate = evaluateEvidenceGate(virtualTrades, globalSettings, now);
+      const evidenceTrades = resolveEvidenceTrades(virtualTrades, globalSettings);
+      const evidenceGate = evaluateEvidenceGate(evidenceTrades, globalSettings, now);
 
       const flags = {
         regimeUsesRealBtcCandles: !!globalSettings.regimeUsesRealBtcCandles,
@@ -556,7 +560,9 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         exchangeWsObserveOnly: !!globalSettings.exchangeWsObserveOnly,
         btcFreshnessFastLoopEnabled: !!globalSettings.btcFreshnessFastLoopEnabled,
         aiDailyBudgetEnabled: !!globalSettings.aiDailyBudgetEnabled,
-        aiDailyBudgetCalls: Number(globalSettings.aiDailyBudgetCalls) || 20
+        aiDailyBudgetCalls: Number(globalSettings.aiDailyBudgetCalls) || 20,
+        evidenceUsesArchive: !!globalSettings.evidenceUsesArchive,
+        disabledPatterns: Array.isArray(globalSettings.disabledPatterns) ? globalSettings.disabledPatterns : []
       };
 
       res.json({

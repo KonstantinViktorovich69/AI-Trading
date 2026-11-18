@@ -332,6 +332,24 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
       const v = Number(req.body.aiDailyBudgetCalls);
       if (Number.isFinite(v) && v >= 1 && v <= 10000) globalSettings.aiDailyBudgetCalls = Math.round(v);
     }
+    if (req.body.evidenceUsesArchive !== undefined) {
+      globalSettings.evidenceUsesArchive = !!req.body.evidenceUsesArchive;
+    }
+    if (req.body.disabledPatterns !== undefined && Array.isArray(req.body.disabledPatterns)) {
+      const seenPatterns = new Set<string>();
+      const cleanedPatterns: string[] = [];
+      for (const raw of req.body.disabledPatterns) {
+        if (typeof raw !== 'string') continue;
+        const trimmed = raw.trim();
+        if (!trimmed) continue;
+        const key = trimmed.toLowerCase();
+        if (!seenPatterns.has(key)) {
+          seenPatterns.add(key);
+          cleanedPatterns.push(trimmed);
+        }
+      }
+      globalSettings.disabledPatterns = cleanedPatterns;
+    }
     const exitFields = [
       'exitTrailingTriggerPct', 'exitTrailingDistancePct', 'exitEnableTrailingStop',
       'exitMinPttpActivationNetPnlPct', 'exitMinPttpPeakNetPnlPct', 'exitPttpTrailingDropPct',

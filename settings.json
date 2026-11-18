@@ -1,6 +1,6 @@
 {
-  "virtualBalance": 85.77,
-  "startOfDayBalance": 85.48,
+  "virtualBalance": 80.77,
+  "startOfDayBalance": 85.77,
   "telegramBots": [],
   "discordWebhooks": [],
   "exchangeApiConfig": {
@@ -92,8 +92,8 @@
     "totalLearnedTrades": 36,
     "lastRetrained": 1794889463483
   },
-  "stateRevision": 26,
-  "updatedAt": 1794890386879,
+  "stateRevision": 27,
+  "updatedAt": 1794981701609,
   "regimeUsesRealBtcCandles": true,
   "blockEntriesOnEstimatedFeatures": true,
   "modelSideAwareFeatures": true,

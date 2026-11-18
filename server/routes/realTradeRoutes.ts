@@ -4,6 +4,7 @@ import ccxt from 'ccxt';
 import { normalizeExchangeId, DEFAULT_EXCHANGE } from '../services/activeExchange.ts';
 import { isEntryPaused } from '../services/entryGate.ts';
 import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
+import { resolveEvidenceTrades } from '../services/tradeArchive.ts';
 import { getCostModel, getShadowTakerCostModel } from '../services/costModel.ts';
 
 export interface RealTradeRouterContext {
@@ -72,7 +73,7 @@ export function createRealTradeRouter(ctx: RealTradeRouterContext): Router {
     const globalSettings = ctx.getGlobalSettings();
 
     // T7.1: Evidence Gate for real trading orders
-    const evidenceGate = evaluateEvidenceGate(allTrades, globalSettings);
+    const evidenceGate = evaluateEvidenceGate(resolveEvidenceTrades(allTrades, globalSettings), globalSettings);
     if (!evidenceGate.passed) {
       console.log(`[REAL TRADE ROUTE] Blocked manual real open for ${symbol}: ${evidenceGate.reason}`);
       return res.status(403).json({

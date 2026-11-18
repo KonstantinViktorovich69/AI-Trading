@@ -187,6 +187,7 @@ export interface ScannerPatternEvalInput {
   open?: number;
   tickerVwap?: number;
   rawIndicators?: any;
+  disabledPatterns?: string[];
 }
 
 export interface ScannerPatternEvalResult {
@@ -357,6 +358,22 @@ export function evaluateScannerPatternPure(input: ScannerPatternEvalInput): Scan
     }
   }
 
+  if (
+    matchedPattern !== 'None' &&
+    Array.isArray(input.disabledPatterns) &&
+    input.disabledPatterns.length > 0
+  ) {
+    const normalizedMatched = matchedPattern.trim().toLowerCase();
+    const isDisabled = input.disabledPatterns.some(
+      (p) => typeof p === 'string' && p.trim().length > 0 && p.trim().toLowerCase() === normalizedMatched
+    );
+    if (isDisabled) {
+      matchedPattern = 'None';
+      signalSide = 'NEUTRAL';
+      scoreBonus = 0;
+    }
+  }
+
   return {
     matchedPattern,
     signalSide,
@@ -513,7 +530,8 @@ export async function executeUpdateSignalsCache(ctx: MarketSignalScannerContext)
         volume,
         open: ticker?.open,
         tickerVwap: ticker?.vwap,
-        rawIndicators
+        rawIndicators,
+        disabledPatterns: Array.isArray(globalSettings.disabledPatterns) ? globalSettings.disabledPatterns : undefined
       });
 
       const blockLocks: string[] = [];

@@ -5,6 +5,7 @@ import { SignalPerformanceAnalyticsService } from '../services/signalPerformance
 import { getCostModel, getShadowTakerCostModel } from '../services/costModel.ts';
 import { isEntryPaused } from '../services/entryGate.ts';
 import { evaluateEvidenceGate } from '../services/evidenceGate.ts';
+import { resolveEvidenceTrades } from '../services/tradeArchive.ts';
 
 export interface PaperTradeRouterContext {
   getVirtualTrades: () => any[];
@@ -437,7 +438,7 @@ export function createPaperTradeRouter(ctx: PaperTradeRouterContext): Router {
       let finalEntryPrice = entryPrice;
       if (isReal) {
         // T7.1: Evidence Gate for real trading entries (virtual entries bypass this)
-        const evidenceGate = evaluateEvidenceGate(virtualTrades, globalSettings);
+        const evidenceGate = evaluateEvidenceGate(resolveEvidenceTrades(virtualTrades, globalSettings), globalSettings);
         if (!evidenceGate.passed) {
           console.log(`[REAL TRADE ROUTE] Blocked paper-trade isReal open for ${symbol}: ${evidenceGate.reason}`);
           return res.status(403).json({

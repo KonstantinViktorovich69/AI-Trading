@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
-import { partitionTradesForArchive, appendTradesToArchive } from './tradeArchive.ts';
+import {
+  partitionTradesForArchive,
+  appendTradesToArchive,
+  readArchivedTrades,
+  mergeTradesWithArchive,
+  resolveEvidenceTrades
+} from './tradeArchive.ts';
 
 describe('tradeArchive', () => {
   describe('partitionTradesForArchive', () => {
@@ -111,4 +118,78 @@ describe('tradeArchive', () => {
       spyAppend.mockRestore();
     });
   });
+
+  describe('readArchivedTrades, mergeTradesWithArchive, resolveEvidenceTrades', () => {
+    it('reads valid JSONL lines, ignores blank/corrupt lines, and handles missing files gracefully', () => {
+      expect(readArchivedTrades(path.join(os.tmpdir(), `missing_${Date.now()}.jsonl`))).toEqual([]);
+
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ta-read-'));
+      try {
+        const filePath = path.join(tmpDir, 'archive.jsonl');
+        fs.writeFileSync(
+          filePath,
+          [
+            JSON.stringify({ id: 'A1', status: 'CLOSED', pnlPercent: 1.5 }),
+            '',
+            '{bad json line',
+            JSON.stringify({ id: 'A2', status: 'CLOSED', pnlPercent: -0.5 }),
+            '   '
+          ].join('\n'),
+          'utf8'
+        );
+
+        const parsed = readArchivedTrades(filePath);
+        expect(parsed).toHaveLength(2);
+        expect(parsed.map((t) => t.id)).toEqual(['A1', 'A2']);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('merges DB and archive with id deduplication where live DB overwrites archived record', () => {
+      const archived = [
+        { id: 'T1', pnlPercent: 1.0, source: 'archive' },
+        { id: 'T2', pnlPercent: 2.0, source: 'archive' }
+      ];
+      const live = [
+        { id: 'T2', pnlPercent: 2.5, source: 'db' },
+        { id: 'T3', pnlPercent: -0.4, source: 'db' }
+      ];
+
+      const merged = mergeTradesWithArchive(live, archived);
+      expect(merged).toHaveLength(3);
+      const t2 = merged.find((t) => t.id === 'T2');
+      expect(t2?.source).toBe('db');
+      expect(t2?.pnlPercent).toBe(2.5);
+    });
+
+    it('returns live trades only when evidenceUsesArchive is false, and DB union archive when true', () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ta-resolve-'));
+      try {
+        const archivePath = path.join(tmpDir, 'archive.jsonl');
+        fs.writeFileSync(
+          archivePath,
+          [
+            JSON.stringify({ id: 'ARC-1', status: 'CLOSED' }),
+            JSON.stringify({ id: 'ARC-1', status: 'CLOSED' }),
+            JSON.stringify({ id: 'SHARED', status: 'CLOSED', from: 'archive' })
+          ].join('\n') + '\n',
+          'utf8'
+        );
+
+        const live = [{ id: 'SHARED', status: 'CLOSED', from: 'live' }, { id: 'DB-1', status: 'CLOSED' }];
+
+        const disabledRes = resolveEvidenceTrades(live, { evidenceUsesArchive: false }, archivePath);
+        expect(disabledRes).toBe(live);
+
+        const enabledRes = resolveEvidenceTrades(live, { evidenceUsesArchive: true }, archivePath);
+        expect(enabledRes).toHaveLength(3);
+        expect(enabledRes.find((t) => t.id === 'SHARED')?.from).toBe('live');
+        expect(enabledRes.map((t) => t.id).sort()).toEqual(['ARC-1', 'DB-1', 'SHARED']);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+  });
 });
+

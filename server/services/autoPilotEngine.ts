@@ -21,6 +21,7 @@ import { computeQuantFeaturesV2 } from './quantFeaturesV2.ts';
 import { calculateProbabilityV2IfAccepted } from './quantModelV2.ts';
 import { evaluateSessionFilter } from './sessionTradingService.ts';
 import { evaluateEvidenceGate } from './evidenceGate.ts';
+import { resolveEvidenceTrades } from './tradeArchive.ts';
 
 export interface AutoPilotEngineDependencies {
   getGlobalSettings: () => any;
@@ -1349,7 +1350,7 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
             const isOpeningInProgress = symbolsUndergoingRealOpen.has(normalizedSymbol);
 
             if (isRealScoreSatisfied && !isRealLimitReached && !isSameDirRealLimitReached && !existingRealAutoTrade && !recentlyClosedRealAuto && isEntryConf && !autopilotFailedSymbols.has(symbol.toUpperCase().trim()) && !isOpeningInProgress) {
-                const evidenceGate = evaluateEvidenceGate(virtualTrades, globalSettings);
+                const evidenceGate = evaluateEvidenceGate(resolveEvidenceTrades(virtualTrades, globalSettings), globalSettings);
                 if (!evidenceGate.passed) {
                     incFunnel('autopilot', 'evidence_gate_blocked', symbol);
                     console.log(`[REAL AUTOPILOT] Trade for ${symbol} blocked by ${evidenceGate.reason}`);

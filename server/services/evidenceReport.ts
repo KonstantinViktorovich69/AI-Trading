@@ -12,6 +12,7 @@ import { extractPatternFromTrade, isPatternProtected } from './signalEngine.ts';
 import { SignalPerformanceAnalyticsService } from './signalPerformanceAnalyticsService.ts';
 import { writeJsonAtomically } from './selfLearningGuard.ts';
 import { evaluateEvidenceGate, type EvidenceGateResult } from './evidenceGate.ts';
+import { resolveEvidenceTrades } from './tradeArchive.ts';
 
 export interface CohortStats {
   n: number;
@@ -203,9 +204,10 @@ export function buildEvidenceReport(
     writeSnapshot?: boolean;
     reportsDir?: string;
     nowTs?: number;
+    archiveFilePath?: string;
   } = {}
 ): EvidenceReport {
-  const safeTrades = Array.isArray(trades) ? trades : [];
+  const safeTrades = resolveEvidenceTrades(Array.isArray(trades) ? trades : [], settings, opts.archiveFilePath);
   const nowTs = opts.nowTs ?? Date.now();
   const dateUtc = new Date(nowTs).toISOString().split('T')[0];
 

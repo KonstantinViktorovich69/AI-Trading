@@ -303,4 +303,59 @@ describe('Settings Router Security Tests', () => {
     // In-memory cachedDB must NOT be modified
     expect(cachedDB.settings.exchangeApiConfig.apiKey).toBe('secret-export-key');
   });
+
+  it('POST /settings persists evidenceUsesArchive & sanitized disabledPatterns and GET /effective-config exposes them', async () => {
+    const realSettings: any = {
+      evidenceUsesArchive: false,
+      disabledPatterns: []
+    };
+
+    const settingsCtx: Partial<SettingsRouterContext> = {
+      getGlobalSettings: vi.fn().mockReturnValue(realSettings),
+      getAutopilotFailedSymbols: vi.fn().mockReturnValue(new Set()),
+      getLastSanitizationStatus: vi.fn().mockReturnValue({ sanitized: false }),
+      saveSettings: vi.fn()
+    };
+
+    const settingsRouter = createSettingsRouter(settingsCtx as SettingsRouterContext);
+    const postSettingsHandler = getHandler(settingsRouter, '/settings', 'post');
+    const res1 = createMockRes();
+
+    await postSettingsHandler({
+      body: {
+        evidenceUsesArchive: true,
+        disabledPatterns: ['  Pattern One ', '', 'pattern one', 123, 'Pattern Two']
+      }
+    } as any, res1);
+
+    expect(realSettings.evidenceUsesArchive).toBe(true);
+    expect(realSettings.disabledPatterns).toEqual(['Pattern One', 'Pattern Two']);
+    expect(res1.jsonData.data.evidenceUsesArchive).toBe(true);
+    expect(res1.jsonData.data.disabledPatterns).toEqual(['Pattern One', 'Pattern Two']);
+
+    const systemRouter = createSystemRouter({
+      getGlobalSettings: () => realSettings,
+      getVirtualTrades: () => [],
+      getKnowledgeBase: () => [],
+      getCachedDB: () => ({}),
+      requestDBSave: vi.fn(),
+      streamEmitter: { emit: vi.fn(() => true) },
+      queryStructuredLogs: () => ({ logs: [], total: 0 }),
+      getCurrentExchangePingMs: () => 10,
+      getExchangePingHistory: () => [],
+      getProlivPeaks: () => [],
+      getAiCommitteeCache: () => ({}),
+      getSignalsCache: () => ({}),
+      getPendingFrontendAiTasks: () => [],
+      setPendingFrontendAiTasks: vi.fn()
+    });
+    const effectiveConfigHandler = getHandler(systemRouter, '/system/effective-config', 'get');
+    const res2 = createMockRes();
+
+    await effectiveConfigHandler({} as any, res2);
+    expect(res2.jsonData.success).toBe(true);
+    expect(res2.jsonData.flags.evidenceUsesArchive).toBe(true);
+    expect(res2.jsonData.flags.disabledPatterns).toEqual(['Pattern One', 'Pattern Two']);
+  });
 });
+

@@ -43,6 +43,16 @@ const FALLBACK_TOP30_SYMBOLS = [
   'ASTERUSDT', 'BZUSDT', 'THETAUSDT', 'DOTUSDT', 'AKEUSDT'
 ];
 
+// Fixed liquid benchmark universe (independent of current 24h turnover spikes to measure survivorship/recency bias)
+const FIXED_CONTROL_SYMBOLS = [
+  'BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'BNBUSDT',
+  'DOGEUSDT', 'ADAUSDT', 'AVAXUSDT', 'LINKUSDT', 'LTCUSDT',
+  'BCHUSDT', 'TRXUSDT', 'DOTUSDT', 'ATOMUSDT', 'UNIUSDT',
+  'SUIUSDT', 'XLMUSDT', 'XMRUSDT', 'HYPEUSDT', 'ZECUSDT'
+];
+
+const USE_FIXED_UNIVERSE = process.argv.includes('--fixed-universe');
+
 const CACHE_DIR = path.resolve(process.cwd(), 'data', 'backtest_cache');
 const AMBIGUOUS_1M_SLICE_CACHE_FILE = path.join(CACHE_DIR, '1m_ambiguous_slices.json');
 const REPORT_JSON_OUT = path.resolve(process.cwd(), 'reports', 'diagnostics_2026-11-14', 'g7_backtest_summary.json');
@@ -662,64 +672,73 @@ function executeSingleTradeAtEntry(
 // Live config sensitivity: matches settings.json (conservative, costModel v2 0.16% RT),
 // autoPilotEngine.ts vol-capped leverage (5x -> 3x if vol>3.5 or |24h|>=4 -> 2x if vol>=5 or |24h|>=7),
 // structuralExitLevels.ts SL [1.0%, 2.2%], and buildExitPolicyConfig (6% minNormalClose, bypassTP, Trail 14%/3%).
-function computeLiveSensitivityTradeNetPct(
-  trade: SimTrade,
+function computeLiveSensitivityCore(
+  symbol: string,
+  side: 'LONG' | 'SHORT',
+  entryCandleIdx: number,
+  range24hPct: number,
+  change24hPct: number,
+  atrAtEntry: number,
+  localHigh: number,
+  localLow: number,
   candles: Candle[],
   ambiguous1mSlices: Record<string, Candle[]>
 ): { leverage: number; slPct: number; netPctLiveCost016: number; netPctTaker020: number } {
   let leverage = 5;
-  if (trade.range24hPct >= 5.0 || Math.abs(trade.change24hPct) >= 7.0) {
+  if (range24hPct >= 5.0 || Math.abs(change24hPct) >= 7.0) {
     leverage = Math.min(4, Math.max(2, Math.round(leverage * 0.4))); // 2x
-  } else if (trade.range24hPct > 3.5 || Math.abs(trade.change24hPct) >= 4.0) {
+  } else if (range24hPct > 3.5 || Math.abs(change24hPct) >= 4.0) {
     leverage = Math.min(6, Math.max(2, Math.round(leverage * 0.6))); // 3x
   }
 
+  const entryCandle = candles[entryCandleIdx];
+  const entryPrice = entryCandle.open;
+  const entryTime = entryCandle.time;
+
   const slCalc = calculateStructuralStopLoss({
-    isSellSignal: trade.side === 'SHORT',
-    referencePrice: trade.entryPrice,
-    localLow5m: trade.localLow,
-    localHigh5m: trade.localHigh,
-    atr: trade.atrAtEntry,
+    isSellSignal: side === 'SHORT',
+    referencePrice: entryPrice,
+    localLow5m: localLow,
+    localHigh5m: localHigh,
+    atr: atrAtEntry,
     dAutoTp1OrDRealTp1: 1.35 // 30% of 4.50% TP4 floor
   });
   const slPct = slCalc.slPct;
   const tpPct = 0.045; // default structural TP4 floor in autoPilotEngine
 
-  const stopLoss = trade.side === 'LONG' ? trade.entryPrice * (1 - slPct) : trade.entryPrice * (1 + slPct);
-  const takeProfit = trade.side === 'LONG' ? trade.entryPrice * (1 + tpPct) : trade.entryPrice * (1 - tpPct);
+  const stopLoss = side === 'LONG' ? entryPrice * (1 - slPct) : entryPrice * (1 + slPct);
+  const takeProfit = side === 'LONG' ? entryPrice * (1 + tpPct) : entryPrice * (1 - tpPct);
 
-  const entryCandle = candles[trade.entryCandleIdx];
   const snapshot: ExitTradeSnapshot = {
-    id: `live_sens_${trade.symbol}_${trade.entryTime}`,
-    symbol: trade.symbol,
-    side: trade.side,
-    entryPrice: trade.entryPrice,
+    id: `live_sens_${symbol}_${entryTime}`,
+    symbol,
+    side,
+    entryPrice,
     highestPrice: entryCandle.high,
     lowestPrice: entryCandle.low,
     amount: 100,
     leverage,
     stopLoss,
     takeProfit,
-    createdAt: trade.entryTime
+    createdAt: entryTime
   };
 
   let exitPrice = entryCandle.close;
-  let closed = false;
-  const maxBars = trade.timeframe === '15m' ? 24 * 4 + 2 : 24 * 60 + 5;
+  const maxBars = 24 * 4 + 2;
 
   const evalBar = (bar: Candle): boolean => {
     snapshot.highestPrice = Math.max(snapshot.highestPrice || bar.high, bar.high);
     snapshot.lowestPrice = Math.min(snapshot.lowestPrice || bar.low, bar.low);
     const activeSl = snapshot.stopLoss ?? stopLoss;
-    const slHit = trade.side === 'LONG' ? bar.low <= activeSl : bar.high >= activeSl;
-    const tpHit = trade.side === 'LONG' ? bar.high >= takeProfit : bar.low <= takeProfit;
+    const slHit = side === 'LONG' ? bar.low <= activeSl : bar.high >= activeSl;
+    const tpHit = side === 'LONG' ? bar.high >= takeProfit : bar.low <= takeProfit;
 
     if (slHit && tpHit) {
-      const slice = ambiguous1mSlices[`${trade.symbol}:${bar.time}`];
+      const slice = ambiguous1mSlices[`${symbol}:${bar.time}`];
       if (Array.isArray(slice) && slice.length > 0) {
         for (const sub of slice) {
-          const sSl = trade.side === 'LONG' ? sub.low <= activeSl : sub.high >= activeSl;
-          const sTp = trade.side === 'LONG' ? sub.high >= takeProfit : sub.low <= takeProfit;
+          const sSl = side === 'LONG' ? sub.low <= activeSl : sub.high >= activeSl;
+          const sTp = side === 'LONG' ? sub.high >= takeProfit : sub.low <= takeProfit;
           if (sSl) { exitPrice = activeSl; return true; }
           if (sTp) { exitPrice = takeProfit; return true; }
         }
@@ -745,20 +764,17 @@ function computeLiveSensitivityTradeNetPct(
   };
 
   if (!evalBar(entryCandle)) {
-    for (let k = trade.entryCandleIdx + 1; k < Math.min(candles.length, trade.entryCandleIdx + 1 + maxBars); k++) {
+    for (let k = entryCandleIdx + 1; k < Math.min(candles.length, entryCandleIdx + 1 + maxBars); k++) {
       const b = candles[k];
-      if (evalBar(b)) { closed = true; break; }
+      if (evalBar(b)) break;
       exitPrice = b.close;
     }
-  } else {
-    closed = true;
   }
-  void closed;
 
   const rawPct =
-    trade.side === 'SHORT'
-      ? ((trade.entryPrice - exitPrice) / trade.entryPrice) * 100
-      : ((exitPrice - trade.entryPrice) / trade.entryPrice) * 100;
+    side === 'SHORT'
+      ? ((entryPrice - exitPrice) / entryPrice) * 100
+      : ((exitPrice - entryPrice) / entryPrice) * 100;
 
   return {
     leverage,
@@ -768,12 +784,68 @@ function computeLiveSensitivityTradeNetPct(
   };
 }
 
+function getCachedLiveSensitivityOutcome(
+  ser: SymbolSeries,
+  side: 'LONG' | 'SHORT',
+  entryCandleIdx: number,
+  ambiguous1mSlices: Record<string, Candle[]>,
+  overrides?: { range24hPct: number; change24hPct: number; atrAtEntry: number; localHigh: number; localLow: number }
+): { leverage: number; slPct: number; netPctLiveCost016: number; netPctTaker020: number } {
+  const key = `${side}:${entryCandleIdx}`;
+  let hit = ser.liveOutcomeCache.get(key);
+  if (!hit) {
+    const candles = ser.candles15;
+    let params = overrides;
+    if (!params) {
+      const sigIdx = Math.max(0, entryCandleIdx - 1);
+      const stats24 = computeBar24hStats(candles, sigIdx);
+      const swingSlice = candles.slice(Math.max(0, sigIdx - 7), sigIdx + 1);
+      const localHigh = Math.max(...swingSlice.map(c => c.high));
+      const localLow = Math.min(...swingSlice.map(c => c.low));
+      if (!ser.atr15) {
+        const values = ATR.calculate({
+          high: candles.map(c => c.high),
+          low: candles.map(c => c.low),
+          close: candles.map(c => c.close),
+          period: 14
+        });
+        ser.atr15 = { values, offset: candles.length - values.length };
+      }
+      const atrIdx = sigIdx - ser.atr15.offset;
+      const atrAtEntry = atrIdx >= 0 ? ser.atr15.values[atrIdx] : candles[entryCandleIdx].open * 0.015;
+      params = {
+        range24hPct: stats24.range24h,
+        change24hPct: stats24.change24h,
+        atrAtEntry,
+        localHigh,
+        localLow
+      };
+    }
+    hit = computeLiveSensitivityCore(
+      ser.symbol,
+      side,
+      entryCandleIdx,
+      params.range24hPct,
+      params.change24hPct,
+      params.atrAtEntry,
+      params.localHigh,
+      params.localLow,
+      candles,
+      ambiguous1mSlices
+    );
+    ser.liveOutcomeCache.set(key, hit);
+  }
+  return hit;
+}
+
 interface SymbolSeries {
   symbol: string;
   candles15: Candle[];
   candles1: Candle[];
   idx1m: { times: number[]; candles: Candle[] } | null;
   outcomeCache: Map<string, ExecOutcome>;
+  liveOutcomeCache: Map<string, { leverage: number; slPct: number; netPctLiveCost016: number; netPctTaker020: number }>;
+  atr15?: { values: number[]; offset: number };
   cond24hPool15m?: { isAll: number[]; oosAll: number[]; all: number[] };
 }
 
@@ -1111,6 +1183,99 @@ function runRandomBaselineMonteCarlo(
   return { p50, p95, mean };
 }
 
+function runLiveCondVolRandomBaselineMonteCarlo(
+  subset: SimTrade[],
+  seriesBySym: Map<string, SymbolSeries>,
+  side: 'LONG' | 'SHORT',
+  splitTime: number,
+  seedKey: string,
+  ambiguous1mSlices: Record<string, Candle[]>
+): { mean_016: number; p95_016: number; mean_020: number; p95_020: number } {
+  if (subset.length === 0) return { mean_016: 0, p95_016: 0, mean_020: 0, p95_020: 0 };
+
+  const countBySym = new Map<string, number>();
+  for (const t of subset) {
+    countBySym.set(t.symbol, (countBySym.get(t.symbol) || 0) + 1);
+  }
+
+  const candidateIndicesBySym = new Map<string, number[]>();
+  for (const [sym] of countBySym.entries()) {
+    const ser = seriesBySym.get(sym);
+    if (!ser) continue;
+    const candles = ser.candles15;
+    const idxs: number[] = [];
+    const fallbackIdxs: number[] = [];
+    for (let idx = 97; idx < candles.length - 2; idx++) {
+      if (candles[idx].time <= splitTime) continue;
+      fallbackIdxs.push(idx);
+      const sigIdx = idx - 1;
+      const open24 = candles[Math.max(0, sigIdx - 95)].open;
+      const closeSig = candles[sigIdx].close;
+      const ch24 = open24 > 0 ? Math.abs((closeSig - open24) / open24) * 100 : 0;
+      if (ch24 >= 3.0) idxs.push(idx);
+    }
+    candidateIndicesBySym.set(sym, idxs.length >= 10 ? idxs : fallbackIdxs);
+  }
+
+  const rng = createMulberry32(hashString(`MC_LIVE_VOL3_${seedKey}`));
+  const simMeans016: number[] = new Array(MONTE_CARLO_RUNS);
+  const simMeans020: number[] = new Array(MONTE_CARLO_RUNS);
+
+  for (let r = 0; r < MONTE_CARLO_RUNS; r++) {
+    let total016 = 0;
+    let total020 = 0;
+    let totalN = 0;
+
+    for (const [sym, k] of countBySym.entries()) {
+      const ser = seriesBySym.get(sym);
+      const pool = candidateIndicesBySym.get(sym);
+      if (!ser || !pool || pool.length === 0) continue;
+      const candles = ser.candles15;
+
+      const chosen = new Array<number>(k);
+      for (let j = 0; j < k; j++) {
+        chosen[j] = pool[Math.floor(rng() * pool.length)];
+      }
+      chosen.sort((a, b) => a - b);
+
+      let busyUntil = 0;
+      for (const entryIdx of chosen) {
+        let pickIdx = entryIdx;
+        if (candles[entryIdx].time <= busyUntil) {
+          let found = -1;
+          for (let tries = 0; tries < 5; tries++) {
+            const alt = pool[Math.floor(rng() * pool.length)];
+            if (candles[alt].time > busyUntil) {
+              found = alt;
+              break;
+            }
+          }
+          if (found === -1) continue;
+          pickIdx = found;
+        }
+        const ls = getCachedLiveSensitivityOutcome(ser, side, pickIdx, ambiguous1mSlices);
+        // Estimate non-overlap horizon via 6h conservative spacing for fast random loop
+        busyUntil = candles[pickIdx].time + 6 * 3600 * 1000;
+        total016 += ls.netPctLiveCost016;
+        total020 += ls.netPctTaker020;
+        totalN++;
+      }
+    }
+
+    simMeans016[r] = totalN > 0 ? total016 / totalN : 0;
+    simMeans020[r] = totalN > 0 ? total020 / totalN : 0;
+  }
+
+  const sorted016 = [...simMeans016].sort((a, b) => a - b);
+  const sorted020 = [...simMeans020].sort((a, b) => a - b);
+  return {
+    mean_016: simMeans016.reduce((a, b) => a + b, 0) / MONTE_CARLO_RUNS,
+    p95_016: sorted016[Math.min(MONTE_CARLO_RUNS - 1, Math.floor(MONTE_CARLO_RUNS * 0.95))],
+    mean_020: simMeans020.reduce((a, b) => a + b, 0) / MONTE_CARLO_RUNS,
+    p95_020: sorted020[Math.min(MONTE_CARLO_RUNS - 1, Math.floor(MONTE_CARLO_RUNS * 0.95))]
+  };
+}
+
 function summarizeTrades(trades: SimTrade[], seedKey: string) {
   const n = trades.length;
   if (n === 0) {
@@ -1295,7 +1460,13 @@ async function main() {
   log('SL / TP & ExitPolicy | Struct SL [1.0%,2.2%], TP4>=4.5%, minClose=6%, bypassTP=true, Trail 14%/3%, timeoutProfit 18h@6%, cost=0.16% | Fixed SL 2% / TP 3%, minClose=4%, bypassTP=false, Trail=false, cost=0.20% | Tested below in J1.4 Live Sensitivity');
   log('');
 
-  const universe = await resolveTop30WeexSymbols(30);
+  const universe = USE_FIXED_UNIVERSE
+    ? {
+        symbols: FIXED_CONTROL_SYMBOLS,
+        source: `fixed liquid control universe (${FIXED_CONTROL_SYMBOLS.length} symbols)`,
+        topDetails: FIXED_CONTROL_SYMBOLS.map(symbol => ({ symbol, quoteVolume: 0 }))
+      }
+    : await resolveTop30WeexSymbols(30);
   log(`Universe (${universe.symbols.length}): ${universe.source}`);
   log(`Symbols: ${universe.symbols.join(', ')}`);
   log('');
@@ -1323,7 +1494,8 @@ async function main() {
         candles15: c15,
         candles1: c1,
         idx1m: c1.length > 0 ? build1mIndex(c1) : null,
-        outcomeCache: new Map()
+        outcomeCache: new Map(),
+        liveOutcomeCache: new Map()
       };
       seriesList.push(ser);
       seriesBySym.set(sym, ser);
@@ -1387,7 +1559,17 @@ async function main() {
   const summaryRows: any[] = [];
   const oosRowsForFdr: any[] = [];
   const oosPassingStrategies: any[] = [];
-  const liveSensitivityByGroup = new Map<string, { label: string; baseline020: number[]; live016: number[]; live020: number[]; levSum: number; slSum: number }>();
+  const liveSensitivityByGroup = new Map<string, {
+    label: string;
+    side: 'LONG' | 'SHORT';
+    splitTime: number;
+    subset: SimTrade[];
+    baseline020: number[];
+    live016: number[];
+    live020: number[];
+    levSum: number;
+    slSum: number;
+  }>();
 
   for (const engine of ['patternScannerService', 'marketSignalScanner'] as const) {
     for (const tf of ['15m', '1m'] as const) {
@@ -1473,7 +1655,7 @@ async function main() {
             stats.ci95[0] > 0 &&
             betterUncond;
 
-          // Live config sensitivity computation for OOS-40% & ALL
+          // Live config sensitivity computation for OOS-40% (15m)
           if (splitLabel === 'OOS-40%' && subset.length > 0 && tf === '15m') {
             const gKey = `${engine}:${patternName}:${side}`;
             const b020: number[] = [];
@@ -1483,7 +1665,13 @@ async function main() {
             let slSum = 0;
             for (const t of subset) {
               const ser = seriesBySym.get(t.symbol)!;
-              const ls = computeLiveSensitivityTradeNetPct(t, ser.candles15, ambigInfo.slices);
+              const ls = getCachedLiveSensitivityOutcome(ser, t.side, t.entryCandleIdx, ambigInfo.slices, {
+                range24hPct: t.range24hPct,
+                change24hPct: t.change24hPct,
+                atrAtEntry: t.atrAtEntry,
+                localHigh: t.localHigh,
+                localLow: t.localLow
+              });
               b020.push(t.leveragedNetPct020);
               l016.push(ls.netPctLiveCost016);
               l020.push(ls.netPctTaker020);
@@ -1492,6 +1680,9 @@ async function main() {
             }
             liveSensitivityByGroup.set(gKey, {
               label: gKey,
+              side,
+              splitTime,
+              subset,
               baseline020: b020,
               live016: l016,
               live020: l020,
@@ -1580,12 +1771,12 @@ async function main() {
   }
   log('');
 
-  // J1.4: Live Config Sensitivity Output
+  // J1.4: Live Config Sensitivity Output with CI95, tStat, FDR & Live-Geometry CondVol Monte Carlo Baseline
   log('--- J1.4: LIVE CONFIG SENSITIVITY RUN ON OOS-40% (15m) ---');
   log('Baseline v2: fixed 5x, SL 2.0%, TP 3.0%, minNormalAutoClose=4%, bypassTP=false, Trail=off, cost=0.20%');
   log('Live Approx: settings.json conservative vol-capped leverage (5x->3x/2x), Struct SL [1.0%,2.2%], TP4=4.5%, minNormalAutoClose=6%, bypassTP=true, Trail 14%/3%, timeoutProfit 18h@6%, cost=0.16% & 0.20%');
-  log('Group | n | AvgLev | AvgSL% | Base@0.20% | Live@0.16% (CostModel v2) | Live@0.20% (Taker) | Live WR@0.16% | Live Sum@0.16% | Live MaxDD@0.16%');
-  log('---|---:|---:|---:|---:|---:|---:|---:|---:|---:|');
+  log('Group | n | AvgLev | AvgSL% | Base@0.20% | Live@0.16% [CI95] | Live@0.20% [CI95] | t(0.20) | p_raw | p_Bonf32 | q_BH32 | LiveCondRandP95(0.16/0.20) | BeatRand(0.16/0.20) | Live WR@0.16% | MaxDD@0.16%');
+  log('---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---|---|---:|---:|');
   const liveSensitivityRows: any[] = [];
   for (const g of liveSensitivityByGroup.values()) {
     const n = g.baseline020.length;
@@ -1594,6 +1785,20 @@ async function main() {
     const l020S = summarizeValues(g.live020);
     const avgLev = g.levSum / n;
     const avgSlPct = (g.slSum / n) * 100;
+
+    const liveCi95_016 = bootstrapMeanCi95(g.live016, 2000, hashString(`LIVE_CI16_${g.label}`));
+    const liveCi95_020 = bootstrapMeanCi95(g.live020, 2000, hashString(`LIVE_CI20_${g.label}`));
+    const tTest016 = computeOneSampleTTest(g.live016);
+    const tTest020 = computeOneSampleTTest(g.live020);
+    const liveRand = runLiveCondVolRandomBaselineMonteCarlo(
+      g.subset,
+      seriesBySym,
+      g.side,
+      g.splitTime,
+      g.label,
+      ambigInfo.slices
+    );
+
     liveSensitivityRows.push({
       group: g.label,
       n,
@@ -1602,16 +1807,146 @@ async function main() {
       baselineMeanNet020Pct: Number(baseS.mean.toFixed(3)),
       liveMeanNet016Pct: Number(l016S.mean.toFixed(3)),
       liveMeanNet020Pct: Number(l020S.mean.toFixed(3)),
+      liveCi95_016: [Number(liveCi95_016[0].toFixed(3)), Number(liveCi95_016[1].toFixed(3))],
+      liveCi95_020: [Number(liveCi95_020[0].toFixed(3)), Number(liveCi95_020[1].toFixed(3))],
+      tStat_016: Number(tTest016.tStat.toFixed(3)),
+      tStat_020: Number(tTest020.tStat.toFixed(3)),
+      pOneSidedRaw_020: Number(tTest020.pOneSided.toFixed(6)),
+      pBonferroni32_020: Number(Math.min(1, tTest020.pOneSided * MULTIPLE_TESTING_M).toFixed(6)),
+      qBh32_020: 1,
+      liveCondVolRandMean016Pct: Number(liveRand.mean_016.toFixed(3)),
+      liveCondVolRandP95016Pct: Number(liveRand.p95_016.toFixed(3)),
+      liveCondVolRandMean020Pct: Number(liveRand.mean_020.toFixed(3)),
+      liveCondVolRandP95020Pct: Number(liveRand.p95_020.toFixed(3)),
+      betterThanLiveCondVolRand016: l016S.mean > liveRand.p95_016,
+      betterThanLiveCondVolRand020: l020S.mean > liveRand.p95_020,
       liveWr016Pct: Number(l016S.wr.toFixed(2)),
       liveSum016Pp: Number(l016S.sum.toFixed(2)),
       liveMaxDd016Pp: Number(l016S.maxDd.toFixed(2))
     });
+  }
+
+  // BH FDR q-values across liveSensitivityOosRows
+  const liveSortedByP = [...liveSensitivityRows].sort((a, b) => a.pOneSidedRaw_020 - b.pOneSidedRaw_020);
+  let minLiveBh32 = 1;
+  for (let idx = liveSortedByP.length - 1; idx >= 0; idx--) {
+    const rank = idx + 1;
+    const raw32 = (liveSortedByP[idx].pOneSidedRaw_020 * MULTIPLE_TESTING_M) / rank;
+    minLiveBh32 = Math.min(minLiveBh32, Math.min(1, raw32));
+    liveSortedByP[idx].qBh32_020 = Number(minLiveBh32.toFixed(6));
+  }
+
+  for (const row of liveSensitivityRows) {
     log(
-      `${g.label} | ${n} | ${avgLev.toFixed(2)}x | ${avgSlPct.toFixed(2)}% | ${baseS.mean.toFixed(2)}% | ` +
-      `${l016S.mean.toFixed(2)}% | ${l020S.mean.toFixed(2)}% | ${l016S.wr.toFixed(1)}% | ${l016S.sum.toFixed(1)} | ${l016S.maxDd.toFixed(1)}`
+      `${row.group} | ${row.n} | ${row.avgLeverage.toFixed(2)}x | ${row.avgSlPct.toFixed(2)}% | ${row.baselineMeanNet020Pct.toFixed(2)}% | ` +
+      `${row.liveMeanNet016Pct.toFixed(2)}% [${row.liveCi95_016[0].toFixed(2)}, ${row.liveCi95_016[1].toFixed(2)}] | ` +
+      `${row.liveMeanNet020Pct.toFixed(2)}% [${row.liveCi95_020[0].toFixed(2)}, ${row.liveCi95_020[1].toFixed(2)}] | ` +
+      `${row.tStat_020.toFixed(2)} | ${row.pOneSidedRaw_020.toFixed(5)} | ${row.pBonferroni32_020.toFixed(5)} | ${row.qBh32_020.toFixed(5)} | ` +
+      `${row.liveCondVolRandP95016Pct.toFixed(2)}% / ${row.liveCondVolRandP95020Pct.toFixed(2)}% | ` +
+      `${row.betterThanLiveCondVolRand016 ? 'да' : 'нет'}/${row.betterThanLiveCondVolRand020 ? 'да' : 'нет'} | ` +
+      `${row.liveWr016Pct.toFixed(1)}% | ${row.liveMaxDd016Pp.toFixed(1)}`
     );
   }
   log('');
+
+  // J1.7: Fixed Control Universe (20 established liquid perpetuals, independent of current 24h turnover recency bias)
+  let fixedControlComparison: any = null;
+  if (!USE_FIXED_UNIVERSE) {
+    const missingFixed = FIXED_CONTROL_SYMBOLS.filter(s => !seriesBySym.has(s));
+    for (let i = 0; i < missingFixed.length; i += 5) {
+      const chunk = missingFixed.slice(i, i + 5);
+      const loaded = await Promise.all(
+        chunk.map(async sym => ({
+          sym,
+          c15: await loadOrDownloadCandles(sym, '15m', DAYS_15M, false),
+          c1: await loadOrDownloadCandles(sym, '1m', DAYS_1M, true)
+        }))
+      );
+      for (const { sym, c15, c1 } of loaded) {
+        if (c15.length < 150) continue;
+        seriesBySym.set(sym, {
+          symbol: sym,
+          candles15: c15,
+          candles1: c1,
+          idx1m: c1.length > 0 ? build1mIndex(c1) : null,
+          outcomeCache: new Map(),
+          liveOutcomeCache: new Map()
+        });
+      }
+    }
+
+    const fixedTrades: SimTrade[] = [];
+    for (const sym of FIXED_CONTROL_SYMBOLS) {
+      const ser = seriesBySym.get(sym);
+      if (!ser) continue;
+      fixedTrades.push(...backtestPatternScanner(ser, '15m'));
+      fixedTrades.push(...backtestMarketSignalScanner(ser));
+    }
+
+    const scanner15Fixed = fixedTrades.filter(t => t.engine === 'marketSignalScanner' && t.timeframe === '15m').sort((a, b) => a.entryTime - b.entryTime);
+    const fixedSplitTime = scanner15Fixed.length > 0
+      ? scanner15Fixed[0].entryTime + (scanner15Fixed[scanner15Fixed.length - 1].entryTime - scanner15Fixed[0].entryTime) * 0.6
+      : 0;
+    const fixedOosScanner = scanner15Fixed.filter(t => t.entryTime > fixedSplitTime);
+
+    const summarizeFixedGroup = (label: string, subset: SimTrade[], side: 'LONG' | 'SHORT') => {
+      const s = summarizeTrades(subset, `FIXED_CTRL_${label}`);
+      const live016: number[] = [];
+      for (const t of subset) {
+        const ser = seriesBySym.get(t.symbol)!;
+        live016.push(getCachedLiveSensitivityOutcome(ser, t.side, t.entryCandleIdx, ambigInfo.slices, {
+          range24hPct: t.range24hPct,
+          change24hPct: t.change24hPct,
+          atrAtEntry: t.atrAtEntry,
+          localHigh: t.localHigh,
+          localLow: t.localLow
+        }).netPctLiveCost016);
+      }
+      const lS = summarizeValues(live016);
+      const lCi = bootstrapMeanCi95(live016, 2000, hashString(`FIXED_LIVE_CI_${label}`));
+      return {
+        label,
+        side,
+        n: s.n,
+        wrPct: Number(s.winRatePct.toFixed(2)),
+        baseMeanNet020Pct: Number(s.meanNet020Pct.toFixed(3)),
+        baseCi95: [Number(s.ci95[0].toFixed(3)), Number(s.ci95[1].toFixed(3))],
+        liveMeanNet016Pct: Number(lS.mean.toFixed(3)),
+        liveCi95_016: [Number(lCi[0].toFixed(3)), Number(lCi[1].toFixed(3))]
+      };
+    };
+
+    const fixedPooled = summarizeTrades(scanner15Fixed, 'FIXED_POOLED_SCANNER');
+    const fixedOosPooled = summarizeTrades(fixedOosScanner, 'FIXED_OOS_SCANNER');
+    const fixedVolClimaxShortOos = summarizeFixedGroup(
+      'marketSignalScanner:💀 Volume Climax (Predictive Dump):SHORT',
+      fixedOosScanner.filter(t => t.patternName.includes('Volume Climax (Predictive Dump)') && t.side === 'SHORT'),
+      'SHORT'
+    );
+    const fixedProlivLongOos = summarizeFixedGroup(
+      'marketSignalScanner:💥 ПРОЛИВ (SAR Bottom Reversal):LONG',
+      fixedOosScanner.filter(t => t.patternName.includes('ПРОЛИВ (SAR Bottom Reversal)') && t.side === 'LONG'),
+      'LONG'
+    );
+
+    const inLiveTop30 = FIXED_CONTROL_SYMBOLS.filter(s => seriesList.some(x => x.symbol === s));
+    fixedControlComparison = {
+      controlSymbols: FIXED_CONTROL_SYMBOLS,
+      overlapWithLiveTop30: inLiveTop30.length,
+      scanner15mPooled: { n: fixedPooled.n, wrPct: Number(fixedPooled.winRatePct.toFixed(2)), meanNet020Pct: Number(fixedPooled.meanNet020Pct.toFixed(3)), ci95: [Number(fixedPooled.ci95[0].toFixed(3)), Number(fixedPooled.ci95[1].toFixed(3))] },
+      scanner15mOosPooled: { n: fixedOosPooled.n, wrPct: Number(fixedOosPooled.winRatePct.toFixed(2)), meanNet020Pct: Number(fixedOosPooled.meanNet020Pct.toFixed(3)), ci95: [Number(fixedOosPooled.ci95[0].toFixed(3)), Number(fixedOosPooled.ci95[1].toFixed(3))] },
+      volumeClimaxShortOos: fixedVolClimaxShortOos,
+      prolivLongOos: fixedProlivLongOos
+    };
+
+    log('--- J1.7: FIXED CONTROL UNIVERSE COMPARISON (20 LIQUID MAJORS, NO 24H VOLUME SELECTION) ---');
+    log(`Control overlap with Live Top-30: ${inLiveTop30.length}/${FIXED_CONTROL_SYMBOLS.length} symbols`);
+    log(`  - Pooled marketSignalScanner (15m, n=${fixedPooled.n}): WR=${fixedPooled.winRatePct.toFixed(1)}%, MeanNet@0.20%=${fixedPooled.meanNet020Pct.toFixed(2)}% [${fixedPooled.ci95[0].toFixed(2)}%, ${fixedPooled.ci95[1].toFixed(2)}%]`);
+    log(`  - OOS-40% marketSignalScanner (15m, n=${fixedOosPooled.n}): WR=${fixedOosPooled.winRatePct.toFixed(1)}%, MeanNet@0.20%=${fixedOosPooled.meanNet020Pct.toFixed(2)}% [${fixedOosPooled.ci95[0].toFixed(2)}%, ${fixedOosPooled.ci95[1].toFixed(2)}%]`);
+    log(`  - OOS Volume Climax SHORT (control n=${fixedVolClimaxShortOos.n}): Base@0.20%=${fixedVolClimaxShortOos.baseMeanNet020Pct.toFixed(2)}% [${fixedVolClimaxShortOos.baseCi95[0].toFixed(2)}%, ${fixedVolClimaxShortOos.baseCi95[1].toFixed(2)}%] | Live@0.16%=${fixedVolClimaxShortOos.liveMeanNet016Pct.toFixed(2)}% [${fixedVolClimaxShortOos.liveCi95_016[0].toFixed(2)}%, ${fixedVolClimaxShortOos.liveCi95_016[1].toFixed(2)}%]`);
+    log(`  - OOS ПРОЛИВ LONG (control n=${fixedProlivLongOos.n}): Base@0.20%=${fixedProlivLongOos.baseMeanNet020Pct.toFixed(2)}% [${fixedProlivLongOos.baseCi95[0].toFixed(2)}%, ${fixedProlivLongOos.baseCi95[1].toFixed(2)}%] | Live@0.16%=${fixedProlivLongOos.liveMeanNet016Pct.toFixed(2)}% [${fixedProlivLongOos.liveCi95_016[0].toFixed(2)}%, ${fixedProlivLongOos.liveCi95_016[1].toFixed(2)}%]`);
+    log('');
+  }
 
   log('--- POOLED SUMMARY & COST SENSITIVITY BY ENGINE/TIMEFRAME ---');
   for (const engine of ['patternScannerService', 'marketSignalScanner'] as const) {
@@ -1636,7 +1971,7 @@ async function main() {
     REPORT_JSON_OUT,
     JSON.stringify(
       {
-        version: 'v2.1-j1',
+        version: 'v2.2-k2',
         generatedAt: new Date().toISOString(),
         preCommittedOosCriterion: OOS_PASS_CRITERION_TEXT,
         multipleTestingHypothesesM: MULTIPLE_TESTING_M,
@@ -1671,6 +2006,7 @@ async function main() {
         maxDdMethod: 'non_compounded_roe_percentage_points',
         positionConstraint: 'one_active_position_per_symbol_per_engine_timeframe',
         dataCoverage,
+        fixedControlComparison,
         totalTrades: allTrades.length,
         oosPassingCount: oosPassingStrategies.length,
         oosPassingStrategies,
