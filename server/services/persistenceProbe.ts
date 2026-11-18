@@ -18,12 +18,24 @@ export interface PersistenceProbeState {
     startedAt: number | null;
     copyFound: boolean;
     copyCounter: number | null;
+    ignoredFound: boolean;
+    ignoredCounter: number | null;
+    ignoredTimestamp: number | null;
+    ignoredIso: string | null;
   } | null;
 }
 
 let probeTimer: NodeJS.Timeout | null = null;
 let probeCounter = 0;
+let ignoredProbeCounter = 0;
 let bootPreviousProbeCaptured: PersistenceProbeState['previousProbeOnBoot'] | undefined;
+
+export function resetPersistenceProbeForTest(): void {
+  stopPersistenceProbeTimer();
+  probeCounter = 0;
+  ignoredProbeCounter = 0;
+  bootPreviousProbeCaptured = undefined;
+}
 
 export function writePersistenceProbeSnapshot(
   baseDir = process.cwd(),
@@ -32,10 +44,12 @@ export function writePersistenceProbeSnapshot(
 ): PersistenceProbeState {
   const probePath = path.join(baseDir, 'data', '_persistence_probe.json');
   const copyPath = path.join(baseDir, 'data', 'backups', '_persistence_probe_copy.json');
+  const ignoredProbePath = path.join(baseDir, 'data', '_persistence_probe_ignored.json');
 
   if (bootPreviousProbeCaptured === undefined) {
     let prevMain: any = null;
     let prevCopy: any = null;
+    let prevIgnored: any = null;
     try {
       if (fs.existsSync(probePath)) {
         prevMain = safeJsonParse(fs.readFileSync(probePath, 'utf-8'), null);
@@ -46,35 +60,47 @@ export function writePersistenceProbeSnapshot(
         prevCopy = safeJsonParse(fs.readFileSync(copyPath, 'utf-8'), null);
       }
     } catch {}
-    bootPreviousProbeCaptured = prevMain
-      ? {
-          found: true,
-          counter: typeof prevMain.counter === 'number' ? prevMain.counter : null,
-          timestamp: typeof prevMain.timestamp === 'number' ? prevMain.timestamp : null,
-          iso: typeof prevMain.iso === 'string' ? prevMain.iso : null,
-          startedAt: typeof prevMain.startedAt === 'number' ? prevMain.startedAt : null,
-          copyFound: Boolean(prevCopy),
-          copyCounter: typeof prevCopy?.counter === 'number' ? prevCopy.counter : null
-        }
-      : {
-          found: false,
-          counter: null,
-          timestamp: null,
-          iso: null,
-          startedAt: null,
-          copyFound: Boolean(prevCopy),
-          copyCounter: typeof prevCopy?.counter === 'number' ? prevCopy.counter : null
-        };
+    try {
+      if (fs.existsSync(ignoredProbePath)) {
+        prevIgnored = safeJsonParse(fs.readFileSync(ignoredProbePath, 'utf-8'), null);
+      }
+    } catch {}
+    bootPreviousProbeCaptured = {
+      found: Boolean(prevMain),
+      counter: typeof prevMain?.counter === 'number' ? prevMain.counter : null,
+      timestamp: typeof prevMain?.timestamp === 'number' ? prevMain.timestamp : null,
+      iso: typeof prevMain?.iso === 'string' ? prevMain.iso : null,
+      startedAt: typeof prevMain?.startedAt === 'number' ? prevMain.startedAt : null,
+      copyFound: Boolean(prevCopy),
+      copyCounter: typeof prevCopy?.counter === 'number' ? prevCopy.counter : null,
+      ignoredFound: Boolean(prevIgnored),
+      ignoredCounter: typeof prevIgnored?.counter === 'number' ? prevIgnored.counter : null,
+      ignoredTimestamp: typeof prevIgnored?.timestamp === 'number' ? prevIgnored.timestamp : null,
+      ignoredIso: typeof prevIgnored?.iso === 'string' ? prevIgnored.iso : null
+    };
     if (prevMain && typeof prevMain.counter === 'number' && Number.isFinite(prevMain.counter)) {
       probeCounter = prevMain.counter;
+    }
+    if (prevIgnored && typeof prevIgnored.counter === 'number' && Number.isFinite(prevIgnored.counter)) {
+      ignoredProbeCounter = prevIgnored.counter;
     }
   }
 
   probeCounter += 1;
+  ignoredProbeCounter += 1;
+  const iso = new Date(now).toISOString();
   const payload: PersistenceProbeState = {
     counter: probeCounter,
     timestamp: now,
-    iso: new Date(now).toISOString(),
+    iso,
+    startedAt,
+    pid: process.pid,
+    previousProbeOnBoot: bootPreviousProbeCaptured
+  };
+  const ignoredPayload: PersistenceProbeState = {
+    counter: ignoredProbeCounter,
+    timestamp: now,
+    iso,
     startedAt,
     pid: process.pid,
     previousProbeOnBoot: bootPreviousProbeCaptured
@@ -82,6 +108,7 @@ export function writePersistenceProbeSnapshot(
 
   atomicWriteJson(probePath, payload);
   atomicWriteJson(copyPath, payload);
+  atomicWriteJson(ignoredProbePath, ignoredPayload);
   return payload;
 }
 
@@ -93,7 +120,7 @@ export function startPersistenceProbeTimer(intervalMs = 60000, startedAt = Date.
   try {
     const initial = writePersistenceProbeSnapshot(process.cwd(), startedAt, Date.now());
     console.log(
-      `[PERSISTENCE PROBE] initialized counter=${initial.counter} iso=${initial.iso} prevFound=${Boolean(initial.previousProbeOnBoot?.found)} prevCounter=${initial.previousProbeOnBoot?.counter ?? 'none'}`
+      `[PERSISTENCE PROBE] initialized counter=${initial.counter} iso=${initial.iso} prevFound=${Boolean(initial.previousProbeOnBoot?.found)} prevCounter=${initial.previousProbeOnBoot?.counter ?? 'none'} ignoredFound=${Boolean(initial.previousProbeOnBoot?.ignoredFound)} ignoredCounter=${initial.previousProbeOnBoot?.ignoredCounter ?? 'none'}`
     );
   } catch (err: any) {
     console.warn('[PERSISTENCE PROBE] Initial write failed:', err?.message || err);

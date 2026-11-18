@@ -1,5 +1,5 @@
 {
-  "virtualBalance": 80.77,
+  "virtualBalance": 75.68,
   "startOfDayBalance": 85.77,
   "telegramBots": [],
   "discordWebhooks": [],
@@ -86,14 +86,16 @@
   "btcFreshnessFastLoopEnabled": false,
   "aiDailyBudgetEnabled": false,
   "aiDailyBudgetCalls": 20,
+  "evidenceUsesArchive": false,
+  "disabledPatterns": [],
   "virtualEquity": 85.77,
   "uiStatsResetTimestamp": 1791122286530,
   "modelStatusMetadata": {
     "totalLearnedTrades": 36,
     "lastRetrained": 1794889463483
   },
-  "stateRevision": 27,
-  "updatedAt": 1794981701609,
+  "stateRevision": 28,
+  "updatedAt": 1794986178884,
   "regimeUsesRealBtcCandles": true,
   "blockEntriesOnEstimatedFeatures": true,
   "modelSideAwareFeatures": true,

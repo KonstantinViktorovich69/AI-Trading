@@ -178,6 +178,72 @@ export const shadowRegimeStats = {
   real: {} as Record<string, number>
 };
 
+export const SCANNER_PATTERN_NAMES = [
+  '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)',
+  '🧹 False Breakout (Ложный пробой)',
+  '⚡ 1m Spire Climax (Шпиль на 1м)',
+  '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)',
+  '🎯 Wick Zone Retest (Ретест фитиля)',
+  '🔥 Vertical Exhaustion (Разворот)',
+  '💀 Volume Climax (Predictive Dump)',
+  '⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry)',
+  '💥 ПРОЛИВ (SAR Bottom Reversal)',
+  '🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)',
+  '⚡ 1m Spire Climax Bottom (Шпиль снизу)',
+  '💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)',
+  '🎯 Bottom Wick Retest (Ретест дна)',
+  '🔥 Reversal from Dump (Разворот пролива)',
+  '💀 Volume Climax Bottom (Recovery)',
+  '⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry)'
+] as const;
+
+export function normalizePatternName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+const CANONICAL_PATTERN_SET = new Set<string>(SCANNER_PATTERN_NAMES.map(normalizePatternName));
+const warnedUnknownDisabledPatterns = new Set<string>();
+
+export function getUnknownDisabledPatterns(disabledPatterns?: string[]): string[] {
+  if (!Array.isArray(disabledPatterns) || disabledPatterns.length === 0) return [];
+  const unknown: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of disabledPatterns) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const norm = normalizePatternName(trimmed);
+    if (!CANONICAL_PATTERN_SET.has(norm) && !seen.has(norm)) {
+      seen.add(norm);
+      unknown.push(trimmed);
+    }
+  }
+  return unknown;
+}
+
+export function resetUnknownDisabledPatternsWarnForTest(): void {
+  warnedUnknownDisabledPatterns.clear();
+}
+
+function buildDisabledPatternSet(disabledPatterns?: string[]): Set<string> {
+  const set = new Set<string>();
+  if (!Array.isArray(disabledPatterns) || disabledPatterns.length === 0) return set;
+  for (const raw of disabledPatterns) {
+    if (typeof raw !== 'string') continue;
+    const norm = normalizePatternName(raw);
+    if (norm.length > 0) set.add(norm);
+  }
+  const unknown = getUnknownDisabledPatterns(disabledPatterns);
+  if (unknown.length > 0) {
+    const cacheKey = unknown.map(normalizePatternName).sort().join('|');
+    if (!warnedUnknownDisabledPatterns.has(cacheKey)) {
+      warnedUnknownDisabledPatterns.add(cacheKey);
+      console.warn(`[SCANNER] Unknown pattern(s) in disabledPatterns: ${unknown.join(', ')}`);
+    }
+  }
+  return set;
+}
+
 export interface ScannerPatternEvalInput {
   tickerPrice: number;
   change: number;
@@ -283,94 +349,81 @@ export function evaluateScannerPatternPure(input: ScannerPatternEvalInput): Scan
   const minVolumeRequired = 50000;
   const isVolumeQualified = volume >= minVolumeRequired || volumeSpike >= 4.0;
 
+  const disabledPatternSet = buildDisabledPatternSet(input.disabledPatterns);
+  const isDisabled = (patternName: string): boolean => disabledPatternSet.has(normalizePatternName(patternName));
+
   // Только при наличии реальных OHLCV свечей разрешаем генерацию направленных паттернов.
   // Монеты без полного набора OHLCV остаются NEUTRAL с dataQuality: 'ESTIMATED' и не торгуются по эвристикам тикера.
   if (isVolumeQualified && hasRealOhlcv) {
     // --- SHORT PATTERNS ---
     // Слив монеты: требует реальных OHLCV, подтвержденного переключения SAR на вершине, импульса >= 7% и фитиля съема ликвидности
-    if ((change >= 7.0 || riseFromLow >= 8.0) && isSarBearishFlipped1m && volumeSpike >= 1.5 && (wicks.topPct >= 0.35 || dropFromRecentHigh >= 1.2)) {
+    if (!isDisabled('💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)') && (change >= 7.0 || riseFromLow >= 8.0) && isSarBearishFlipped1m && volumeSpike >= 1.5 && (wicks.topPct >= 0.35 || dropFromRecentHigh >= 1.2)) {
       matchedPattern = '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)';
       signalSide = 'SHORT';
       scoreBonus = 16;
-    } else if ((wicks.topPct >= 0.40 || dropFromRecentHigh >= 1.0) && (change >= 3.0 || riseFromLow >= 5.0) && (tickerPrice <= vwapInfo || isShortTermBearish)) {
+    } else if (!isDisabled('🧹 False Breakout (Ложный пробой)') && (wicks.topPct >= 0.40 || dropFromRecentHigh >= 1.0) && (change >= 3.0 || riseFromLow >= 5.0) && (tickerPrice <= vwapInfo || isShortTermBearish)) {
       matchedPattern = '🧹 False Breakout (Ложный пробой)';
       signalSide = 'SHORT';
       scoreBonus = 14;
-    } else if ((change >= 7.0 || riseFromLow >= 9.0) && (wicks.topPct >= 0.40 || dropFromRecentHigh >= 1.2)) {
+    } else if (!isDisabled('⚡ 1m Spire Climax (Шпиль на 1м)') && (change >= 7.0 || riseFromLow >= 9.0) && (wicks.topPct >= 0.40 || dropFromRecentHigh >= 1.2)) {
       matchedPattern = '⚡ 1m Spire Climax (Шпиль на 1м)';
       signalSide = 'SHORT';
       scoreBonus = 17;
-    } else if (((cachedIndicators.obImbalance && cachedIndicators.obImbalance > 70) || trueRsi >= 72) && (change >= 3.5 || isQuickLocalSpike)) {
+    } else if (!isDisabled('💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)') && ((cachedIndicators.obImbalance && cachedIndicators.obImbalance > 70) || trueRsi >= 72) && (change >= 3.5 || isQuickLocalSpike)) {
       matchedPattern = '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)';
       signalSide = 'SHORT';
       scoreBonus = 18;
-    } else if ((change >= 3.0 || riseFromLow >= 4.5) && dropFromRecentHigh >= 0.5 && dropFromRecentHigh <= 3.5 && wicks.topPct >= 0.30) {
+    } else if (!isDisabled('🎯 Wick Zone Retest (Ретест фитиля)') && (change >= 3.0 || riseFromLow >= 4.5) && dropFromRecentHigh >= 0.5 && dropFromRecentHigh <= 3.5 && wicks.topPct >= 0.30) {
       matchedPattern = '🎯 Wick Zone Retest (Ретест фитиля)';
       signalSide = 'SHORT';
       scoreBonus = 13;
-    } else if ((change >= 7.0 || riseFromLow >= 8.0 || trueRsi >= 75) && wicks.topPct >= 0.35 && (isSarBearishFlipped1m || isShortTermBearish)) {
+    } else if (!isDisabled('🔥 Vertical Exhaustion (Разворот)') && (change >= 7.0 || riseFromLow >= 8.0 || trueRsi >= 75) && wicks.topPct >= 0.35 && (isSarBearishFlipped1m || isShortTermBearish)) {
       matchedPattern = '🔥 Vertical Exhaustion (Разворот)';
       signalSide = 'SHORT';
       scoreBonus = 15;
-    } else if (volumeSpike >= 3.0 && (change >= 4.0 || isQuickLocalSpike) && (wicks.topPct >= 0.30 || dropFromRecentHigh >= 0.8)) {
+    } else if (!isDisabled('💀 Volume Climax (Predictive Dump)') && volumeSpike >= 3.0 && (change >= 4.0 || isQuickLocalSpike) && (wicks.topPct >= 0.30 || dropFromRecentHigh >= 0.8)) {
       matchedPattern = '💀 Volume Climax (Predictive Dump)';
       signalSide = 'SHORT';
       scoreBonus = 12;
-    } else if ((change >= 5.0 || isQuickLocalSpike) && (trueRsi >= 70 || bbStatus === 'OVERBOUGHT') && wicks.topPct >= 0.35) {
+    } else if (!isDisabled('⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry)') && (change >= 5.0 || isQuickLocalSpike) && (trueRsi >= 70 || bbStatus === 'OVERBOUGHT') && wicks.topPct >= 0.35) {
       matchedPattern = '⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry)';
       signalSide = 'SHORT';
       scoreBonus = 16;
     }
     // --- LONG PATTERNS ---
     // Пролив монеты: требует реальных OHLCV, подтвержденного бычьего SAR, просадки <= -7% и фитиля откупа
-    else if ((change <= -7.0 || dropFromRecentHigh >= 8.0) && isSarBullishFlipped1m && volumeSpike >= 1.5 && (wicks.bottomPct >= 0.35 || riseFromLow >= 1.2)) {
+    else if (!isDisabled('💥 ПРОЛИВ (SAR Bottom Reversal)') && (change <= -7.0 || dropFromRecentHigh >= 8.0) && isSarBullishFlipped1m && volumeSpike >= 1.5 && (wicks.bottomPct >= 0.35 || riseFromLow >= 1.2)) {
       matchedPattern = '💥 ПРОЛИВ (SAR Bottom Reversal)';
       signalSide = 'LONG';
       scoreBonus = 16;
-    } else if ((wicks.bottomPct >= 0.40 || riseFromLow >= 1.0) && (change <= -3.0 || dropFromRecentHigh >= 5.0) && (tickerPrice >= vwapInfo || !isShortTermBearish)) {
+    } else if (!isDisabled('🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)') && (wicks.bottomPct >= 0.40 || riseFromLow >= 1.0) && (change <= -3.0 || dropFromRecentHigh >= 5.0) && (tickerPrice >= vwapInfo || !isShortTermBearish)) {
       matchedPattern = '🧹 Снятие ликвидности снизу (Bottom Liquidity Sweep)';
       signalSide = 'LONG';
       scoreBonus = 14;
-    } else if ((change <= -7.0 || dropFromRecentHigh >= 9.0) && (wicks.bottomPct >= 0.40 || riseFromLow >= 1.2)) {
+    } else if (!isDisabled('⚡ 1m Spire Climax Bottom (Шпиль снизу)') && (change <= -7.0 || dropFromRecentHigh >= 9.0) && (wicks.bottomPct >= 0.40 || riseFromLow >= 1.2)) {
       matchedPattern = '⚡ 1m Spire Climax Bottom (Шпиль снизу)';
       signalSide = 'LONG';
       scoreBonus = 17;
-    } else if (((cachedIndicators.obImbalance && cachedIndicators.obImbalance < 30) || trueRsi <= 28) && (change <= -3.5 || isQuickLocalDrop)) {
+    } else if (!isDisabled('💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)') && ((cachedIndicators.obImbalance && cachedIndicators.obImbalance < 30) || trueRsi <= 28) && (change <= -3.5 || isQuickLocalDrop)) {
       matchedPattern = '💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)';
       signalSide = 'LONG';
       scoreBonus = 18;
-    } else if ((change <= -3.0 || dropFromRecentHigh >= 4.5) && riseFromLow >= 0.5 && riseFromLow <= 3.5 && wicks.bottomPct >= 0.30) {
+    } else if (!isDisabled('🎯 Bottom Wick Retest (Ретест дна)') && (change <= -3.0 || dropFromRecentHigh >= 4.5) && riseFromLow >= 0.5 && riseFromLow <= 3.5 && wicks.bottomPct >= 0.30) {
       matchedPattern = '🎯 Bottom Wick Retest (Ретест дна)';
       signalSide = 'LONG';
       scoreBonus = 13;
-    } else if ((change <= -7.0 || dropFromRecentHigh >= 8.0 || trueRsi <= 25) && wicks.bottomPct >= 0.35 && (isSarBullishFlipped1m || !isShortTermBearish)) {
+    } else if (!isDisabled('🔥 Reversal from Dump (Разворот пролива)') && (change <= -7.0 || dropFromRecentHigh >= 8.0 || trueRsi <= 25) && wicks.bottomPct >= 0.35 && (isSarBullishFlipped1m || !isShortTermBearish)) {
       matchedPattern = '🔥 Reversal from Dump (Разворот пролива)';
       signalSide = 'LONG';
       scoreBonus = 15;
-    } else if (volumeSpike >= 3.0 && (change <= -4.0 || isQuickLocalDrop) && (wicks.bottomPct >= 0.30 || riseFromLow >= 0.8)) {
+    } else if (!isDisabled('💀 Volume Climax Bottom (Recovery)') && volumeSpike >= 3.0 && (change <= -4.0 || isQuickLocalDrop) && (wicks.bottomPct >= 0.30 || riseFromLow >= 0.8)) {
       matchedPattern = '💀 Volume Climax Bottom (Recovery)';
       signalSide = 'LONG';
       scoreBonus = 12;
-    } else if ((change <= -5.0 || isQuickLocalDrop) && (trueRsi <= 30 || bbStatus === 'OVERSOLD') && wicks.bottomPct >= 0.35) {
+    } else if (!isDisabled('⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry)') && (change <= -5.0 || isQuickLocalDrop) && (trueRsi <= 30 || bbStatus === 'OVERSOLD') && wicks.bottomPct >= 0.35) {
       matchedPattern = '⚡ EXTREME OVERSOLD DIP (Early Limit LONG Entry)';
       signalSide = 'LONG';
       scoreBonus = 16;
-    }
-  }
-
-  if (
-    matchedPattern !== 'None' &&
-    Array.isArray(input.disabledPatterns) &&
-    input.disabledPatterns.length > 0
-  ) {
-    const normalizedMatched = matchedPattern.trim().toLowerCase();
-    const isDisabled = input.disabledPatterns.some(
-      (p) => typeof p === 'string' && p.trim().length > 0 && p.trim().toLowerCase() === normalizedMatched
-    );
-    if (isDisabled) {
-      matchedPattern = 'None';
-      signalSide = 'NEUTRAL';
-      scoreBonus = 0;
     }
   }
 

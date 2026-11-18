@@ -4,6 +4,7 @@ import ccxt from 'ccxt';
 import { sanitizeSettingsForClient, CONFIGURED_SECRET_MASK } from '../utils/settingsSanitizer.ts';
 import { normalizeExchangeId, DEFAULT_EXCHANGE, detectExchangeByCredentials } from '../services/activeExchange.ts';
 import { sanitizeAllowedSessions, sanitizeBlockedHours } from '../../src/lib/sessionTrading.ts';
+import { getUnknownDisabledPatterns } from '../services/marketSignalScanner.ts';
 
 export interface SettingsRouterContext {
   getGlobalSettings: () => any;
@@ -347,6 +348,10 @@ export function createSettingsRouter(ctx: SettingsRouterContext): Router {
           seenPatterns.add(key);
           cleanedPatterns.push(trimmed);
         }
+      }
+      const unknownPatterns = getUnknownDisabledPatterns(cleanedPatterns);
+      if (unknownPatterns.length > 0) {
+        console.warn(`[SETTINGS] Unknown pattern(s) in disabledPatterns: ${unknownPatterns.join(', ')}`);
       }
       globalSettings.disabledPatterns = cleanedPatterns;
     }

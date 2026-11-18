@@ -1132,6 +1132,55 @@ describe('AutoPilotEngine: Queue Balancing & Non-Monopolization Regression Tests
         expect(funnel.aggregated['opened_error|save_trade_db_failed']).toBe(1);
         resetFunnelForTest();
       });
+
+      it('blocks BTC candidate entry when full-cycle BTC updatedAt is stale even if btcFreshnessFastLoopEnabled keeps regimeUpdatedAt fresh, while still allowing ETH', async () => {
+        resetFunnelForTest();
+        const now = Date.now();
+        const executeMainVirtualAutoEntry = vi.fn(async (params) => ({
+          executed: true,
+          status: 'OPEN',
+          trade: { id: `VT-${params.symbol}`, symbol: params.symbol, side: 'LONG', status: 'OPEN' }
+        }));
+
+        const { deps } = createMockAutopilotDeps({
+          executeMainVirtualAutoEntry,
+          getGlobalSettings: () => ({
+            isAutopilotEnabled: true,
+            tradingMode: 'virtual',
+            tradingExecutionMode: 'auto',
+            autopilotAggressiveness: 'aggressive',
+            allowedTradingDirections: 'BOTH',
+            maxActivePositionsVirtual: 6,
+            maxSameDirectionPositions: 3,
+            virtualBalance: 1000,
+            isCommitteeConsensusCheckEnabled: false,
+            btcFreshnessFastLoopEnabled: true,
+            staleDataPauseSec: 300
+          }),
+          getGlobalTrueOhlcv: () => ({
+            BTCUSDT: { updatedAt: now - 450_000, regimeUpdatedAt: now - 10_000 },
+            ETHUSDT: { updatedAt: now - 10_000 }
+          }),
+          getCacheSignals: () => ({
+            data: [
+              { rawSymbol: 'BTC/USDT', signal: 'LONG', aiScore: 98, price: 60000, type: 'SAR REVERSAL', matchedPattern: 'SAR Reversal', volumeSpike: 2.0, volume24h: 500000 },
+              { rawSymbol: 'ETH/USDT', signal: 'LONG', aiScore: 95, price: 3000, type: 'SAR REVERSAL', matchedPattern: 'SAR Reversal', volumeSpike: 2.0, volume24h: 500000 }
+            ],
+            lastUpdated: now,
+            marketRegime: 'RANGING',
+            marketHealth: 80,
+            btcTrend24h: 0.5
+          })
+        });
+
+        await runAutopilotAndVirtualTradeEntry(deps);
+        const calledSymbols = executeMainVirtualAutoEntry.mock.calls.map(([p]: any[]) => p.symbol);
+        expect(calledSymbols).not.toContain('BTC/USDT');
+        expect(calledSymbols).toContain('ETH/USDT');
+        const funnel = getFunnelData(1);
+        expect(funnel.aggregated['stale_data|stale_btc_candidate_ohlcv']).toBe(1);
+        resetFunnelForTest();
+      });
     });
   });
 });

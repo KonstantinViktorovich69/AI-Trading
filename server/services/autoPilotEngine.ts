@@ -15,7 +15,7 @@ import { isPatternBlacklisted } from './signalEngine.ts';
 import { SignalPerformanceAnalyticsService } from './signalPerformanceAnalyticsService.ts';
 import { evaluateKnowledgeBaseForSignal } from './quantRiskEngine.ts';
 import { incFunnel } from './funnelCounters.ts';
-import { isEntryPaused } from './entryGate.ts';
+import { isEntryPaused, isBtcCandidateEntryBlocked } from './entryGate.ts';
 import { getCellVerdict } from './learningCellService.ts';
 import { computeQuantFeaturesV2 } from './quantFeaturesV2.ts';
 import { calculateProbabilityV2IfAccepted } from './quantModelV2.ts';
@@ -322,6 +322,16 @@ export async function runAutopilotAndVirtualTradeEntry(deps: AutoPilotEngineDepe
         const symbol = currentSig.rawSymbol || currentSig.symbol;
         if (!symbol || typeof symbol !== 'string') continue;
         try { incFunnel('seen', 'evaluating_candidate', symbol); } catch {}
+        const btcCandidateCheck = isBtcCandidateEntryBlocked(symbol, Date.now(), {
+            getGlobalTrueOhlcv: deps.getGlobalTrueOhlcv,
+            getGlobalSettings: deps.getGlobalSettings,
+            getBtcOhlcvTimestamp: deps.getBtcOhlcvTimestamp
+        });
+        if (btcCandidateCheck.blocked) {
+            try { incFunnel('stale_data', 'stale_btc_candidate_ohlcv', symbol); } catch {}
+            console.log(`[ENTRY GATE] Skipping BTC candidate ${symbol}: ${btcCandidateCheck.reason}`);
+            continue;
+        }
         const price = currentSig.price;
         const exName = currentSig.exchange;
         let finalAiScore = currentSig.aiScore;

@@ -14,6 +14,7 @@ import { getLastLoopTickTimes } from '../services/heartbeatService.ts';
 import { getAllLearningCells } from '../services/learningCellService.ts';
 import { loadExpertInstructionsHistory } from '../services/selfLearningGuard.ts';
 import { aiGatewayService } from '../services/aiOrchestrator.ts';
+import { SCANNER_PATTERN_NAMES, getUnknownDisabledPatterns } from '../services/marketSignalScanner.ts';
 
 export interface SystemRouterContext {
   getVirtualTrades: () => any[];
@@ -539,6 +540,9 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
       const evidenceTrades = resolveEvidenceTrades(virtualTrades, globalSettings);
       const evidenceGate = evaluateEvidenceGate(evidenceTrades, globalSettings, now);
 
+      const disabledPatternsList = Array.isArray(globalSettings.disabledPatterns) ? globalSettings.disabledPatterns : [];
+      const unknownDisabledPatterns = getUnknownDisabledPatterns(disabledPatternsList);
+
       const flags = {
         regimeUsesRealBtcCandles: !!globalSettings.regimeUsesRealBtcCandles,
         blockEntriesOnEstimatedFeatures: !!globalSettings.blockEntriesOnEstimatedFeatures,
@@ -562,7 +566,8 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
         aiDailyBudgetEnabled: !!globalSettings.aiDailyBudgetEnabled,
         aiDailyBudgetCalls: Number(globalSettings.aiDailyBudgetCalls) || 20,
         evidenceUsesArchive: !!globalSettings.evidenceUsesArchive,
-        disabledPatterns: Array.isArray(globalSettings.disabledPatterns) ? globalSettings.disabledPatterns : []
+        disabledPatterns: disabledPatternsList,
+        unknownDisabledPatterns
       };
 
       res.json({
@@ -582,7 +587,11 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
           btcOhlcvAgeSec: freshness.btcOhlcvAgeSec,
           btcOhlcvAgeMax10mSec: freshness.btcOhlcvAgeMax10mSec,
           tickerTimestamp: freshness.tickerTimestamp,
-          btcOhlcvTimestamp: freshness.btcOhlcvTimestamp
+          btcOhlcvTimestamp: freshness.btcOhlcvTimestamp,
+          btcRegimeTimestamp: freshness.btcRegimeTimestamp,
+          btcRegimeAgeSec: freshness.btcRegimeAgeSec,
+          btcCandidateTimestamp: freshness.btcCandidateTimestamp,
+          btcCandidateAgeSec: freshness.btcCandidateAgeSec
         },
         tickersAgeSec: freshness.tickerAgeSec,
         btcOhlcvAgeSec: freshness.btcOhlcvAgeSec,
@@ -603,6 +612,8 @@ export function createSystemRouter(ctx: SystemRouterContext): Router {
           legacy: signalsCache?.regimeLegacy || signalsCache?.marketRegime || 'UNKNOWN',
           real: signalsCache?.regimeReal || signalsCache?.shadowRegimeReal?.regime || 'UNAVAILABLE'
         },
+        allowedPatterns: [...SCANNER_PATTERN_NAMES],
+        unknownDisabledPatterns,
         flags
       });
     } catch (err: any) {

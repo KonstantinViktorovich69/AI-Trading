@@ -64,7 +64,7 @@ const LEVERAGE = 5;
 const STOP_LOSS_PCT = 0.02;   // 2.0% unleveraged => -10.0% ROE before costs
 const TAKE_PROFIT_PCT = 0.03; // 3.0% unleveraged => +15.0% ROE before costs
 const MONTE_CARLO_RUNS = 200;
-const MULTIPLE_TESTING_M = 32; // 16 scanner patterns x 2 sides (LONG + SHORT)
+const MULTIPLE_TESTING_M_PROD = 16; // 16 production marketSignalScanner patterns (8 SHORT + 8 LONG); patternScannerService excluded (not production)
 
 // PRE-COMMITTED OOS PASS CRITERION (locked before inspecting v2 results)
 const OOS_PASS_CRITERION_TEXT =
@@ -1590,7 +1590,10 @@ async function main() {
         groups.set(k, arr);
       }
 
-      log(`--- ENGINE=${engine} | TF=${tf} (IS 60% <= ${new Date(splitTime).toISOString()} < OOS 40%) ---`);
+      const engineLabel = engine === 'marketSignalScanner'
+        ? `${engine} [БОЕВОЙ ДВИЖОК]`
+        : `${engine} [НЕ БОЕВОЙ ДВИЖОК — исключён из выводов и FDR]`;
+      log(`--- ENGINE=${engineLabel} | TF=${tf} (IS 60% <= ${new Date(splitTime).toISOString()} < OOS 40%) ---`);
       log('Pattern | Side | Split | n | Ambig15m% | WR% | Mean Gross% | Mean Net@(0.20%) [SL/1m/TP] | Sum ROE | PF | MaxDD | 95% CI Net% | Rand p95 (Uncond / |24h|>=3%) | Better? | p_raw(1s) | OOS Pass');
       log('---|---|---|---:|---:|---:|---:|---|---|---:|---:|---:|---|---|---|---|---|---|');
 
@@ -1691,8 +1694,14 @@ async function main() {
             });
           }
 
+          const isProductionEngine = engine === 'marketSignalScanner';
+          const pBonfProd16 = isProductionEngine
+            ? Number(Math.min(1, stats.pOneSidedRaw * MULTIPLE_TESTING_M_PROD).toFixed(6))
+            : null;
+
           const rowObj: any = {
             engine,
+            isProductionEngine,
             timeframe: tf,
             patternName,
             side,
@@ -1714,25 +1723,28 @@ async function main() {
             tStat: Number(stats.tStat.toFixed(3)),
             pOneSidedRaw: Number(stats.pOneSidedRaw.toFixed(6)),
             pTwoSidedRaw: Number(stats.pTwoSidedRaw.toFixed(6)),
-            pBonferroni32: Number(Math.min(1, stats.pOneSidedRaw * MULTIPLE_TESTING_M).toFixed(6)),
+            pBonferroniProd16: pBonfProd16,
+            qBhProd16: null,
+            qBhProdTested: null,
             randMean020Pct: Number(randUncond.mean.toFixed(3)),
             randP95020Pct: Number(randUncond.p95.toFixed(3)),
             condVolRandP95020Pct: Number(randCondVol.p95.toFixed(3)),
             betterThanRandom: betterUncond,
             betterThanCondVolRandom: betterCond,
-            oosPass,
+            oosPass: isProductionEngine ? oosPass : false,
+            rawCandidatePassBeforeProdFilter: oosPass,
             note: stats.note
           };
           summaryRows.push(rowObj);
           if (splitLabel === 'OOS-40%') oosRowsForFdr.push(rowObj);
-          if (oosPass) oosPassingStrategies.push(rowObj);
+          if (isProductionEngine && oosPass) oosPassingStrategies.push(rowObj);
 
           log(
-            `${patternName} | ${side} | ${splitLabel} | ${stats.n} | ${ambigPct.toFixed(1)}% | ${stats.winRatePct.toFixed(1)}% | ` +
+            `${patternName}${isProductionEngine ? '' : ' [НЕ БОЕВОЙ]'} | ${side} | ${splitLabel} | ${stats.n} | ${ambigPct.toFixed(1)}% | ${stats.winRatePct.toFixed(1)}% | ` +
             `${stats.meanGrossPct.toFixed(2)}% | ${stats.meanNet020Pct.toFixed(2)}% / ${mean1mRes.toFixed(2)}% / ${meanTpFirst.toFixed(2)}% | ` +
             `${stats.sumNet020Pp.toFixed(1)} | ${stats.profitFactor >= 99 ? 'INF' : stats.profitFactor.toFixed(2)} | ${stats.maxDdRoePp.toFixed(1)} | ` +
             `[${stats.ci95[0].toFixed(2)}%, ${stats.ci95[1].toFixed(2)}%] | ${randUncond.p95.toFixed(2)}% / ${randCondVol.p95.toFixed(2)}% | ` +
-            `${betterUncond ? 'да' : 'нет'}/${betterCond ? 'да' : 'нет'} | ${stats.pOneSidedRaw.toFixed(4)} | ${splitLabel === 'OOS-40%' ? (oosPass ? 'PASS' : 'FAIL') : '-'}`
+            `${betterUncond ? 'да' : 'нет'}/${betterCond ? 'да' : 'нет'} | ${stats.pOneSidedRaw.toFixed(4)} | ${splitLabel === 'OOS-40%' ? (!isProductionEngine ? 'N/A(NON-PROD)' : (oosPass ? 'PASS' : 'FAIL')) : '-'}`
           );
         }
       }
@@ -1740,25 +1752,27 @@ async function main() {
     }
   }
 
-  // J1.5: Compute Benjamini-Hochberg FDR q-values across OOS rows (using M=32 hypotheses budget + actual M)
-  const oosSortedByP = [...oosRowsForFdr].sort((a, b) => a.pOneSidedRaw - b.pOneSidedRaw);
-  const actualOosCount = oosSortedByP.length;
-  let minBhActual = 1;
-  let minBh32 = 1;
-  for (let idx = oosSortedByP.length - 1; idx >= 0; idx--) {
+  // J1.5: Compute Benjamini-Hochberg FDR q-values ONLY over production marketSignalScanner OOS rows (M_prod = 16 / actualProdOosCount)
+  const oosProdRows = oosRowsForFdr.filter(r => r.isProductionEngine);
+  const oosNonProdRows = oosRowsForFdr.filter(r => !r.isProductionEngine);
+  const oosProdSortedByP = [...oosProdRows].sort((a, b) => a.pOneSidedRaw - b.pOneSidedRaw);
+  const actualProdOosCount = oosProdSortedByP.length;
+  let minBhTested = 1;
+  let minBh16 = 1;
+  for (let idx = oosProdSortedByP.length - 1; idx >= 0; idx--) {
     const rank = idx + 1;
-    const rawActual = (oosSortedByP[idx].pOneSidedRaw * actualOosCount) / rank;
-    const raw32 = (oosSortedByP[idx].pOneSidedRaw * MULTIPLE_TESTING_M) / rank;
-    minBhActual = Math.min(minBhActual, Math.min(1, rawActual));
-    minBh32 = Math.min(minBh32, Math.min(1, raw32));
-    oosSortedByP[idx].qBhActualOos = Number(minBhActual.toFixed(6));
-    oosSortedByP[idx].qBh32 = Number(minBh32.toFixed(6));
+    const rawTested = (oosProdSortedByP[idx].pOneSidedRaw * actualProdOosCount) / rank;
+    const raw16 = (oosProdSortedByP[idx].pOneSidedRaw * MULTIPLE_TESTING_M_PROD) / rank;
+    minBhTested = Math.min(minBhTested, Math.min(1, rawTested));
+    minBh16 = Math.min(minBh16, Math.min(1, raw16));
+    oosProdSortedByP[idx].qBhProdTested = Number(minBhTested.toFixed(6));
+    oosProdSortedByP[idx].qBhProd16 = Number(minBh16.toFixed(6));
   }
 
-  log(`--- J1.5: IS-60% VS OOS-40% STABILITY & MULTIPLE-TESTING CORRECTIONS (M = ${MULTIPLE_TESTING_M} HYPOTHESES, alpha_bonf = ${(0.05 / MULTIPLE_TESTING_M).toFixed(5)}) ---`);
-  log('Engine | Pattern | Side | TF | IS MeanNet% (n) | OOS MeanNet% (n) | OOS CondRandP95% | t-stat | p_raw (1-sided) | p_Bonf(32) | q_BH(32)');
-  log('---|---|---|---|---:|---:|---:|---:|---:|---:|---:|');
-  for (const r of oosSortedByP) {
+  log(`--- J1.5: IS-60% VS OOS-40% STABILITY & MULTIPLE-TESTING CORRECTIONS (PRODUCTION ONLY: marketSignalScanner, M_prod = ${MULTIPLE_TESTING_M_PROD}, tested in OOS = ${actualProdOosCount}, alpha_bonf = ${(0.05 / MULTIPLE_TESTING_M_PROD).toFixed(6)}) ---`);
+  log('Engine | Pattern | Side | TF | IS MeanNet% (n) | OOS MeanNet% (n) | OOS CondRandP95% | t-stat | p_raw (1-sided) | p_Bonf(M=16) | q_BH(M=16) | q_BH(tested)');
+  log('---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|');
+  for (const r of oosProdSortedByP) {
     const isRow = summaryRows.find(
       x => x.engine === r.engine && x.timeframe === r.timeframe && x.patternName === r.patternName && x.side === r.side && x.split === 'IS-60%'
     );
@@ -1766,8 +1780,22 @@ async function main() {
     log(
       `${r.engine} | ${r.patternName} | ${r.side} | ${r.timeframe} | ${isStr} | ` +
       `${r.meanNet020Pct.toFixed(2)}% (n=${r.n}) | ${r.condVolRandP95020Pct.toFixed(2)}% | ` +
-      `${r.tStat.toFixed(2)} | ${r.pOneSidedRaw.toFixed(5)} | ${r.pBonferroni32.toFixed(5)} | ${r.qBh32.toFixed(5)}`
+      `${r.tStat.toFixed(2)} | ${r.pOneSidedRaw.toFixed(5)} | ${Number(r.pBonferroniProd16).toFixed(5)} | ${Number(r.qBhProd16).toFixed(5)} | ${Number(r.qBhProdTested).toFixed(5)}`
     );
+  }
+  if (oosNonProdRows.length > 0) {
+    log('');
+    log('--- НЕ БОЕВОЙ ДВИЖОК (patternScannerService — в server/ НЕ вызывается, исключён из выводов и FDR M_prod) ---');
+    for (const r of oosNonProdRows) {
+      const isRow = summaryRows.find(
+        x => x.engine === r.engine && x.timeframe === r.timeframe && x.patternName === r.patternName && x.side === r.side && x.split === 'IS-60%'
+      );
+      const isStr = isRow ? `${isRow.meanNet020Pct.toFixed(2)}% (n=${isRow.n})` : 'N/A';
+      log(
+        `${r.engine} [НЕ БОЕВОЙ ДВИЖОК] | ${r.patternName} | ${r.side} | ${r.timeframe} | ${isStr} | ` +
+        `${r.meanNet020Pct.toFixed(2)}% (n=${r.n}) | ${r.condVolRandP95020Pct.toFixed(2)}% | ${r.tStat.toFixed(2)} | ${r.pOneSidedRaw.toFixed(5)} | EXCLUDED | EXCLUDED | EXCLUDED`
+      );
+    }
   }
   log('');
 
@@ -1775,10 +1803,11 @@ async function main() {
   log('--- J1.4: LIVE CONFIG SENSITIVITY RUN ON OOS-40% (15m) ---');
   log('Baseline v2: fixed 5x, SL 2.0%, TP 3.0%, minNormalAutoClose=4%, bypassTP=false, Trail=off, cost=0.20%');
   log('Live Approx: settings.json conservative vol-capped leverage (5x->3x/2x), Struct SL [1.0%,2.2%], TP4=4.5%, minNormalAutoClose=6%, bypassTP=true, Trail 14%/3%, timeoutProfit 18h@6%, cost=0.16% & 0.20%');
-  log('Group | n | AvgLev | AvgSL% | Base@0.20% | Live@0.16% [CI95] | Live@0.20% [CI95] | t(0.20) | p_raw | p_Bonf32 | q_BH32 | LiveCondRandP95(0.16/0.20) | BeatRand(0.16/0.20) | Live WR@0.16% | MaxDD@0.16%');
+  log('Group | n | AvgLev | AvgSL% | Base@0.20% | Live@0.16% [CI95] | Live@0.20% [CI95] | t(0.20) | p_raw | p_Bonf16 | q_BH16 | LiveCondRandP95(0.16/0.20) | BeatRand(0.16/0.20) | Live WR@0.16% | MaxDD@0.16%');
   log('---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---|---|---:|---:|');
   const liveSensitivityRows: any[] = [];
   for (const g of liveSensitivityByGroup.values()) {
+    const isProductionEngine = g.label.startsWith('marketSignalScanner:');
     const n = g.baseline020.length;
     const baseS = summarizeValues(g.baseline020);
     const l016S = summarizeValues(g.live016);
@@ -1801,6 +1830,7 @@ async function main() {
 
     liveSensitivityRows.push({
       group: g.label,
+      isProductionEngine,
       n,
       avgLeverage: Number(avgLev.toFixed(2)),
       avgSlPct: Number(avgSlPct.toFixed(2)),
@@ -1812,8 +1842,9 @@ async function main() {
       tStat_016: Number(tTest016.tStat.toFixed(3)),
       tStat_020: Number(tTest020.tStat.toFixed(3)),
       pOneSidedRaw_020: Number(tTest020.pOneSided.toFixed(6)),
-      pBonferroni32_020: Number(Math.min(1, tTest020.pOneSided * MULTIPLE_TESTING_M).toFixed(6)),
-      qBh32_020: 1,
+      pBonferroniProd16_020: isProductionEngine ? Number(Math.min(1, tTest020.pOneSided * MULTIPLE_TESTING_M_PROD).toFixed(6)) : null,
+      qBhProd16_020: null,
+      qBhProdTested_020: null,
       liveCondVolRandMean016Pct: Number(liveRand.mean_016.toFixed(3)),
       liveCondVolRandP95016Pct: Number(liveRand.p95_016.toFixed(3)),
       liveCondVolRandMean020Pct: Number(liveRand.mean_020.toFixed(3)),
@@ -1826,22 +1857,30 @@ async function main() {
     });
   }
 
-  // BH FDR q-values across liveSensitivityOosRows
-  const liveSortedByP = [...liveSensitivityRows].sort((a, b) => a.pOneSidedRaw_020 - b.pOneSidedRaw_020);
-  let minLiveBh32 = 1;
-  for (let idx = liveSortedByP.length - 1; idx >= 0; idx--) {
+  // BH FDR q-values ONLY across production marketSignalScanner liveSensitivityOosRows
+  const liveProdSortedByP = liveSensitivityRows.filter(r => r.isProductionEngine).sort((a, b) => a.pOneSidedRaw_020 - b.pOneSidedRaw_020);
+  const liveProdTestedCount = liveProdSortedByP.length;
+  let minLiveBh16 = 1;
+  let minLiveBhTested = 1;
+  for (let idx = liveProdSortedByP.length - 1; idx >= 0; idx--) {
     const rank = idx + 1;
-    const raw32 = (liveSortedByP[idx].pOneSidedRaw_020 * MULTIPLE_TESTING_M) / rank;
-    minLiveBh32 = Math.min(minLiveBh32, Math.min(1, raw32));
-    liveSortedByP[idx].qBh32_020 = Number(minLiveBh32.toFixed(6));
+    const raw16 = (liveProdSortedByP[idx].pOneSidedRaw_020 * MULTIPLE_TESTING_M_PROD) / rank;
+    const rawTested = (liveProdSortedByP[idx].pOneSidedRaw_020 * liveProdTestedCount) / rank;
+    minLiveBh16 = Math.min(minLiveBh16, Math.min(1, raw16));
+    minLiveBhTested = Math.min(minLiveBhTested, Math.min(1, rawTested));
+    liveProdSortedByP[idx].qBhProd16_020 = Number(minLiveBh16.toFixed(6));
+    liveProdSortedByP[idx].qBhProdTested_020 = Number(minLiveBhTested.toFixed(6));
   }
 
   for (const row of liveSensitivityRows) {
+    const labelStr = row.isProductionEngine ? row.group : `${row.group} [НЕ БОЕВОЙ ДВИЖОК]`;
+    const bonfStr = row.pBonferroniProd16_020 !== null ? row.pBonferroniProd16_020.toFixed(5) : 'EXCLUDED';
+    const qStr = row.qBhProd16_020 !== null ? row.qBhProd16_020.toFixed(5) : 'EXCLUDED';
     log(
-      `${row.group} | ${row.n} | ${row.avgLeverage.toFixed(2)}x | ${row.avgSlPct.toFixed(2)}% | ${row.baselineMeanNet020Pct.toFixed(2)}% | ` +
+      `${labelStr} | ${row.n} | ${row.avgLeverage.toFixed(2)}x | ${row.avgSlPct.toFixed(2)}% | ${row.baselineMeanNet020Pct.toFixed(2)}% | ` +
       `${row.liveMeanNet016Pct.toFixed(2)}% [${row.liveCi95_016[0].toFixed(2)}, ${row.liveCi95_016[1].toFixed(2)}] | ` +
       `${row.liveMeanNet020Pct.toFixed(2)}% [${row.liveCi95_020[0].toFixed(2)}, ${row.liveCi95_020[1].toFixed(2)}] | ` +
-      `${row.tStat_020.toFixed(2)} | ${row.pOneSidedRaw_020.toFixed(5)} | ${row.pBonferroni32_020.toFixed(5)} | ${row.qBh32_020.toFixed(5)} | ` +
+      `${row.tStat_020.toFixed(2)} | ${row.pOneSidedRaw_020.toFixed(5)} | ${bonfStr} | ${qStr} | ` +
       `${row.liveCondVolRandP95016Pct.toFixed(2)}% / ${row.liveCondVolRandP95020Pct.toFixed(2)}% | ` +
       `${row.betterThanLiveCondVolRand016 ? 'да' : 'нет'}/${row.betterThanLiveCondVolRand020 ? 'да' : 'нет'} | ` +
       `${row.liveWr016Pct.toFixed(1)}% | ${row.liveMaxDd016Pp.toFixed(1)}`
@@ -1954,8 +1993,9 @@ async function main() {
       const pool = allTrades.filter(t => t.engine === engine && t.timeframe === tf);
       if (pool.length === 0) continue;
       const s = summarizeTrades(pool, `POOL_${engine}_${tf}`);
+      const engTag = engine === 'marketSignalScanner' ? `${engine} [БОЕВОЙ ДВИЖОК]` : `${engine} [НЕ БОЕВОЙ ДВИЖОК]`;
       log(
-        `${engine} (${tf}, n=${s.n}, WR=${s.winRatePct.toFixed(1)}%): MeanGross=${s.meanGrossPct.toFixed(2)}% | ` +
+        `${engTag} (${tf}, n=${s.n}, WR=${s.winRatePct.toFixed(1)}%): MeanGross=${s.meanGrossPct.toFixed(2)}% | ` +
         `Net@0.16%=${s.meanNet016Pct.toFixed(2)}% | Net@0.20%=${s.meanNet020Pct.toFixed(2)}% (Sum=${s.sumNet020Pp.toFixed(1)} п.п., MaxDD=${s.maxDdRoePp.toFixed(1)} п.п.) | ` +
         `Net@0.30%=${s.meanNet030Pct.toFixed(2)}%`
       );
@@ -1963,7 +2003,7 @@ async function main() {
   }
 
   log('');
-  log(`OOS PASSING STRATEGIES (${oosPassingStrategies.length}): ${oosPassingStrategies.length === 0 ? 'NONE' : oosPassingStrategies.map(x => `${x.engine}:${x.patternName}:${x.side}(${x.timeframe})`).join('; ')}`);
+  log(`PRODUCTION OOS PASSING STRATEGIES (${oosPassingStrategies.length}, marketSignalScanner only; patternScannerService excluded): ${oosPassingStrategies.length === 0 ? 'NONE' : oosPassingStrategies.map(x => `${x.engine}:${x.patternName}:${x.side}(${x.timeframe})`).join('; ')}`);
 
   const outDir = path.dirname(REPORT_JSON_OUT);
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
@@ -1971,11 +2011,15 @@ async function main() {
     REPORT_JSON_OUT,
     JSON.stringify(
       {
-        version: 'v2.2-k2',
+        version: 'v2.3-l5',
         generatedAt: new Date().toISOString(),
+        productionEngines: ['marketSignalScanner'],
+        nonProductionEngines: ['patternScannerService'],
+        patternScannerServiceExcludedFromConclusions: true,
         preCommittedOosCriterion: OOS_PASS_CRITERION_TEXT,
-        multipleTestingHypothesesM: MULTIPLE_TESTING_M,
-        bonferroniAlpha005: Number((0.05 / MULTIPLE_TESTING_M).toFixed(6)),
+        multipleTestingHypothesesM: MULTIPLE_TESTING_M_PROD,
+        multipleTestingActualProdOosCount: actualProdOosCount,
+        bonferroniAlpha005: Number((0.05 / MULTIPLE_TESTING_M_PROD).toFixed(6)),
         breakEvenRoeAt5x: {
           cost016Pct: 0.8,
           cost020Pct: 1.0,

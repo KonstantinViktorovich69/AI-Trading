@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { generateProgrammaticCommitteeFallback, runDeterministicQuantCommitteeFallback, executeUpdateSignalsCache, evaluateScannerPatternPure, type MarketSignalScannerContext } from './marketSignalScanner.ts';
+import {
+  generateProgrammaticCommitteeFallback,
+  runDeterministicQuantCommitteeFallback,
+  executeUpdateSignalsCache,
+  evaluateScannerPatternPure,
+  SCANNER_PATTERN_NAMES,
+  getUnknownDisabledPatterns,
+  resetUnknownDisabledPatternsWarnForTest,
+  type MarketSignalScannerContext
+} from './marketSignalScanner.ts';
 
 describe('marketSignalScanner', () => {
   describe('generateProgrammaticCommitteeFallback', () => {
@@ -235,14 +244,90 @@ describe('marketSignalScanner', () => {
     });
   });
 
-  describe('disabledPatterns kill-switch (K3)', () => {
-    it('keeps signal unchanged when disabledPatterns is empty and suppresses matched pattern to NEUTRAL when listed', async () => {
+  describe('disabledPatterns kill-switch (L2 branch-level fall-through)', () => {
+    it('allows subsequent matching pattern (Volume Climax Bottom) to trigger when earlier pattern (Bottom Wick Retest) is disabled', () => {
+      // Matches both '🎯 Bottom Wick Retest (Ретест дна)' AND '💀 Volume Climax Bottom (Recovery)'
+      // Avoids earlier LONG branches: change > -7 (dropFromRecentHigh < 8, wait: dropFromRecentHigh=(105-100)/105=4.76%),
+      // riseFromLow=(100-98)/98=2.04% (between 0.5 and 3.5), wicks.bottomPct=0.34 (<0.35 & <0.40),
+      // rsi1h=45 (>30), bb1h='INSIDE', volumeSpike=3.5 (>=3.0), isSarBullishFlipped1m=false.
+      const dualLongInput = {
+        tickerPrice: 100,
+        change: -4.5,
+        high: 105,
+        low: 98,
+        volume: 1_000_000,
+        rawIndicators: {
+          sar: 101,
+          vwap: 102,
+          rsi1h: 45,
+          bb1h: 'INSIDE',
+          psarStatus1m: 'BULLISH',
+          isSarBullishFlipped1m: false,
+          isSarBearishFlipped1m: false,
+          wicks: { topPct: 0.1, bottomPct: 0.34, bodySize: 0 },
+          volumeSpike: 3.5
+        }
+      };
+
+      const baseline = evaluateScannerPatternPure({ ...dualLongInput, disabledPatterns: [] });
+      expect(baseline.signalSide).toBe('LONG');
+      expect(baseline.matchedPattern).toBe('🎯 Bottom Wick Retest (Ретест дна)');
+      expect(baseline.scoreBonus).toBe(13);
+
+      // Disable Bottom Wick Retest (case + whitespace insensitive) -> must fall through to Volume Climax Bottom
+      const fallThrough = evaluateScannerPatternPure({
+        ...dualLongInput,
+        disabledPatterns: ['  🎯 bottom wick retest (ретест дна)  ']
+      });
+      expect(fallThrough.signalSide).toBe('LONG');
+      expect(fallThrough.matchedPattern).toBe('💀 Volume Climax Bottom (Recovery)');
+      expect(fallThrough.scoreBonus).toBe(12);
+
+      // Disabling both matching LONG branches suppresses to NEUTRAL
+      const suppressedBoth = evaluateScannerPatternPure({
+        ...dualLongInput,
+        disabledPatterns: [
+          '🎯 Bottom Wick Retest (Ретест дна)',
+          '💀 Volume Climax Bottom (Recovery)'
+        ]
+      });
+      expect(suppressedBoth.signalSide).toBe('NEUTRAL');
+      expect(suppressedBoth.matchedPattern).toBe('None');
+      expect(suppressedBoth.scoreBonus).toBe(0);
+
+      // Other non-disabled patterns (e.g. SHORT SAR Reversal) stay completely unaffected
+      const unaffectedShort = evaluateScannerPatternPure({
+        tickerPrice: 65000,
+        change: 8.5,
+        high: 65500,
+        low: 60000,
+        volume: 1_000_000,
+        disabledPatterns: ['🎯 Bottom Wick Retest (Ретест дна)'],
+        rawIndicators: {
+          sar: 65000,
+          vwap: 64800,
+          rsi1h: 78,
+          bb1h: 'OVERBOUGHT',
+          psarStatus1m: 'BEARISH',
+          isSarBearishFlipped1m: true,
+          wicks: { topPct: 0.65, bottomPct: 0.1, bodySize: 0 },
+          volumeSpike: 1.5
+        }
+      });
+      expect(unaffectedShort.signalSide).toBe('SHORT');
+      expect(unaffectedShort.matchedPattern).toBe('💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)');
+    });
+
+    it('suppresses cache signal to NEUTRAL when all matching patterns for the coin are disabled, and warns once on unknown names', async () => {
+      resetUnknownDisabledPatternsWarnForTest();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
       const input = {
         tickerPrice: 65000,
         change: 8.5,
         high: 65500,
         low: 60000,
-        volume: 1000000,
+        volume: 1_000_000,
         rawIndicators: {
           sar: 65000,
           vwap: 64800,
@@ -255,18 +340,9 @@ describe('marketSignalScanner', () => {
         }
       };
 
-      const baseline = evaluateScannerPatternPure({ ...input, disabledPatterns: [] });
-      expect(baseline.signalSide).toBe('SHORT');
-      expect(baseline.matchedPattern).toBe('💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)');
-      expect(baseline.scoreBonus).toBe(16);
-
-      const suppressed = evaluateScannerPatternPure({
-        ...input,
-        disabledPatterns: ['  💀 слив монеты (SAR Reversal at Peak)  ']
-      });
-      expect(suppressed.signalSide).toBe('NEUTRAL');
-      expect(suppressed.matchedPattern).toBe('None');
-      expect(suppressed.scoreBonus).toBe(0);
+      // Unknown name check & warning
+      expect(SCANNER_PATTERN_NAMES).toHaveLength(16);
+      expect(getUnknownDisabledPatterns(['NoSuchPattern', '  🎯 bottom wick retest (ретест дна)  '])).toEqual(['NoSuchPattern']);
 
       let cachedSignals: any = null;
       await executeUpdateSignalsCache({
@@ -291,7 +367,17 @@ describe('marketSignalScanner', () => {
           isLiquiditySweepFilterEnabled: true,
           liquiditySweepWickThreshold: 0.60,
           isLateShortFilterEnabled: true,
-          disabledPatterns: ['💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)']
+          disabledPatterns: [
+            'Unknown Fake Pattern',
+            '💀 СЛИВ МОНЕТЫ (SAR Reversal at Peak)',
+            '🧹 False Breakout (Ложный пробой)',
+            '⚡ 1m Spire Climax (Шпиль на 1м)',
+            '💎 ИДЕАЛЬНЫЙ ШОРТ (Smart Liquidity Lock)',
+            '🎯 Wick Zone Retest (Ретест фитиля)',
+            '🔥 Vertical Exhaustion (Разворот)',
+            '💀 Volume Climax (Predictive Dump)',
+            '⚡ EXTREME OVERBOUGHT PEAK (Early Limit SHORT Entry)'
+          ]
         }),
         setCachedSignals: (obj) => { cachedSignals = obj; },
         emitSignalsUpdated: vi.fn(),
@@ -301,6 +387,8 @@ describe('marketSignalScanner', () => {
       expect(cachedSignals?.data).toHaveLength(1);
       expect(cachedSignals.data[0].signal).toBe('NEUTRAL');
       expect(cachedSignals.data[0].matchedPattern).toBe('None');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Unknown Fake Pattern'));
+      warnSpy.mockRestore();
     });
   });
 });

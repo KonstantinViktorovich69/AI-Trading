@@ -542,7 +542,7 @@ export async function updateTrueOHLCV(ctx: MarketDataCollectorContext): Promise<
 
 /**
  * Lightweight BTC freshness fast loop (15m + 1h for BTC/USDT:USDT only) gated by btcFreshnessFastLoopEnabled.
- * Keeps GLOBAL_TRUE_OHLCV['BTCUSDT'].updatedAt fresh without running the full multi-asset collector loop.
+ * Updates GLOBAL_TRUE_OHLCV['BTCUSDT'].regimeUpdatedAt only and never mutates full-cycle updatedAt.
  */
 export async function updateBtcFreshnessFast(
   ctx: MarketDataCollectorContext,
@@ -588,7 +588,11 @@ export async function updateBtcFreshnessFast(
       '1h': Array.isArray(ohlcv1h) && ohlcv1h.length > 0 ? ohlcv1h : (prevRaw['1h'] || [])
     };
 
-    recalculateIndicatorsForSymbol('BTCUSDT', ctx);
+    const nowTs = Date.now();
+    recalculateIndicatorsForSymbol('BTCUSDT', ctx, {
+      preserveUpdatedAt: true,
+      setRegimeUpdatedAt: nowTs
+    });
 
     if (Array.isArray(ohlcv1h) && ohlcv1h.length >= 50 && GLOBAL_TRUE_OHLCV['BTCUSDT']) {
       const closes1h = ohlcv1h.map((h: any) => Number(h[4]));
@@ -596,7 +600,7 @@ export async function updateBtcFreshnessFast(
     }
 
     if (GLOBAL_TRUE_OHLCV['BTCUSDT']) {
-      GLOBAL_TRUE_OHLCV['BTCUSDT'].updatedAt = Date.now();
+      GLOBAL_TRUE_OHLCV['BTCUSDT'].regimeUpdatedAt = nowTs;
     }
 
     return true;
@@ -765,7 +769,11 @@ export async function checkOrderBooks(ctx: MarketDataCollectorContext): Promise<
   }
 }
 
-export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketDataCollectorContext): void {
+export function recalculateIndicatorsForSymbol(
+  cleanSym: string,
+  ctx: MarketDataCollectorContext,
+  options?: { preserveUpdatedAt?: boolean; setRegimeUpdatedAt?: number }
+): void {
   try {
     const GLOBAL_RAW_OHLCV = ctx.getGlobalRawOHLCV();
     const GLOBAL_TRUE_OHLCV = ctx.getGlobalTrueOHLCV();
@@ -912,8 +920,14 @@ export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketData
         }))
       : [];
     
+    const prevEntry = GLOBAL_TRUE_OHLCV[cleanSym] || {};
+    const nextUpdatedAt = options?.preserveUpdatedAt ? prevEntry.updatedAt : Date.now();
+    const nextRegimeUpdatedAt = typeof options?.setRegimeUpdatedAt === 'number'
+      ? options.setRegimeUpdatedAt
+      : prevEntry.regimeUpdatedAt;
+
     GLOBAL_TRUE_OHLCV[cleanSym] = {
-        ...(GLOBAL_TRUE_OHLCV[cleanSym] || {}), // Preserve other values like FVG
+        ...prevEntry, // Preserve other values like FVG
         rsi1h: trueRsi15, 
         rsi15m: trueRsi15,
         rsi1m: rsi1mVal,
@@ -946,7 +960,8 @@ export function recalculateIndicatorsForSymbol(cleanSym: string, ctx: MarketData
         isLiquiditySweep,
         isLiquiditySweepLow,
         adx15m: GLOBAL_ADX[cleanSym] || 25,
-        updatedAt: Date.now()
+        updatedAt: nextUpdatedAt,
+        ...(nextRegimeUpdatedAt !== undefined ? { regimeUpdatedAt: nextRegimeUpdatedAt } : {})
     };
 
     if (ctx.onIndicatorsUpdated) {

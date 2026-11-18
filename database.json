@@ -1,19 +1,19 @@
 {
   "settings": {
     "main": {
-      "virtualBalance": 80.77,
+      "virtualBalance": 75.68,
       "startOfDayBalance": 85.77,
       "lastResetDate": "2026-11-18",
-      "startOfWeekBalance": 85.77,
+      "startOfWeekBalance": 80.77,
       "lastWeekCheckTime": 1790150445705,
       "userId": "polyakovats3110@gmail.com",
-      "updatedAt": 1794982182408,
+      "updatedAt": 1794986179012,
       "virtualEquity": 85.77,
       "uiStatsResetTimestamp": 1791122286530
     },
     "globalConfig": {
-      "virtualBalance": 85.77,
-      "startOfDayBalance": 85.48,
+      "virtualBalance": 85.68,
+      "startOfDayBalance": 85.77,
       "telegramBots": [],
       "discordWebhooks": [],
       "exchangeApiConfig": {
@@ -26,18 +26,18 @@
       "btcShockThreshold": 1.5,
       "failedAutopilotSymbols": [],
       "modelWeights": {
-        "beta0": -0.7767181795203513,
-        "beta1": 1.095173080953333,
-        "beta2": 0.29709458063868305,
-        "beta3": 0.7321157116776109,
-        "beta4": 0.584034328715177,
-        "beta5": 0.27411598642982593,
-        "beta6": 0.4873565394058929,
-        "beta7": 0.1825288468255559,
-        "beta8": 0.9278297650039635,
-        "beta9": 1.3691248553282267,
-        "beta10": 0.7921779047920097,
-        "beta11": 1.064138658611329
+        "beta0": -0.8102997996926518,
+        "beta1": 1.0949540463371423,
+        "beta2": 0.12598875521495845,
+        "beta3": 0.7402461455990682,
+        "beta4": 0.5309943903856674,
+        "beta5": 0.2814420851231227,
+        "beta6": 0.4535221042898072,
+        "beta7": 0.18249234105619078,
+        "beta8": 0.912125195699189,
+        "beta9": 1.368851030357161,
+        "beta10": 0.7001896875556969,
+        "beta11": 1.0976627946878112
       },
       "autopilotAggressiveness": "conservative",
       "isAiExpertTraderEnabled": true,
@@ -96,21 +96,26 @@
       "staleDataPauseSec": 300,
       "kbDedupeCap": true,
       "exchangeWsObserveOnly": false,
-      "virtualEquity": 85.48,
+      "btcFreshnessFastLoopEnabled": false,
+      "aiDailyBudgetEnabled": false,
+      "aiDailyBudgetCalls": 20,
+      "evidenceUsesArchive": false,
+      "disabledPatterns": [],
+      "virtualEquity": 85.77,
       "uiStatsResetTimestamp": 1791122286530,
       "modelStatusMetadata": {
-        "totalLearnedTrades": 36,
-        "lastRetrained": 1794889463483
+        "totalLearnedTrades": 33,
+        "lastRetrained": 1794985354598
       },
-      "stateRevision": 25,
-      "updatedAt": 1794889463490,
+      "stateRevision": 28,
+      "updatedAt": 1794985354599,
       "regimeUsesRealBtcCandles": true,
       "blockEntriesOnEstimatedFeatures": true,
       "modelSideAwareFeatures": true,
       "requireModelMaturity": true,
       "modelMinSamplesForAdjustment": 100
     },
-    "virtualBalance": 80.77,
+    "virtualBalance": 75.68,
     "startOfDayBalance": 85.77
   },
   "trades": [
@@ -12885,7 +12890,7 @@
       "margin": 5,
       "initialMargin": 5,
       "leverage": 2,
-      "status": "OPEN",
+      "status": "CLOSED",
       "openTime": 1794981701192,
       "mode": "AUTO",
       "isReal": false,
@@ -13110,6 +13115,12 @@
           "type": "OPEN",
           "price": 0.10967,
           "amount": 5
+        },
+        {
+          "time": 1794985353733,
+          "type": "CLOSE",
+          "price": 0.11045,
+          "amount": 5
         }
       ],
       "marketType": "FUTURES",
@@ -13199,15 +13210,725 @@
           "strictLiquidityWouldBlock": false
         }
       },
-      "lastAliveAt": 1794982182408,
-      "currentPrice": 0.10957,
-      "highestPrice": 0.10984,
+      "lastAliveAt": 1794985353731,
+      "currentPrice": 0.11089,
+      "highestPrice": 0.11089,
       "lowestPrice": 0.10957,
       "maxReachedUnleveragedPnl": 0.09118263882557022,
-      "slViolationSeconds": 0,
+      "slViolationSeconds": 1,
       "lastAiCheck": 1794982092684,
       "aiAdvice": "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
       "maxReachedPnl": 0.05470958329534466,
+      "userId": "polyakovats3110@gmail.com",
+      "gapEvents": [
+        {
+          "id": "gap_1794985350603_2s07h",
+          "kind": "RESTART_GAP_ESTIMATED",
+          "from": 1794982182408,
+          "to": 1794985350603
+        }
+      ],
+      "gapAffected": true,
+      "gapFrom": 1794982182408,
+      "gapTo": 1794985350603,
+      "gapSec": 3168,
+      "gapReplayFrom": 1794982182408,
+      "gapReplayStatus": "DONE",
+      "gapReplayAttempts": 0,
+      "closeReasonCode": "STOP_LOSS",
+      "closedByGapReplay": true,
+      "gapReplayEventTime": 1794982620000,
+      "gapReplayTimeframe": "1m",
+      "gapReplayApprox": true,
+      "isClosing": true,
+      "closeTime": 1794982620000,
+      "closeDetectedAt": 1794985353733,
+      "closePrice": 0.11045,
+      "closeReason": "Gap replay: Stop Loss Hit at 0.11045 (SL was 0.11039)",
+      "notes": "Gap replay: Stop Loss Hit at 0.11045 (SL was 0.11039)",
+      "pnl": -0.087122458283943,
+      "pnlPercent": -1.7424491656788599,
+      "grossPnlUsd": -0.071122458283943,
+      "feeUsd": 0.011999999999999999,
+      "slippageUsd": 0.004,
+      "costModelVersion": 2,
+      "netPnlTakerFee": -1.8224,
+      "netPnlTakerFeeUsd": -0.091122,
+      "outcome": 0
+    },
+    {
+      "id": "TR-1794985613487-DZ",
+      "symbol": "BZ/USDT:USDT",
+      "side": "LONG",
+      "action": "BUY",
+      "entryPrice": 88.94245,
+      "amount": 5,
+      "initialAmount": 5,
+      "margin": 5,
+      "initialMargin": 5,
+      "leverage": 3,
+      "status": "OPEN",
+      "openTime": 1794985613503,
+      "mode": "AUTO",
+      "isReal": false,
+      "isPaper": true,
+      "dataOrigin": "PAPER",
+      "decisionSource": "COMMITTEE",
+      "marketRegime": "RANGING_FLAT",
+      "decisionTrace": {
+        "id": "dt_1794985613417_iwvydz",
+        "timestamp": 1794985613417,
+        "symbol": "BZ/USDT:USDT",
+        "side": "LONG",
+        "marketRegime": "RANGING_FLAT",
+        "regimeConfidence": 0.82,
+        "factors": [
+          {
+            "name": "RSI_15M",
+            "category": "TECHNICAL",
+            "value": 25.97,
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "RSI на уровне 26.0 (Перепроданность)"
+          },
+          {
+            "name": "SAR_REVERSAL_TRIGGER",
+            "category": "TECHNICAL",
+            "value": 0,
+            "weight": 20,
+            "direction": "LONG",
+            "passed": false,
+            "notes": "SAR не подтверждает разворот"
+          },
+          {
+            "name": "VOLUME_CLIMAX_SPIKE",
+            "category": "VOLUME",
+            "value": "2.5x",
+            "weight": 18,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Аномальный всплеск объема торгов: 2.5x от среднего"
+          },
+          {
+            "name": "BOTTOM_WICK_REJECTION",
+            "category": "STRUCTURE",
+            "value": "21.1%",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Размер разворотного фитиля: 21.1% (отказ от продолжения движения)"
+          },
+          {
+            "name": "LIQUIDITY_SWEEP",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": true,
+            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
+          },
+          {
+            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
+            "category": "STRUCTURE",
+            "value": "NONE",
+            "weight": 15,
+            "direction": "LONG",
+            "passed": false,
+            "notes": "Структура не сломана"
+          }
+        ],
+        "agentVotes": [
+          {
+            "agentId": "scout_agent",
+            "agentName": "ИИ-Сканер (Scout Agent)",
+            "role": "SCOUT",
+            "vote": "APPROVE_LONG",
+            "confidence": 93,
+            "assignedWeight": 1,
+            "weightedScore": 93,
+            "reason": "Обнаружен паттерн \"💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)\"",
+            "timestamp": 1794985613417
+          },
+          {
+            "agentId": "bull_analyst",
+            "agentName": "Бычий Аналитик (Bull Analyst)",
+            "role": "BULL_ANALYST",
+            "vote": "APPROVE_LONG",
+            "confidence": 93,
+            "assignedWeight": 1,
+            "weightedScore": 93,
+            "reason": "Бычий импульс с RSI 26.0",
+            "timestamp": 1794985613417
+          },
+          {
+            "agentId": "bear_analyst",
+            "agentName": "Медвежий Аналитик (Bear Analyst)",
+            "role": "BEAR_ANALYST",
+            "vote": "HOLD",
+            "confidence": 50,
+            "assignedWeight": 1,
+            "weightedScore": 50,
+            "reason": "Продажи иссякли (давление продавцов отсутствует)",
+            "timestamp": 1794985613417
+          },
+          {
+            "agentId": "liquidity_hunter",
+            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
+            "role": "LIQUIDITY_HUNTER",
+            "vote": "APPROVE_LONG",
+            "confidence": 90,
+            "assignedWeight": 1,
+            "weightedScore": 90,
+            "reason": "Снятие ликвидности подтверждено",
+            "timestamp": 1794985613417
+          },
+          {
+            "agentId": "risk_sentinel",
+            "agentName": "Риск-Страж (Risk Sentinel)",
+            "role": "RISK_SENTINEL",
+            "vote": "APPROVE_LONG",
+            "confidence": 85,
+            "assignedWeight": 1.2,
+            "weightedScore": 102,
+            "reason": "Риск-фильтры пройдены успешно",
+            "timestamp": 1794985613417
+          }
+        ],
+        "consensusScore": 78,
+        "requiredScore": 68,
+        "passedConsensus": true,
+        "rejectionReasons": [],
+        "executionMode": "PAPER",
+        "triggerPattern": "💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)",
+        "metadata": {
+          "indicatorsSource": "OHLCV",
+          "hasRealOhlcv": true,
+          "volumeSpike": 2.53,
+          "dataQuality": "REAL",
+          "estimatedFields": []
+        }
+      },
+      "stopLoss": 87.60831,
+      "takeProfit": 93.83428,
+      "tpStages": [
+        {
+          "targetPrice": 90.41,
+          "targetPercent": 1.38,
+          "closeRatio": 0.5,
+          "executed": false
+        },
+        {
+          "targetPrice": 91.63296,
+          "targetPercent": 2.75,
+          "closeRatio": 0.25,
+          "executed": false
+        },
+        {
+          "targetPrice": 92.85592,
+          "targetPercent": 4.13,
+          "closeRatio": 0.15,
+          "executed": false
+        },
+        {
+          "targetPrice": 93.83428,
+          "targetPercent": 5.5,
+          "closeRatio": 1,
+          "executed": false
+        }
+      ],
+      "gridOrders": [],
+      "correlationId": "corr_mv_1794985613484_sxmnv",
+      "correlationContext": {
+        "correlationId": "corr_mv_1794985613484_sxmnv",
+        "proposedTradeId": "TR-1794985613487-DZ",
+        "entryIntentId": "intent_1794985613485_6wx5ri4",
+        "signalId": "sig_1794985613484",
+        "strategyId": "CANONICAL_QUANT_SCALP_V2",
+        "strategyVersion": "2.1.0",
+        "stateRevision": 1295526,
+        "emittedAt": 1794985613489
+      },
+      "entryIntentId": "intent_1794985613485_6wx5ri4",
+      "intentId": "intent_1794985613485_6wx5ri4",
+      "tradeIntentId": "intent_1794985613485_6wx5ri4",
+      "signalId": "sig_1794985613484",
+      "strategyId": "CANONICAL_QUANT_SCALP_V2",
+      "strategyVersion": "2.1.0",
+      "matchedRuleIds": [
+        "rule-1792316263316-uehbyim-85",
+        "rule-1792316263317-wp1x3rm-489",
+        "adv_14",
+        "adv_21",
+        "adv_22"
+      ],
+      "matchedRules": [
+        "rule-1792316263316-uehbyim-85",
+        "rule-1792316263317-wp1x3rm-489",
+        "adv_14",
+        "adv_21",
+        "adv_22"
+      ],
+      "features": [
+        0,
+        24.03,
+        0.07709945882667332,
+        1.3453043462562886,
+        0.2020882452003959,
+        1,
+        0,
+        0.21052631578943432,
+        1,
+        1.6568491415621893,
+        -1
+      ],
+      "committeeDecisionId": "comm_1794985613489_2tvxw",
+      "agentDecisionIds": [
+        "dec_hunter_1794985613489_70qti",
+        "dec_bear_1794985613489_rdfol",
+        "comm_1794985613489_2tvxw"
+      ],
+      "stateRevision": 1295526,
+      "lineageStatus": "COMPLIANT",
+      "history": [
+        {
+          "time": 1794985613503,
+          "type": "OPEN",
+          "price": 88.94245,
+          "amount": 5
+        }
+      ],
+      "marketType": "FUTURES",
+      "resolvedMarketType": "FUTURES",
+      "requestedMode": "HYBRID",
+      "allowedDirections": "BOTH",
+      "scannerSide": "LONG",
+      "strategySide": "LONG",
+      "committeeSide": "LONG",
+      "executionSide": "LONG",
+      "gateDiagnostics": {
+        "dataCompleteness": true,
+        "spreadSafety": true,
+        "spreadGate": true,
+        "liquiditySafety": true,
+        "volumeGate": true,
+        "strictLiquidityWouldBlock": false,
+        "fundingSafety": true,
+        "fundingGate": true,
+        "strategy_ADAPTIVE_DYNAMIC": true,
+        "sideInvariantMatch": true,
+        "directionAllowed": true,
+        "patternNotBlacklisted": true,
+        "confidenceGate": true
+      },
+      "sourcePath": "MAIN_VIRTUAL",
+      "configVersion": "8c572706-aca42b2b",
+      "buildId": "8c572706",
+      "processStartedAt": 1794985347995,
+      "featuresVersion": 2,
+      "entryDiagnostics": {
+        "indicatorsSource": "OHLCV",
+        "dataQuality": "REAL",
+        "estimatedFields": [],
+        "featuresVersion": 2,
+        "features": [
+          0,
+          24.03,
+          0.07709945882667332,
+          1.3453043462562886,
+          0.2020882452003959,
+          1,
+          0,
+          0.21052631578943432,
+          1,
+          1.6568491415621893,
+          -1
+        ],
+        "featuresHadIndicators": true,
+        "featuresV2": [
+          0,
+          -24.03,
+          -0.07709945882667332,
+          -1.3453043462562886,
+          -0.2020882452003959,
+          1,
+          0,
+          0,
+          0,
+          -1.6568491415621893,
+          1
+        ],
+        "featuresV2HadIndicators": true,
+        "featuresV2KeyUsed": "BZUSDT",
+        "quantPV2": null,
+        "aiScoreRaw": 93,
+        "kbPenalty": 0,
+        "kbPenaltyCapped": 0,
+        "kbBonus": 6,
+        "quantP": 0.99,
+        "aiScoreFinal": 99,
+        "volume24h": 354098212.1998,
+        "volumeSpike": 2.53,
+        "marketRegime": "RANGING_FLAT",
+        "cellVerdict": {
+          "cellKey": "💎 ИДЕАЛЬНЫЙ ЛОНГ (Smart Liquidity Floor)|LONG|RANGING_FLAT",
+          "level": "none",
+          "n": 0,
+          "verdict": "NEUTRAL",
+          "adjustment": 0
+        },
+        "shadow": {
+          "regimeReal": "RANGING_FLAT",
+          "wouldBlockEstimatedFeatures": false,
+          "pSideAware": 0.99,
+          "pAdjustmentWouldBeZero": true,
+          "strictLiquidityWouldBlock": false
+        }
+      },
+      "matchedRuleTexts": [
+        "Фиксировать прибыль в шортах на нейтральном рынке с помощью трейлинг-стопа, избегая входов при локальной перепроданности.",
+        "Паттерн 'Ретест зоны фитиля / Двойная вершина' (Wick Zone Retest): Повторный тест зоны экстремума верхнего фитиля предыдущей кульминационной свечи при затухании объемов; вход Sell Limit под хай первой тени.",
+        "Кульминация на объеме: Когда монета летит вверх и объем достигает пика, а цена начинает 'тормозить' (свечи становятся меньше), значит крупный игрок разгружается (сливает). Это точка входа в SHORT на откат.",
+        "Паттерн 'Шпиль на 1м' (1m Spire Pump Climax): Внезапный вертикальный выстрел монеты на 1m ТФ с образованием длиннющей верхней тени (>50-70% диапазона свечи) на экстремальном объеме. Быстрая зачистка лонгистов в лимиты продавца. Вход Sell Limit в верхнюю треть тени.",
+        "Паттерн 'Ретест Зоны Фитиля / Двойная Вершина' (Wick Zone Retest / Double Peak): Повторный тест зоны экстремума верхнего фитиля предыдущей кульминационной свечи на младших ТФ на снижающейся торговой активности (затухание объема на второй вершине). Вход лимитным ордером (Sell Limit) под хай первой тени."
+      ],
+      "lastAliveAt": 1794986154420,
+      "currentPrice": 88.99,
+      "highestPrice": 88.99,
+      "lowestPrice": 88.82,
+      "maxReachedUnleveragedPnl": 0.053461536083165125,
+      "slViolationSeconds": 0,
+      "lastAiCheck": 1794986129606,
+      "aiAdvice": "ИИ-эксперт недоступен. Сохранение текущих уровней позиции без изменений.",
+      "maxReachedPnl": 0.05919558096274599,
+      "userId": "polyakovats3110@gmail.com"
+    },
+    {
+      "id": "TR-1794986178494-LS",
+      "symbol": "XPIN/USDT:USDT",
+      "side": "SHORT",
+      "action": "SELL",
+      "entryPrice": 0.0006992,
+      "amount": 5,
+      "initialAmount": 5,
+      "margin": 5,
+      "initialMargin": 5,
+      "leverage": 2,
+      "status": "OPEN",
+      "openTime": 1794986178510,
+      "mode": "AUTO",
+      "isReal": false,
+      "isPaper": true,
+      "dataOrigin": "PAPER",
+      "decisionSource": "COMMITTEE",
+      "marketRegime": "RANGING_FLAT",
+      "decisionTrace": {
+        "id": "dt_1794986019080_nx3c29",
+        "timestamp": 1794986019080,
+        "symbol": "XPIN/USDT:USDT",
+        "side": "SHORT",
+        "marketRegime": "RANGING_FLAT",
+        "regimeConfidence": 0.82,
+        "factors": [
+          {
+            "name": "RSI_15M",
+            "category": "TECHNICAL",
+            "value": 77.89,
+            "weight": 15,
+            "direction": "SHORT",
+            "passed": true,
+            "notes": "RSI на уровне 77.9 (Перекупленность)"
+          },
+          {
+            "name": "SAR_REVERSAL_TRIGGER",
+            "category": "TECHNICAL",
+            "value": 1,
+            "weight": 20,
+            "direction": "SHORT",
+            "passed": true,
+            "notes": "Parabolic SAR переключился в сторону входа"
+          },
+          {
+            "name": "VOLUME_CLIMAX_SPIKE",
+            "category": "VOLUME",
+            "value": "1.0x",
+            "weight": 18,
+            "direction": "SHORT",
+            "passed": false,
+            "notes": "Аномальный всплеск объема торгов: 1.0x от среднего"
+          },
+          {
+            "name": "TOP_WICK_REJECTION",
+            "category": "STRUCTURE",
+            "value": "65.1%",
+            "weight": 15,
+            "direction": "SHORT",
+            "passed": true,
+            "notes": "Размер разворотного фитиля: 65.1% (отказ от продолжения движения)"
+          },
+          {
+            "name": "LIQUIDITY_SWEEP",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "SHORT",
+            "passed": true,
+            "notes": "Зафиксировано снятие ликвидности за локальным экстремумом"
+          },
+          {
+            "name": "MARKET_STRUCTURE_SHIFT_BOS_CHOCH",
+            "category": "STRUCTURE",
+            "value": "CONFIRMED",
+            "weight": 15,
+            "direction": "SHORT",
+            "passed": true,
+            "notes": "Локальный слом структуры (BOS/ChoCh) подтвержден"
+          }
+        ],
+        "agentVotes": [
+          {
+            "agentId": "scout_agent",
+            "agentName": "ИИ-Сканер (Scout Agent)",
+            "role": "SCOUT",
+            "vote": "APPROVE_SHORT",
+            "confidence": 89,
+            "assignedWeight": 1,
+            "weightedScore": 89,
+            "reason": "Обнаружен паттерн \"🧹 False Breakout (Ложный пробой)\"",
+            "timestamp": 1794986019080
+          },
+          {
+            "agentId": "bull_analyst",
+            "agentName": "Бычий Аналитик (Bull Analyst)",
+            "role": "BULL_ANALYST",
+            "vote": "HOLD",
+            "confidence": 50,
+            "assignedWeight": 1,
+            "weightedScore": 50,
+            "reason": "Покупательские импульсы иссякли (сопротивление покупателей отсутствует)",
+            "timestamp": 1794986019080
+          },
+          {
+            "agentId": "bear_analyst",
+            "agentName": "Медвежий Аналитик (Bear Analyst)",
+            "role": "BEAR_ANALYST",
+            "vote": "APPROVE_SHORT",
+            "confidence": 89,
+            "assignedWeight": 1,
+            "weightedScore": 89,
+            "reason": "Медвежий сетап: фитиль 65.1%",
+            "timestamp": 1794986019080
+          },
+          {
+            "agentId": "liquidity_hunter",
+            "agentName": "Охотник за Ликвидностью (Liquidity Hunter)",
+            "role": "LIQUIDITY_HUNTER",
+            "vote": "APPROVE_SHORT",
+            "confidence": 90,
+            "assignedWeight": 1,
+            "weightedScore": 90,
+            "reason": "Снятие ликвидности подтверждено",
+            "timestamp": 1794986019080
+          },
+          {
+            "agentId": "risk_sentinel",
+            "agentName": "Риск-Страж (Risk Sentinel)",
+            "role": "RISK_SENTINEL",
+            "vote": "APPROVE_SHORT",
+            "confidence": 85,
+            "assignedWeight": 1.2,
+            "weightedScore": 102,
+            "reason": "Риск-фильтры пройдены успешно",
+            "timestamp": 1794986019080
+          }
+        ],
+        "consensusScore": 76,
+        "requiredScore": 68,
+        "passedConsensus": true,
+        "rejectionReasons": [],
+        "executionMode": "PAPER",
+        "triggerPattern": "🧹 False Breakout (Ложный пробой)",
+        "metadata": {
+          "indicatorsSource": "OHLCV",
+          "hasRealOhlcv": true,
+          "volumeSpike": 0.99,
+          "dataQuality": "REAL",
+          "estimatedFields": []
+        }
+      },
+      "stopLoss": 0.0007,
+      "takeProfit": 0.00064,
+      "tpStages": [
+        {
+          "targetPrice": 0.00068,
+          "targetPercent": 1.98,
+          "closeRatio": 0.55,
+          "executed": false
+        },
+        {
+          "targetPrice": 0.00067,
+          "targetPercent": 3.95,
+          "closeRatio": 0.25,
+          "executed": false
+        },
+        {
+          "targetPrice": 0.00065,
+          "targetPercent": 5.93,
+          "closeRatio": 0.12,
+          "executed": false
+        },
+        {
+          "targetPrice": 0.00064,
+          "targetPercent": 7.91,
+          "closeRatio": 1,
+          "executed": false
+        }
+      ],
+      "gridOrders": [],
+      "correlationId": "corr_mv_1794986019087_zrpsf",
+      "correlationContext": {
+        "correlationId": "corr_mv_1794986019087_zrpsf",
+        "proposedTradeId": "TR-1794986178494-LS",
+        "entryIntentId": "intent_1794986019087_r6xnegz",
+        "signalId": "sig_1794986019087",
+        "strategyId": "CANONICAL_QUANT_SCALP_V2",
+        "strategyVersion": "2.1.0",
+        "stateRevision": 1295546,
+        "emittedAt": 1794986178496
+      },
+      "entryIntentId": "intent_1794986019087_r6xnegz",
+      "intentId": "intent_1794986019087_r6xnegz",
+      "tradeIntentId": "intent_1794986019087_r6xnegz",
+      "signalId": "sig_1794986019087",
+      "strategyId": "CANONICAL_QUANT_SCALP_V2",
+      "strategyVersion": "2.1.0",
+      "matchedRuleIds": [
+        "RULE_SAR_M1_M15",
+        "RULE_VWAP_ALIGNMENT",
+        "PAT_EXPLICIT_SHORT_STRATEGY_SIGNAL"
+      ],
+      "matchedRules": [
+        "RULE_SAR_M1_M15",
+        "RULE_VWAP_ALIGNMENT",
+        "PAT_EXPLICIT_SHORT_STRATEGY_SIGNAL"
+      ],
+      "features": [
+        0,
+        27.89,
+        0.4267205024620164,
+        4.259627804615614,
+        0,
+        1,
+        0,
+        0.650793650793659,
+        1,
+        4.236720976286213,
+        -1
+      ],
+      "committeeDecisionId": "comm_1794986178495_ytn09",
+      "agentDecisionIds": [
+        "dec_hunter_1794986178495_wuqjc",
+        "dec_bear_1794986178495_rbzjo",
+        "comm_1794986178495_ytn09"
+      ],
+      "stateRevision": 1295546,
+      "lineageStatus": "COMPLIANT",
+      "history": [
+        {
+          "time": 1794986178510,
+          "type": "OPEN",
+          "price": 0.0006992,
+          "amount": 5
+        }
+      ],
+      "marketType": "FUTURES",
+      "resolvedMarketType": "FUTURES",
+      "requestedMode": "HYBRID",
+      "allowedDirections": "BOTH",
+      "scannerSide": "SHORT",
+      "strategySide": "SHORT",
+      "committeeSide": "SHORT",
+      "executionSide": "SHORT",
+      "gateDiagnostics": {
+        "dataCompleteness": true,
+        "spreadSafety": true,
+        "spreadGate": true,
+        "liquiditySafety": true,
+        "volumeGate": true,
+        "strictLiquidityWouldBlock": false,
+        "fundingSafety": true,
+        "fundingGate": true,
+        "strategy_ADAPTIVE_DYNAMIC": true,
+        "sideInvariantMatch": true,
+        "directionAllowed": true,
+        "patternNotBlacklisted": true,
+        "confidenceGate": true
+      },
+      "sourcePath": "MAIN_VIRTUAL",
+      "configVersion": "8c572706-aca42b2b",
+      "buildId": "8c572706",
+      "processStartedAt": 1794985347995,
+      "featuresVersion": 2,
+      "entryDiagnostics": {
+        "indicatorsSource": "OHLCV",
+        "dataQuality": "REAL",
+        "estimatedFields": [],
+        "featuresVersion": 2,
+        "features": [
+          0,
+          27.89,
+          0.4267205024620164,
+          4.259627804615614,
+          0,
+          1,
+          0,
+          0.650793650793659,
+          1,
+          4.236720976286213,
+          -1
+        ],
+        "featuresHadIndicators": true,
+        "featuresV2": [
+          0,
+          27.89,
+          0.4267205024620164,
+          4.259627804615614,
+          0,
+          0,
+          0,
+          0.650793650793659,
+          1,
+          4.236720976286213,
+          -1
+        ],
+        "featuresV2HadIndicators": true,
+        "featuresV2KeyUsed": "XPINUSDT",
+        "quantPV2": null,
+        "aiScoreRaw": 89,
+        "kbPenalty": 0,
+        "kbPenaltyCapped": 0,
+        "kbBonus": 0,
+        "quantP": 0.99,
+        "aiScoreFinal": 89,
+        "volume24h": 198220686.2221,
+        "volumeSpike": 0.99,
+        "marketRegime": "RANGING_FLAT",
+        "cellVerdict": {
+          "cellKey": "Ложный пробой (VWAP Reclaim)|SHORT|RANGING_FLAT",
+          "level": "none",
+          "n": 0,
+          "verdict": "NEUTRAL",
+          "adjustment": 0
+        },
+        "shadow": {
+          "regimeReal": "RANGING_FLAT",
+          "wouldBlockEstimatedFeatures": false,
+          "pSideAware": 0.99,
+          "pAdjustmentWouldBeZero": true,
+          "strictLiquidityWouldBlock": false
+        }
+      },
+      "lastAliveAt": 1794986179012,
       "userId": "polyakovats3110@gmail.com"
     }
   ],
@@ -22125,24 +22846,6 @@
   ],
   "agentExchangeLogs": [
     {
-      "id": "el_1792395029164_3f3m3",
-      "timestamp": 1792395029164,
-      "fromAgent": "RETROSPECTIVE",
-      "toAgent": "EXPERT",
-      "message": "Проведен аудит закрытых сделок.",
-      "details": "Винрейт стабилен, активирована защита от проскальзываний.",
-      "type": "info"
-    },
-    {
-      "id": "el_1792395029164_fshmn",
-      "timestamp": 1792395029164,
-      "fromAgent": "ARCHIVIST",
-      "toAgent": "ALL",
-      "message": "Оптимизирована база знаний.",
-      "details": "Проведена программная дедупликация авто-правил.",
-      "type": "success"
-    },
-    {
       "id": "el_1792395029165_8zvvi",
       "timestamp": 1792395029165,
       "fromAgent": "EXPERT",
@@ -23023,11 +23726,29 @@
       "message": "Ретроспективное совещание завершено",
       "details": "Все агенты подтвердили стабильность торговых показателей и соответствие риск-лимитам.",
       "type": "success"
+    },
+    {
+      "id": "el_1794985354390_whgg5",
+      "timestamp": 1794985354390,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "ALL",
+      "message": "Ретроспективное совещание завершено",
+      "details": "Все агенты подтвердили стабильность торговых показателей и соответствие риск-лимитам.",
+      "type": "success"
+    },
+    {
+      "id": "el_1794985528948_c906g",
+      "timestamp": 1794985528948,
+      "fromAgent": "RETROSPECTIVE",
+      "toAgent": "ALL",
+      "message": "Ретроспективное совещание завершено",
+      "details": "Все агенты подтвердили стабильность торговых показателей и соответствие риск-лимитам.",
+      "type": "success"
     }
   ],
   "aiCommitteeHistory": [],
-  "stateRevision": 1295512,
-  "updatedAt": 1794982182409,
+  "stateRevision": 1295552,
+  "updatedAt": 1794986179179,
   "aiExpertTraderInstructionsHistory": [
     {
       "id": "inst_1792223010329_4wtk3",
@@ -23171,76 +23892,12 @@
     }
   ],
   "optimizerSummary": {
-    "timestamp": 1794981351907,
+    "timestamp": 1794985528948,
     "winRate": 0,
     "summary": "ИИ недоступен, ретроспектива пропущена",
     "expertModifications": ""
   },
   "aiPerformanceReports": [
-    {
-      "id": "rep_1792384024537_9f4o4",
-      "timestamp": 1792384024537,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 28.26086956521739,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 25,
-          "count": 4,
-          "profitCount": 1,
-          "totalPnl": -0.5738947236118122
-        },
-        "week": {
-          "winRate": 28.26086956521739,
-          "count": 46,
-          "profitCount": 13,
-          "totalPnl": -5.507478248684062
-        },
-        "month": {
-          "winRate": 33.74083129584352,
-          "count": 409,
-          "profitCount": 138,
-          "totalPnl": -28.168915437011034
-        }
-      }
-    },
-    {
-      "id": "rep_1792384911164_ezob3",
-      "timestamp": 1792384911164,
-      "analyzedTradesCount": 15,
-      "winRateBefore": 28.26086956521739,
-      "winRateAfter": 52.5,
-      "archivedRulesCount": 0,
-      "archivedRulesList": [],
-      "optimizedLogicSummary": "Плановая квант-оптимизация параметров входа и спреда",
-      "impactAssessment": "Сохранение устойчивости торговых показателей",
-      "historicalSelfReview": "Стабильное поддержание винрейта на интервале",
-      "stats": {
-        "day": {
-          "winRate": 25,
-          "count": 4,
-          "profitCount": 1,
-          "totalPnl": -0.5738947236118122
-        },
-        "week": {
-          "winRate": 28.26086956521739,
-          "count": 46,
-          "profitCount": 13,
-          "totalPnl": -5.507478248684062
-        },
-        "month": {
-          "winRate": 33.74083129584352,
-          "count": 409,
-          "profitCount": 138,
-          "totalPnl": -28.168915437011034
-        }
-      }
-    },
     {
       "id": "rep_1792385819194_ca5f1",
       "timestamp": 1792385819194,
@@ -24793,18 +25450,73 @@
           "totalPnl": -0.21091301828202133
         }
       }
+    },
+    {
+      "id": "rep_1794985354390_219fb",
+      "timestamp": 1794985354390,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 38.46153846153847,
+      "winRateAfter": 0,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Оптимизация пропущена из-за недоступности ИИ",
+      "impactAssessment": "Нейтрально",
+      "historicalSelfReview": "Пропущено",
+      "stats": {
+        "day": {
+          "winRate": 0,
+          "count": 1,
+          "profitCount": 0,
+          "totalPnl": -0.087122458283943
+        },
+        "week": {
+          "winRate": 38.46153846153847,
+          "count": 13,
+          "profitCount": 5,
+          "totalPnl": 0.21651100914150972
+        },
+        "month": {
+          "winRate": 39.39393939393939,
+          "count": 33,
+          "profitCount": 13,
+          "totalPnl": -0.2980354765659643
+        }
+      }
+    },
+    {
+      "id": "rep_1794985528948_mlw5h",
+      "timestamp": 1794985528948,
+      "analyzedTradesCount": 15,
+      "winRateBefore": 38.46153846153847,
+      "winRateAfter": 0,
+      "archivedRulesCount": 0,
+      "archivedRulesList": [],
+      "optimizedLogicSummary": "Оптимизация пропущена из-за недоступности ИИ",
+      "impactAssessment": "Нейтрально",
+      "historicalSelfReview": "Пропущено",
+      "stats": {
+        "day": {
+          "winRate": 0,
+          "count": 1,
+          "profitCount": 0,
+          "totalPnl": -0.087122458283943
+        },
+        "week": {
+          "winRate": 38.46153846153847,
+          "count": 13,
+          "profitCount": 5,
+          "totalPnl": 0.21651100914150972
+        },
+        "month": {
+          "winRate": 39.39393939393939,
+          "count": 33,
+          "profitCount": 13,
+          "totalPnl": -0.2980354765659643
+        }
+      }
     }
   ],
   "retrospectiveMemory": [
-    {
-      "id": "retro_1791898258791_370",
-      "symbol": "ACNUSDT",
-      "pnlPercent": -7.057593104643745,
-      "pnlUsd": -0.44462836559255586,
-      "actionTaken": "AI_AUTO",
-      "lesson": "Сделка завершена с результатом -7.1%. Соблюдайте риск-политику.",
-      "timestamp": 1791898258791
-    },
     {
       "id": "retro_1791898258791_335",
       "symbol": "TOSHIUSDT",
@@ -25155,6 +25867,15 @@
       "actionTaken": "AI_AUTO",
       "lesson": "Сделка завершена с результатом 3.4%. Соблюдайте риск-политику.",
       "timestamp": 1794889463303
+    },
+    {
+      "id": "retro_1794985354302_510",
+      "symbol": "AINUSDT",
+      "pnlPercent": -1.7424491656788599,
+      "pnlUsd": -0.087122458283943,
+      "actionTaken": "AI_AUTO",
+      "lesson": "Сделка завершена с результатом -1.7%. Соблюдайте риск-политику.",
+      "timestamp": 1794985354302
     }
   ],
   "decisionBundles": [

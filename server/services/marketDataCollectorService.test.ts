@@ -94,14 +94,16 @@ describe('updateBtcFreshnessFast & 10m BTC age max tracking (J4)', () => {
     expect(disabledRes).toBe(false);
     expect(fetchOHLCV).not.toHaveBeenCalled();
     expect(trueOhlcv.BTCUSDT.updatedAt).toBe(staleTs);
+    expect(trueOhlcv.BTCUSDT.regimeUpdatedAt).toBeUndefined();
 
-    // Flag ON -> lightweight BTC 15m + 1h update only
+    // Flag ON -> lightweight BTC 15m + 1h update updates ONLY regimeUpdatedAt, never updatedAt
     flagEnabled = true;
     const enabledRes = await updateBtcFreshnessFast(ctx);
     expect(enabledRes).toBe(true);
     expect(fetchOHLCV).toHaveBeenCalledTimes(2);
     expect(fetchOHLCV.mock.calls.every(([sym]) => sym === 'BTC/USDT:USDT')).toBe(true);
-    expect(trueOhlcv.BTCUSDT.updatedAt).toBeGreaterThan(staleTs);
+    expect(trueOhlcv.BTCUSDT.updatedAt).toBe(staleTs);
+    expect(trueOhlcv.BTCUSDT.regimeUpdatedAt).toBeGreaterThan(staleTs);
     expect(Object.keys(trueOhlcv)).toEqual(['BTCUSDT']);
   });
 

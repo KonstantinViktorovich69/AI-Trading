@@ -24,4 +24,5 @@ data/funnel.json
 data/learning-cells.json
 data/quant-model-v2.json
 data/backtest_cache/
+data/_persistence_probe_ignored.json
 

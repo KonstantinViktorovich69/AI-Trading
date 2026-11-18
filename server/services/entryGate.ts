@@ -100,20 +100,89 @@ export function resolveTickerTimestamp(deps?: EntryGateDeps): number | undefined
   return undefined;
 }
 
+function getBtcOhlcvEntry(deps?: EntryGateDeps): any {
+  const trueOhlcv = deps?.getGlobalTrueOhlcv ? deps.getGlobalTrueOhlcv() : undefined;
+  if (trueOhlcv && typeof trueOhlcv === 'object') {
+    return trueOhlcv['BTCUSDT'] || trueOhlcv['BTC/USDT'] || trueOhlcv['BTC/USDT:USDT'];
+  }
+  return undefined;
+}
+
 export function resolveBtcOhlcvTimestamp(deps?: EntryGateDeps): number | undefined {
   if (!deps) return undefined;
   if (typeof deps.getBtcOhlcvTimestamp === 'function') {
     const ts = deps.getBtcOhlcvTimestamp();
     if (typeof ts === 'number' && ts > 0) return ts;
   }
-  const trueOhlcv = deps.getGlobalTrueOhlcv ? deps.getGlobalTrueOhlcv() : undefined;
-  if (trueOhlcv && typeof trueOhlcv === 'object') {
-    const btcEntry = trueOhlcv['BTCUSDT'] || trueOhlcv['BTC/USDT'] || trueOhlcv['BTC/USDT:USDT'];
-    if (btcEntry && typeof btcEntry.updatedAt === 'number' && btcEntry.updatedAt > 0) {
-      return btcEntry.updatedAt;
-    }
+  const btcEntry = getBtcOhlcvEntry(deps);
+  if (btcEntry && typeof btcEntry.updatedAt === 'number' && btcEntry.updatedAt > 0) {
+    return btcEntry.updatedAt;
   }
   return undefined;
+}
+
+export function resolveBtcRegimeTimestamp(deps?: EntryGateDeps): number | undefined {
+  if (!deps) return undefined;
+  const fullCycleTs = resolveBtcOhlcvTimestamp(deps);
+  const settings = deps.getGlobalSettings ? deps.getGlobalSettings() : undefined;
+  if (settings?.btcFreshnessFastLoopEnabled !== true) {
+    return fullCycleTs;
+  }
+  const btcEntry = getBtcOhlcvEntry(deps);
+  const regimeTs = btcEntry && typeof btcEntry.regimeUpdatedAt === 'number' && btcEntry.regimeUpdatedAt > 0
+    ? btcEntry.regimeUpdatedAt
+    : 0;
+  const maxTs = Math.max(fullCycleTs || 0, regimeTs);
+  return maxTs > 0 ? maxTs : undefined;
+}
+
+export function isBtcCandidateSymbol(symbol?: string): boolean {
+  if (!symbol || typeof symbol !== 'string') return false;
+  const clean = symbol.split(':')[0].replace(/[\/:\s-]/g, '').toUpperCase();
+  return clean === 'BTCUSDT';
+}
+
+export function isBtcCandidateEntryBlocked(
+  symbol: string,
+  nowTs?: number,
+  deps?: EntryGateDeps
+): { blocked: boolean; reason?: string; ageSec?: number } {
+  if (!isBtcCandidateSymbol(symbol)) {
+    return { blocked: false };
+  }
+  const now = nowTs || Date.now();
+  const settings = deps?.getGlobalSettings ? deps.getGlobalSettings() : {};
+  const staleDataPauseSec = typeof (settings as any)?.staleDataPauseSec === 'number'
+    ? (settings as any).staleDataPauseSec
+    : 300;
+  if (staleDataPauseSec <= 0) {
+    return { blocked: false };
+  }
+
+  const btcCandidateTs = resolveBtcOhlcvTimestamp(deps);
+  if (typeof btcCandidateTs === 'number' && btcCandidateTs > 0) {
+    const ageMs = now - btcCandidateTs;
+    const ageSec = Math.max(0, Math.round(ageMs / 1000));
+    if (ageMs > staleDataPauseSec * 1000) {
+      return {
+        blocked: true,
+        reason: `stale_data_btc_candidate_ohlcv (${ageSec}s > ${staleDataPauseSec}s)`,
+        ageSec
+      };
+    }
+    return { blocked: false, ageSec };
+  }
+
+  // If fast loop already populated regimeUpdatedAt while full-cycle BTC updatedAt is still missing
+  const btcEntry = getBtcOhlcvEntry(deps);
+  if (settings?.btcFreshnessFastLoopEnabled === true && btcEntry && typeof btcEntry.regimeUpdatedAt === 'number' && btcEntry.regimeUpdatedAt > 0) {
+    return {
+      blocked: true,
+      reason: 'stale_data_btc_candidate_ohlcv (full-cycle updatedAt missing)'
+    };
+  }
+
+  return { blocked: false };
 }
 
 export function getMarketDataFreshness(nowTs?: number, deps?: EntryGateDeps): {
@@ -122,20 +191,30 @@ export function getMarketDataFreshness(nowTs?: number, deps?: EntryGateDeps): {
   btcOhlcvTimestamp: number | null;
   btcOhlcvAgeSec: number | null;
   btcOhlcvAgeMax10mSec: number | null;
+  btcRegimeTimestamp: number | null;
+  btcRegimeAgeSec: number | null;
+  btcCandidateTimestamp: number | null;
+  btcCandidateAgeSec: number | null;
 } {
   const now = nowTs || Date.now();
   const tickerTs = resolveTickerTimestamp(deps);
-  const btcOhlcvTs = resolveBtcOhlcvTimestamp(deps);
-  const btcOhlcvAgeSec = typeof btcOhlcvTs === 'number' && btcOhlcvTs > 0 ? Math.max(0, Math.round((now - btcOhlcvTs) / 1000)) : null;
-  if (btcOhlcvAgeSec !== null) {
-    recordBtcOhlcvAgeSample(btcOhlcvAgeSec, now);
+  const btcRegimeTs = resolveBtcRegimeTimestamp(deps);
+  const btcCandidateTs = resolveBtcOhlcvTimestamp(deps);
+  const btcRegimeAgeSec = typeof btcRegimeTs === 'number' && btcRegimeTs > 0 ? Math.max(0, Math.round((now - btcRegimeTs) / 1000)) : null;
+  const btcCandidateAgeSec = typeof btcCandidateTs === 'number' && btcCandidateTs > 0 ? Math.max(0, Math.round((now - btcCandidateTs) / 1000)) : null;
+  if (btcRegimeAgeSec !== null) {
+    recordBtcOhlcvAgeSample(btcRegimeAgeSec, now);
   }
   return {
     tickerTimestamp: tickerTs ?? null,
     tickerAgeSec: typeof tickerTs === 'number' && tickerTs > 0 ? Math.max(0, Math.round((now - tickerTs) / 1000)) : null,
-    btcOhlcvTimestamp: btcOhlcvTs ?? null,
-    btcOhlcvAgeSec,
-    btcOhlcvAgeMax10mSec: getBtcOhlcvAgeMax10mSec(now)
+    btcOhlcvTimestamp: btcRegimeTs ?? null,
+    btcOhlcvAgeSec: btcRegimeAgeSec,
+    btcOhlcvAgeMax10mSec: getBtcOhlcvAgeMax10mSec(now),
+    btcRegimeTimestamp: btcRegimeTs ?? null,
+    btcRegimeAgeSec,
+    btcCandidateTimestamp: btcCandidateTs ?? null,
+    btcCandidateAgeSec
   };
 }
 
@@ -145,7 +224,7 @@ export function getMarketDataFreshness(nowTs?: number, deps?: EntryGateDeps): {
  * 1. Process startup grace period: < entryPauseAfterStartSec (default 120; 0 = off).
  * 2. Warmup check: < 3 symbols in getGlobalTrueOhlcv(), while < 300s since start. After 300s warmup pause forced release.
  * 3. now < pausedUntilTs.
- * 4. T7.5 Stale data check: ticker age or BTC OHLCV age > staleDataPauseSec (default 300s).
+ * 4. T7.5 Stale data check: ticker age or BTC regime OHLCV age > staleDataPauseSec (default 300s).
  */
 export function isEntryPaused(nowTs?: number, deps?: EntryGateDeps): EntryGateStatus {
   const now = nowTs || Date.now();
@@ -191,7 +270,7 @@ export function isEntryPaused(nowTs?: number, deps?: EntryGateDeps): EntryGateSt
     };
   }
 
-  // 4. T7.5: Pause new entries when ticker or BTC OHLCV data exceeds staleDataPauseSec
+  // 4. T7.5: Pause new entries when ticker or BTC regime OHLCV data exceeds staleDataPauseSec
   const staleDataPauseSec = typeof (settings as any)?.staleDataPauseSec === 'number'
     ? (settings as any).staleDataPauseSec
     : 300;
@@ -210,11 +289,11 @@ export function isEntryPaused(nowTs?: number, deps?: EntryGateDeps): EntryGateSt
       };
     }
 
-    const btcOhlcvTs = resolveBtcOhlcvTimestamp(deps);
-    if (typeof btcOhlcvTs === 'number' && btcOhlcvTs > 0) {
-      const ageSec = Math.max(0, Math.round((now - btcOhlcvTs) / 1000));
+    const btcRegimeTs = resolveBtcRegimeTimestamp(deps);
+    if (typeof btcRegimeTs === 'number' && btcRegimeTs > 0) {
+      const ageSec = Math.max(0, Math.round((now - btcRegimeTs) / 1000));
       recordBtcOhlcvAgeSample(ageSec, now);
-      if ((now - btcOhlcvTs) > thresholdMs) {
+      if ((now - btcRegimeTs) > thresholdMs) {
         if (!deps?.silent && (now - lastStaleLogTs > 60000)) {
           lastStaleLogTs = now;
           console.warn(`[ENTRY GATE] Pausing entries: BTC OHLCV age ${ageSec}s > ${staleDataPauseSec}s`);

@@ -7,7 +7,8 @@ import express from 'express';
 
 import { evaluateEvidenceGate } from './evidenceGate.ts';
 import { buildEvidenceReport } from './evidenceReport.ts';
-import { isEntryPaused, resetEntryGateForTest } from './entryGate.ts';
+import { isEntryPaused, isBtcCandidateEntryBlocked, getMarketDataFreshness, resetEntryGateForTest } from './entryGate.ts';
+import { SCANNER_PATTERN_NAMES } from './marketSignalScanner.ts';
 import {
   validateExpertInstructionModification,
   validateKnowledgeRebalanceSize,
@@ -839,6 +840,96 @@ describe('Phase 7 — Self-control & Real Trading Protection (T7.1 - T7.6)', () 
       expect(parsed.virtualTrades[0].id).toBe('A1');
       const leftoverTmp = fs.readdirSync(tmpDir).filter(f => f.includes('.tmp'));
       expect(leftoverTmp.length).toBe(0);
+    });
+  });
+
+  describe('L2/L3 — Pattern allowlist in /system/health & BTC regimeUpdatedAt isolation', () => {
+    it('ignores regimeUpdatedAt when btcFreshnessFastLoopEnabled=false, uses it for regime when true, and still blocks stale BTC candidates', () => {
+      resetEntryGateForTest();
+      const now = 1_795_000_000_000;
+      const depsBase = {
+        getApiHealth: () => ({ weex: { lastSuccessfulSyncAt: now - 10_000 } }),
+        getGlobalTrueOhlcv: () => ({
+          BTCUSDT: {
+            updatedAt: now - 450_000, // full-cycle stale (450s > 300s)
+            regimeUpdatedAt: now - 15_000 // fast-loop fresh (15s)
+          },
+          ETHUSDT: { updatedAt: now - 15_000 }
+        })
+      };
+
+      // Flag OFF: regimeUpdatedAt is ignored -> global pause triggers on stale updatedAt
+      const flagOff = isEntryPaused(now, {
+        ...depsBase,
+        getGlobalSettings: () => ({ staleDataPauseSec: 300, btcFreshnessFastLoopEnabled: false })
+      });
+      expect(flagOff.paused).toBe(true);
+      expect(flagOff.reason).toContain('stale_data_btc_ohlcv');
+
+      // Flag ON: global regime uses max(updatedAt, regimeUpdatedAt) -> unpaused for altcoins
+      const flagOn = isEntryPaused(now, {
+        ...depsBase,
+        getGlobalSettings: () => ({ staleDataPauseSec: 300, btcFreshnessFastLoopEnabled: true })
+      });
+      expect(flagOn.paused).toBe(false);
+
+      // Freshness breakdown reflects both timestamps cleanly
+      const freshness = getMarketDataFreshness(now, {
+        ...depsBase,
+        getGlobalSettings: () => ({ staleDataPauseSec: 300, btcFreshnessFastLoopEnabled: true })
+      });
+      expect(freshness.btcRegimeAgeSec).toBe(15);
+      expect(freshness.btcCandidateAgeSec).toBe(450);
+
+      // Candidate gate blocks BTC/USDT:USDT (uses full-cycle updatedAt only) while allowing ETH/USDT:USDT
+      const btcBlock = isBtcCandidateEntryBlocked('BTC/USDT:USDT', now, {
+        ...depsBase,
+        getGlobalSettings: () => ({ staleDataPauseSec: 300, btcFreshnessFastLoopEnabled: true })
+      });
+      expect(btcBlock.blocked).toBe(true);
+      expect(btcBlock.reason).toContain('stale_data_btc_candidate_ohlcv');
+
+      const ethAllowed = isBtcCandidateEntryBlocked('ETH/USDT:USDT', now, {
+        ...depsBase,
+        getGlobalSettings: () => ({ staleDataPauseSec: 300, btcFreshnessFastLoopEnabled: true })
+      });
+      expect(ethAllowed.blocked).toBe(false);
+    });
+
+    it('exposes canonical allowedPatterns and unknownDisabledPatterns in GET /api/system/health', async () => {
+      const sysRouter = createSystemRouter({
+        getVirtualTrades: () => [],
+        getKnowledgeBase: () => [],
+        getGlobalSettings: () => ({
+          ...createDefaultGlobalSettings(),
+          disabledPatterns: ['  🎯 Bottom Wick Retest (Ретест дна) ', 'NonExistentPattern']
+        }),
+        getCachedDB: () => ({}),
+        requestDBSave: vi.fn(),
+        streamEmitter: { emit: vi.fn(() => true) },
+        queryStructuredLogs: vi.fn(() => ({ logs: [], total: 0 })),
+        getCurrentExchangePingMs: () => 15,
+        getExchangePingHistory: () => [],
+        getProlivPeaks: () => [],
+        getAiCommitteeCache: () => ({}),
+        getSignalsCache: () => ({ data: [], marketRegime: 'RANGING', lastUpdated: Date.now() }),
+        getPendingFrontendAiTasks: () => [],
+        setPendingFrontendAiTasks: vi.fn(),
+        getGlobalTrueOhlcv: () => ({ BTCUSDT: { updatedAt: Date.now() - 10_000 } }),
+        getGlobalCcxtTickers: () => ({ weex: { 'BTC/USDT:USDT': { timestamp: Date.now() - 5_000 } } })
+      });
+
+      await withServer(sysRouter, '/api', async (baseUrl) => {
+        const resp = await fetch(`${baseUrl}/system/health`);
+        expect(resp.status).toBe(200);
+        const body: any = await resp.json();
+        expect(body.allowedPatterns).toEqual([...SCANNER_PATTERN_NAMES]);
+        expect(body.allowedPatterns).toHaveLength(16);
+        expect(body.unknownDisabledPatterns).toEqual(['NonExistentPattern']);
+        expect(body.flags.unknownDisabledPatterns).toEqual(['NonExistentPattern']);
+        expect(body.marketData.btcRegimeTimestamp).toBeTypeOf('number');
+        expect(body.marketData.btcCandidateTimestamp).toBeTypeOf('number');
+      });
     });
   });
 });
